@@ -397,17 +397,31 @@ app.get('/api/companies/info/:siren', async (c) => {
     const tvaKey = (12 + 3 * (sirenNum % 97)) % 97;
     const tvaNumber = `FR${String(tvaKey).padStart(2, '0')}${siren}`;
 
-    // Try to get capital social from societe.com
+    // Try Pappers API first (better data), fall back to societe.com scraping
     let capitalSocial: number | null = null;
-    try {
-      const slug = (company.nom_complet || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-      const url = `https://www.societe.com/societe/${slug}-${siren}.html`;
-      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' } });
-      const html = await res.text();
-      const match = html.match(/data-copy-id="legal_capital">([\d\s,.]+)</) 
-                || html.match(/Capital\s*social[\s\S]*?([\d\s,.]+)\s*€/i);
-      if (match) capitalSocial = parseFloat(match[1].replace(/\s/g, '').replace(',', '.'));
-    } catch {}
+    let pappersData: any = null;
+    const pappersToken = process.env.PAPPERS_API_TOKEN;
+    
+    if (pappersToken) {
+      try {
+        const pRes = await fetch(`https://api.pappers.fr/v2/entreprise?siren=${siren}&api_token=${pappersToken}`);
+        if (pRes.ok) pappersData = await pRes.json();
+        if (pappersData?.capital) capitalSocial = pappersData.capital;
+      } catch {}
+    }
+
+    // Fallback: scrape societe.com
+    if (capitalSocial === null) {
+      try {
+        const slug = (company.nom_complet || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const url = `https://www.societe.com/societe/${slug}-${siren}.html`;
+        const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' } });
+        const html = await res.text();
+        const match = html.match(/data-copy-id="legal_capital">([\d\s,.]+)</) 
+                  || html.match(/Capital\s*social[\s\S]*?([\d\s,.]+)\s*€/i);
+        if (match) capitalSocial = parseFloat(match[1].replace(/\s/g, '').replace(',', '.'));
+      } catch {}
+    }
 
     // Legal form mapping
     const FORMS: Record<string, string> = {
@@ -427,8 +441,8 @@ app.get('/api/companies/info/:siren', async (c) => {
       naf_code: company.activite_principale || '',
       naf_label: company.libelle_activite_principale || '',
       date_creation: company.date_creation || '',
-      tva_number: tvaNumber,
-      rcs: `${siren} R.C.S. ${siege.libelle_commune || ''}`,
+      tva_number: pappersData?.numero_tva_intracommunautaire || tvaNumber,
+      rcs: pappersData?.greffe ? `${siren} R.C.S. ${pappersData.greffe}` : `${siren} R.C.S. ${siege.libelle_commune || ''}`,
       category: company.categorie_entreprise || '',
     });
   } catch (err: any) {
