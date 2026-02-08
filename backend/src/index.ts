@@ -492,6 +492,131 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
   }
 });
 
+// ========== ASSETS (Patrimoine) ==========
+
+// List assets
+app.get('/api/assets', (c) => {
+  const type = c.req.query('type');
+  let where = '1=1';
+  const params: any[] = [];
+  if (type) { where += ' AND a.type = ?'; params.push(type); }
+
+  const assets = db.prepare(`
+    SELECT a.*, ba.name as loan_name, ba.balance as loan_balance
+    FROM assets a
+    LEFT JOIN bank_accounts ba ON ba.id = a.linked_loan_account_id
+    WHERE ${where}
+    ORDER BY a.created_at DESC
+  `).all(...params) as any[];
+
+  // Attach costs and revenues for each asset
+  for (const asset of assets) {
+    asset.costs = db.prepare('SELECT * FROM asset_costs WHERE asset_id = ? ORDER BY id').all(asset.id);
+    asset.revenues = db.prepare('SELECT * FROM asset_revenues WHERE asset_id = ? ORDER BY id').all(asset.id);
+    // Calculate monthly totals
+    asset.monthly_costs = (asset.costs as any[]).reduce((sum: number, c: any) => {
+      return sum + (c.frequency === 'yearly' ? c.amount / 12 : c.frequency === 'one_time' ? 0 : c.amount);
+    }, 0);
+    asset.monthly_revenues = (asset.revenues as any[]).reduce((sum: number, r: any) => {
+      return sum + (r.frequency === 'yearly' ? r.amount / 12 : r.frequency === 'one_time' ? 0 : r.amount);
+    }, 0);
+    // P&L
+    asset.pnl = asset.current_value && asset.purchase_price
+      ? asset.current_value - asset.purchase_price
+      : null;
+    asset.pnl_percent = asset.pnl != null && asset.purchase_price
+      ? (asset.pnl / asset.purchase_price) * 100
+      : null;
+  }
+
+  return c.json(assets);
+});
+
+// Get single asset
+app.get('/api/assets/:id', (c) => {
+  const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(c.req.param('id')) as any;
+  if (!asset) return c.json({ error: 'Not found' }, 404);
+  asset.costs = db.prepare('SELECT * FROM asset_costs WHERE asset_id = ?').all(asset.id);
+  asset.revenues = db.prepare('SELECT * FROM asset_revenues WHERE asset_id = ?').all(asset.id);
+  return c.json(asset);
+});
+
+// Create asset
+app.post('/api/assets', async (c) => {
+  const body = await c.req.json() as any;
+  const result = db.prepare(
+    `INSERT INTO assets (type, name, purchase_price, purchase_date, current_value, current_value_date, photo_url, linked_loan_account_id, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    body.type, body.name, body.purchase_price || null, body.purchase_date || null,
+    body.current_value || null, body.current_value_date || null,
+    body.photo_url || null, body.linked_loan_account_id || null, body.notes || null
+  );
+
+  // Insert costs
+  if (body.costs?.length) {
+    const stmt = db.prepare('INSERT INTO asset_costs (asset_id, label, amount, frequency, category) VALUES (?, ?, ?, ?, ?)');
+    for (const cost of body.costs) {
+      stmt.run(result.lastInsertRowid, cost.label, cost.amount, cost.frequency || 'monthly', cost.category || null);
+    }
+  }
+
+  // Insert revenues
+  if (body.revenues?.length) {
+    const stmt = db.prepare('INSERT INTO asset_revenues (asset_id, label, amount, frequency) VALUES (?, ?, ?, ?)');
+    for (const rev of body.revenues) {
+      stmt.run(result.lastInsertRowid, rev.label, rev.amount, rev.frequency || 'monthly');
+    }
+  }
+
+  return c.json({ id: result.lastInsertRowid });
+});
+
+// Update asset
+app.patch('/api/assets/:id', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json() as any;
+  
+  const fields = ['type', 'name', 'purchase_price', 'purchase_date', 'current_value', 'current_value_date', 'photo_url', 'linked_loan_account_id', 'notes'];
+  const updates: string[] = [];
+  const values: any[] = [];
+  for (const f of fields) {
+    if (f in body) { updates.push(`${f} = ?`); values.push(body[f]); }
+  }
+  if (updates.length) {
+    db.prepare(`UPDATE assets SET ${updates.join(', ')} WHERE id = ?`).run(...values, id);
+  }
+
+  // Replace costs if provided
+  if (body.costs) {
+    db.prepare('DELETE FROM asset_costs WHERE asset_id = ?').run(id);
+    const stmt = db.prepare('INSERT INTO asset_costs (asset_id, label, amount, frequency, category) VALUES (?, ?, ?, ?, ?)');
+    for (const cost of body.costs) {
+      stmt.run(id, cost.label, cost.amount, cost.frequency || 'monthly', cost.category || null);
+    }
+  }
+
+  // Replace revenues if provided
+  if (body.revenues) {
+    db.prepare('DELETE FROM asset_revenues WHERE asset_id = ?').run(id);
+    const stmt = db.prepare('INSERT INTO asset_revenues (asset_id, label, amount, frequency) VALUES (?, ?, ?, ?)');
+    for (const rev of body.revenues) {
+      stmt.run(id, rev.label, rev.amount, rev.frequency || 'monthly');
+    }
+  }
+
+  return c.json({ ok: true });
+});
+
+// Delete asset
+app.delete('/api/assets/:id', (c) => {
+  const id = c.req.param('id');
+  db.prepare('DELETE FROM asset_costs WHERE asset_id = ?').run(id);
+  db.prepare('DELETE FROM asset_revenues WHERE asset_id = ?').run(id);
+  db.prepare('DELETE FROM assets WHERE id = ?').run(id);
+  return c.json({ ok: true });
+});
+
 serve({ fetch: app.fetch, port: 3004 }, (info) => {
   console.log(`🦎 Kompta API running on http://localhost:${info.port}`);
 });

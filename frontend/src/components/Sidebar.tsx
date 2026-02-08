@@ -6,7 +6,6 @@ import {
   Landmark,
   Building2,
   Home,
-  TrendingUp,
   ArrowLeftRight,
   BarChart3,
   LineChart,
@@ -51,8 +50,7 @@ const navGroups: NavGroup[] = [
     items: [
       { path: '/accounts', icon: Landmark, labelKey: 'nav_accounts' },
       { path: '/companies', icon: Building2, labelKey: 'nav_companies' },
-      { path: '/real-estate', icon: Home, labelKey: 'nav_real_estate', disabled: true },
-      { path: '/investments', icon: TrendingUp, labelKey: 'nav_investments', disabled: true },
+      { path: '/assets', icon: Home, labelKey: 'nav_assets' },
     ],
   },
   {

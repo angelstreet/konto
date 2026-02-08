@@ -7,6 +7,7 @@ import Accounts from './pages/Accounts';
 import Transactions from './pages/Transactions';
 import Company from './pages/Company';
 import Settings from './pages/Settings';
+import Assets from './pages/Assets';
 import ComingSoon from './pages/ComingSoon';
 
 export default function App() {
@@ -36,9 +37,8 @@ export default function App() {
         <Route path="/transactions" element={<Transactions />} />
         <Route path="/companies" element={<Company />} />
         <Route path="/settings" element={<Settings />} />
+        <Route path="/assets" element={<Assets />} />
         {/* Future pages — show coming soon */}
-        <Route path="/real-estate" element={<ComingSoon titleKey="nav_real_estate" />} />
-        <Route path="/investments" element={<ComingSoon titleKey="nav_investments" />} />
         <Route path="/analysis" element={<ComingSoon titleKey="nav_analysis" />} />
         <Route path="/cashflow" element={<ComingSoon titleKey="nav_cashflow" />} />
         <Route path="/ledger" element={<ComingSoon titleKey="nav_ledger" />} />

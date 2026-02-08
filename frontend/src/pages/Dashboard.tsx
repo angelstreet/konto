@@ -23,6 +23,13 @@ function formatCurrency(value: number): string {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value);
 }
 
+function typeBadgeColor(type: string): string {
+  if (type === 'savings') return 'bg-blue-500/20 text-blue-400';
+  if (type === 'loan') return 'bg-orange-500/20 text-orange-400';
+  if (type === 'investment') return 'bg-purple-500/20 text-purple-400';
+  return 'bg-white/5 text-muted';
+}
+
 export default function Dashboard() {
   const { t } = useTranslation();
   const { data, loading } = useApi<DashboardData>(`${API}/dashboard`);
@@ -58,7 +65,12 @@ export default function Dashboard() {
         <div className="bg-surface rounded-xl border border-border divide-y divide-border">
           {data.accounts.map((acc) => (
             <div key={acc.id} className="flex items-center justify-between px-4 py-3">
-              <p className="text-sm font-medium">{acc.name}</p>
+              <div className="flex items-center gap-2">
+                <p className="text-sm font-medium">{acc.name}</p>
+                <span className={`text-xs px-2 py-0.5 rounded-full ${typeBadgeColor(acc.type)}`}>
+                  {t(`account_type_${acc.type || 'checking'}`)}
+                </span>
+              </div>
               <p className="text-sm font-semibold text-accent-400">
                 {formatCurrency(acc.balance)}
               </p>

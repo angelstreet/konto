@@ -32,6 +32,7 @@ export default function Transactions() {
   const [searchInput, setSearchInput] = useState('');
   const [accountFilter, setAccountFilter] = useState('');
   const [loading, setLoading] = useState(true);
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -127,37 +128,70 @@ export default function Transactions() {
         <div className="bg-surface rounded-xl border border-border overflow-hidden">
           <div className="divide-y divide-border">
             {transactions.map(tx => (
-              <div key={tx.id} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-hover transition-colors">
-                {/* Icon */}
-                <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
-                  tx.amount >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'
-                }`}>
-                  {tx.amount >= 0 
-                    ? <ArrowDownLeft size={14} className="text-green-400" />
-                    : <ArrowUpRight size={14} className="text-red-400" />
-                  }
+              <div key={tx.id}>
+                <div
+                  onClick={() => setExpandedId(expandedId === tx.id ? null : tx.id)}
+                  className="flex items-center gap-3 px-4 py-3 hover:bg-surface-hover transition-colors cursor-pointer"
+                >
+                  {/* Icon */}
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                    tx.amount >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'
+                  }`}>
+                    {tx.amount >= 0
+                      ? <ArrowDownLeft size={14} className="text-green-400" />
+                      : <ArrowUpRight size={14} className="text-red-400" />
+                    }
+                  </div>
+
+                  {/* Label + account */}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">{tx.label || '—'}</p>
+                    <p className="text-xs text-muted truncate">
+                      {tx.account_custom_name || tx.account_name}
+                      {tx.category && <span className="ml-2 text-accent-400">{tx.category}</span>}
+                    </p>
+                  </div>
+
+                  {/* Date */}
+                  <div className="text-xs text-muted flex-shrink-0 hidden sm:block">
+                    {formatDate(tx.date)}
+                  </div>
+
+                  {/* Amount */}
+                  <div className={`text-sm font-semibold flex-shrink-0 ${
+                    tx.amount >= 0 ? 'text-green-400' : 'text-white'
+                  }`}>
+                    {tx.amount >= 0 ? '+' : ''}{formatAmount(tx.amount)}
+                  </div>
                 </div>
 
-                {/* Label + account */}
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm text-white truncate">{tx.label || '—'}</p>
-                  <p className="text-xs text-muted truncate">
-                    {tx.account_custom_name || tx.account_name}
-                    {tx.category && <span className="ml-2 text-accent-400">{tx.category}</span>}
-                  </p>
-                </div>
-
-                {/* Date */}
-                <div className="text-xs text-muted flex-shrink-0 hidden sm:block">
-                  {formatDate(tx.date)}
-                </div>
-
-                {/* Amount */}
-                <div className={`text-sm font-semibold flex-shrink-0 ${
-                  tx.amount >= 0 ? 'text-green-400' : 'text-white'
-                }`}>
-                  {tx.amount >= 0 ? '+' : ''}{formatAmount(tx.amount)}
-                </div>
+                {/* Expanded details */}
+                {expandedId === tx.id && (
+                  <div className="px-4 pb-3 pl-[3.75rem] grid grid-cols-2 gap-x-6 gap-y-2 text-xs border-t border-border/50 pt-3">
+                    <div>
+                      <span className="text-muted">{t('date')}</span>
+                      <p className="text-white">{formatDate(tx.date)}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted">{t('amount')}</span>
+                      <p className={tx.amount >= 0 ? 'text-green-400' : 'text-red-400'}>
+                        {tx.amount >= 0 ? '+' : ''}{formatAmount(tx.amount)}
+                      </p>
+                    </div>
+                    <div>
+                      <span className="text-muted">{t('account')}</span>
+                      <p className="text-white">{tx.account_custom_name || tx.account_name}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted">{t('category')}</span>
+                      <p className="text-accent-400">{tx.category || '—'}</p>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-muted">{t('label')}</span>
+                      <p className="text-white break-all">{tx.label || '—'}</p>
+                    </div>
+                  </div>
+                )}
               </div>
             ))}
           </div>
