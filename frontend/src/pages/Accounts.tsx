@@ -253,13 +253,18 @@ export default function Accounts() {
     return 'Wallet';
   })();
 
+  const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+
   const connectMetaMask = async () => {
     const eth = (window as any).ethereum;
     if (!eth) {
-      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
-      setMetamaskError(isMobile
-        ? '🦊 Aucun wallet détecté. Ouvrez cette page depuis le navigateur intégré de MetaMask (MetaMask → ☰ → Navigateur) ou utilisez Brave avec le wallet activé.'
-        : '🦊 Aucun wallet détecté. Installez l\'extension MetaMask depuis metamask.io/download puis rechargez la page.');
+      if (isMobile) {
+        // Deep link: opens MetaMask app which loads our page in its built-in browser
+        const currentUrl = window.location.href.replace(/^https?:\/\//, '');
+        window.location.href = `https://metamask.app.link/dapp/${currentUrl}`;
+        return;
+      }
+      setMetamaskError('🦊 Aucun wallet détecté. Installez l\'extension MetaMask depuis metamask.io/download puis rechargez la page.');
       return;
     }
     setMetamaskError('');
