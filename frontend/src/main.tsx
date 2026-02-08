@@ -22,6 +22,6 @@ const app = (
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   clerkPubKey
-    ? <ClerkProvider publishableKey={clerkPubKey}>{app}</ClerkProvider>
+    ? <ClerkProvider publishableKey={clerkPubKey} afterSignInUrl="/kompta/" afterSignUpUrl="/kompta/">{app}</ClerkProvider>
     : app
 );

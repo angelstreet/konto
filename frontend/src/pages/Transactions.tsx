@@ -3,7 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, Eye, EyeOff } from 'lucide-react';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
-const apiFetch = (url: string) => fetch(url).then(r => r.json());
+import { useAuth } from '@clerk/clerk-react';
+const clerkEnabledTx = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 interface Transaction {
   id: number;
@@ -26,6 +27,17 @@ const PAGE_SIZE = 25;
 
 export default function Transactions() {
   const { t } = useTranslation();
+  let getTokenTx: (() => Promise<string | null>) | undefined;
+  if (clerkEnabledTx) { try { const auth = useAuth(); getTokenTx = auth.getToken; } catch {} }
+  const getTokenTxRef = { current: getTokenTx };
+  const apiFetch = async (url: string) => {
+    const headers: Record<string, string> = {};
+    if (clerkEnabledTx && getTokenTxRef.current) {
+      const token = await getTokenTxRef.current();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    }
+    return fetch(url, { headers }).then(r => r.json());
+  };
   const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
   const { scope, appendScope } = useFilter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);

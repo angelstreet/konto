@@ -6,10 +6,10 @@ import {
 
 import ConfirmDialog from '../components/ConfirmDialog';
 import { usePreferences } from '../PreferencesContext';
+import { useAuth } from '@clerk/clerk-react';
 
 const API = '/kompta/api';
-const apiFetch = (url: string, opts?: RequestInit) =>
-  fetch(url, { headers: { 'Content-Type': 'application/json' }, ...opts }).then(r => r.json());
+const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 const TYPES = [
   { id: 'real_estate', icon: Home, labelKey: 'asset_real_estate' },
@@ -43,6 +43,17 @@ const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
 export default function Assets() {
   const { t } = useTranslation();
+  let getToken: (() => Promise<string | null>) | undefined;
+  if (clerkEnabled) { try { const auth = useAuth(); getToken = auth.getToken; } catch {} }
+  const getTokenRef = { current: getToken };
+  const apiFetch = async (url: string, opts?: RequestInit) => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (clerkEnabled && getTokenRef.current) {
+      const token = await getTokenRef.current();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    }
+    return fetch(url, { headers, ...opts }).then(r => r.json());
+  };
   const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
   const f = (n: number) => hideAmounts ? '••••' : fmt(n);
   const [assets, setAssets] = useState<Asset[]>([]);
