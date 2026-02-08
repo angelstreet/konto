@@ -26,7 +26,7 @@ export default function Layout({ children, onLogout }: Props) {
 
   // Apply theme from localStorage on mount
   useEffect(() => {
-    const theme = localStorage.getItem('kompta_theme') || 'blue';
+    const theme = localStorage.getItem('kompta_theme') || 'gold';
     document.documentElement.setAttribute('data-theme', theme);
   }, []);
 

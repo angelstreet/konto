@@ -143,13 +143,18 @@ export default function CompanyPage() {
     await fetch(`${API}/bank/accounts/${accountId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company_id: 0 }),
+      body: JSON.stringify({ company_id: null }),
     });
     refetchAll();
   };
 
+  const unlinkAllAccounts = async (companyId: number) => {
+    await fetch(`${API}/companies/${companyId}/unlink-all`, { method: 'POST' });
+    refetchAll();
+  };
+
   const linkedAccounts = (companyId: number) => (accounts || []).filter(a => a.company_id === companyId);
-  const unlinkedAccounts = (accounts || []).filter(a => !a.company_id || a.company_id === 0);
+  const unlinkedAccounts = (accounts || []).filter(a => !a.company_id);
 
   const formatBalance = (n: number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
@@ -164,8 +169,7 @@ export default function CompanyPage() {
         <h1 className="text-xl font-semibold">{t('company_profile')}</h1>
         <button
           onClick={startCreate}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          style={{ backgroundColor: '#d4a812', color: '#000' }}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black"
         >
           <Plus size={16} />
           {t('add_company')}
@@ -288,7 +292,7 @@ export default function CompanyPage() {
                   <>
                     <div>
                       <p className="text-xs text-muted">CA ({selectedCompanyInfo.finances.year})</p>
-                      <p style={{ color: '#d4a812' }} className="font-semibold">
+                      <p className="text-accent-400 font-semibold">
                         {selectedCompanyInfo.finances.ca ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(selectedCompanyInfo.finances.ca) : '—'}
                       </p>
                     </div>
@@ -320,8 +324,7 @@ export default function CompanyPage() {
             <button
               onClick={saveCompany}
               disabled={!form.name}
-              className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40"
-              style={{ backgroundColor: '#d4a812', color: '#000' }}
+              className="px-4 py-2 rounded-lg text-sm font-medium disabled:opacity-40 bg-accent-500 text-black"
             >
               {editingId ? t('save') : t('create')}
             </button>
@@ -342,8 +345,7 @@ export default function CompanyPage() {
           <p className="text-muted text-sm mb-4">{t('no_companies')}</p>
           <button
             onClick={startCreate}
-            className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg"
-            style={{ backgroundColor: '#d4a812', color: '#000' }}
+            className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg bg-accent-500 text-black"
           >
             <Plus size={14} />
             {t('add_company')}
@@ -375,12 +377,22 @@ export default function CompanyPage() {
                 <div className="border-t border-border pt-3 mt-3">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-muted uppercase tracking-wide">{t('linked_accounts')} ({linked.length})</span>
-                    <button
-                      onClick={() => setLinkingCompanyId(linkingCompanyId === c.id ? null : c.id)}
-                      className="text-xs flex items-center gap-1 hover:text-white text-muted"
-                    >
-                      <Link size={12} /> {t('link_account')}
-                    </button>
+                    <div className="flex items-center gap-3">
+                      {linked.length > 0 && (
+                        <button
+                          onClick={() => unlinkAllAccounts(c.id)}
+                          className="text-xs flex items-center gap-1 hover:text-red-400 text-muted"
+                        >
+                          <Unlink size={12} /> {t('unlink_all')}
+                        </button>
+                      )}
+                      <button
+                        onClick={() => setLinkingCompanyId(linkingCompanyId === c.id ? null : c.id)}
+                        className="text-xs flex items-center gap-1 hover:text-white text-muted"
+                      >
+                        <Link size={12} /> {t('link_account')}
+                      </button>
+                    </div>
                   </div>
 
                   {linked.length === 0 ? (
@@ -394,7 +406,7 @@ export default function CompanyPage() {
                             <span className="text-sm">{acc.custom_name || acc.name}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium" style={{ color: '#d4a812' }}>{formatBalance(acc.balance)}</span>
+                            <span className="text-sm font-medium text-accent-400">{formatBalance(acc.balance)}</span>
                             <button onClick={() => unlinkAccount(acc.id)} className="text-muted hover:text-red-400" title={t('unlink')}>
                               <Unlink size={12} />
                             </button>
