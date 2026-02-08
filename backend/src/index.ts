@@ -410,18 +410,24 @@ app.get('/api/companies/info/:siren', async (c) => {
       } catch {}
     }
 
-    // Fallback: scrape societe.com
-    if (capitalSocial === null) {
-      try {
-        const slug = (company.nom_complet || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-        const url = `https://www.societe.com/societe/${slug}-${siren}.html`;
-        const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' } });
-        const html = await res.text();
-        const match = html.match(/data-copy-id="legal_capital">([\d\s,.]+)</) 
-                  || html.match(/Capital\s*social[\s\S]*?([\d\s,.]+)\s*€/i);
-        if (match) capitalSocial = parseFloat(match[1].replace(/\s/g, '').replace(',', '.'));
-      } catch {}
-    }
+    // Scrape societe.com for enriched data
+    let scrapedData: Record<string, string> = {};
+    try {
+      const slug = (company.nom_complet || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const url = `https://www.societe.com/societe/${slug}-${siren}.html`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' } });
+      const buf = await res.arrayBuffer();
+      const html = new TextDecoder('iso-8859-1').decode(buf);
+      // Extract all data-copy-id template values
+      const copyRegex = /data-copy-id="([^"]+)">(.*?)<\/template>/g;
+      let m;
+      while ((m = copyRegex.exec(html)) !== null) {
+        scrapedData[m[1]] = m[2].trim();
+      }
+      if (scrapedData.legal_capital && !capitalSocial) {
+        capitalSocial = parseFloat(scrapedData.legal_capital.replace(/\s/g, '').replace(',', '.'));
+      }
+    } catch {}
 
     // Legal form mapping
     const FORMS: Record<string, string> = {
@@ -431,19 +437,24 @@ app.get('/api/companies/info/:siren', async (c) => {
 
     return c.json({
       siren: company.siren,
-      siret: siege.siret || '',
+      siret: scrapedData.resume_siret || siege.siret || '',
       name: company.nom_complet || '',
-      legal_form: FORMS[String(company.nature_juridique)] || `Code ${company.nature_juridique}`,
+      legal_form: scrapedData.legal_form || FORMS[String(company.nature_juridique)] || `Code ${company.nature_juridique}`,
       capital_social: capitalSocial,
-      address: siege.geo_adresse || siege.adresse || '',
+      address: scrapedData.resume_company_address || siege.geo_adresse || siege.adresse || '',
       postal_code: siege.code_postal || '',
       city: siege.libelle_commune || '',
       naf_code: company.activite_principale || '',
-      naf_label: company.libelle_activite_principale || '',
+      naf_label: scrapedData.resume_ape_label || scrapedData.legal_ape || company.libelle_activite_principale || '',
       date_creation: company.date_creation || '',
-      tva_number: pappersData?.numero_tva_intracommunautaire || tvaNumber,
+      tva_number: scrapedData.resume_tva || pappersData?.numero_tva_intracommunautaire || tvaNumber,
       rcs: pappersData?.greffe ? `${siren} R.C.S. ${pappersData.greffe}` : `${siren} R.C.S. ${siege.libelle_commune || ''}`,
       category: company.categorie_entreprise || '',
+      // Extra from societe.com scraping
+      activity_description: scrapedData.legal_activity || null,
+      activity_type: scrapedData.legal_activity_type || null,
+      brand_names: scrapedData.legal_brands || null,
+      collective_agreement: scrapedData.legal_agreement || null,
     });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);

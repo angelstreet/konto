@@ -332,6 +332,10 @@ export default function CompanyPage() {
                       { label: 'Code NAF', value: info.naf_code || sc.naf_code },
                       { label: 'Activité', value: info.naf_label },
                       { label: 'Catégorie', value: info.category || sc.categorie },
+                      { label: 'Objet social', value: info.activity_description, full: true },
+                      { label: 'Type d\'activité', value: info.activity_type },
+                      { label: 'Noms commerciaux', value: info.brand_names },
+                      { label: 'Convention collective', value: info.collective_agreement },
                     ];
                     return (
                       <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5 text-sm">
