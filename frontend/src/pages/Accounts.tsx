@@ -393,27 +393,33 @@ export default function Accounts() {
                       <p className="text-xs text-muted">{t('add_manual_desc')}</p>
                     </div>
                   </button>
-                  <button onClick={connectMetaMask} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
-                    <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-lg">🦊</div>
-                    <div>
-                      <p className="font-medium">MetaMask</p>
-                      <p className="text-xs text-muted">Auto-scan all EVM chains (ETH, Base, Polygon, BNB...)</p>
+                  {/* Crypto section */}
+                  <div className="mt-2 pt-2 border-t border-border">
+                    <p className="text-xs text-muted mb-2 uppercase tracking-wider">⛓️ Crypto</p>
+                    <div className="space-y-2">
+                      <button onClick={connectMetaMask} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
+                        <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-lg">🦊</div>
+                        <div>
+                          <p className="font-medium">MetaMask</p>
+                          <p className="text-xs text-muted">Auto-scan all EVM chains (ETH, Base, Polygon, BNB...)</p>
+                        </div>
+                      </button>
+                      <button onClick={() => setAddMode('blockchain')} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
+                        <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center"><Bitcoin size={20} className="text-amber-400" /></div>
+                        <div>
+                          <p className="font-medium">{t('add_blockchain')}</p>
+                          <p className="text-xs text-muted">{t('add_blockchain_desc')}</p>
+                        </div>
+                      </button>
+                      <button onClick={connectCoinbase} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
+                        <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center"><CircleDollarSign size={20} className="text-blue-400" /></div>
+                        <div>
+                          <p className="font-medium">{t('add_coinbase')}</p>
+                          <p className="text-xs text-muted">OAuth2 — {t('add_blockchain_desc')}</p>
+                        </div>
+                      </button>
                     </div>
-                  </button>
-                  <button onClick={() => setAddMode('blockchain')} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
-                    <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center"><Bitcoin size={20} className="text-amber-400" /></div>
-                    <div>
-                      <p className="font-medium">{t('add_blockchain')}</p>
-                      <p className="text-xs text-muted">{t('add_blockchain_desc')}</p>
-                    </div>
-                  </button>
-                  <button onClick={connectCoinbase} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
-                    <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center"><CircleDollarSign size={20} className="text-blue-400" /></div>
-                    <div>
-                      <p className="font-medium">{t('add_coinbase')}</p>
-                      <p className="text-xs text-muted">OAuth2 — {t('add_blockchain_desc')}</p>
-                    </div>
-                  </button>
+                  </div>
                 </div>
                 <button onClick={() => setAddMode(null)} className="mt-4 w-full text-center text-sm text-muted hover:text-white">{t('cancel')}</button>
               </>
