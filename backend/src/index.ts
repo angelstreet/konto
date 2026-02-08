@@ -4,6 +4,11 @@ import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { verifyToken } from '@clerk/backend';
 import db, { initDatabase, migrateDatabase, ensureUser } from './db.js';
+import * as ecc from 'tiny-secp256k1';
+import { BIP32Factory } from 'bip32';
+import * as bitcoin from 'bitcoinjs-lib';
+
+const bip32 = BIP32Factory(ecc);
 
 const app = new Hono();
 
@@ -758,12 +763,30 @@ async function fetchBlockchainBalance(network: string, address: string): Promise
     return { balance: (data.result?.value || 0) / 1e9, currency: 'SOL' };
   }
   if (network === 'bitcoin') {
-    // xpub/ypub/zpub → use blockchain.info for full HD wallet balance
+    // xpub → derive native segwit (bc1) addresses and scan via Blockstream
     if (/^[xyz]pub/.test(address)) {
-      const res = await fetch(`https://blockchain.info/balance?active=${address}`);
-      const data = await res.json() as any;
-      const info = data[address];
-      return { balance: (info?.final_balance || 0) / 1e8, currency: 'BTC' };
+      const node = bip32.fromBase58(address);
+      let totalBalance = 0;
+      // Scan receiving (m/0/i) and change (m/1/i) addresses
+      for (const chain of [0, 1]) {
+        let emptyCount = 0;
+        for (let i = 0; emptyCount < 5 && i < 50; i++) {
+          const child = node.derive(chain).derive(i);
+          const { address: addr } = bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network: bitcoin.networks.bitcoin });
+          if (!addr) continue;
+          try {
+            const res = await fetch(`https://blockstream.info/api/address/${addr}`);
+            const data = await res.json() as any;
+            const funded = data.chain_stats?.funded_txo_sum || 0;
+            const spent = data.chain_stats?.spent_txo_sum || 0;
+            const bal = funded - spent;
+            const txCount = data.chain_stats?.tx_count || 0;
+            if (txCount === 0) { emptyCount++; } else { emptyCount = 0; }
+            totalBalance += bal;
+          } catch { emptyCount++; }
+        }
+      }
+      return { balance: totalBalance / 1e8, currency: 'BTC' };
     }
     // Single address → use Blockstream
     const res = await fetch(`https://blockstream.info/api/address/${address}`);
