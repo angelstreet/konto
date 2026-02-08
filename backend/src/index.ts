@@ -2,11 +2,47 @@ import 'dotenv/config';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
+import { verifyToken } from '@clerk/backend';
 import db, { initDatabase } from './db.js';
 
 const app = new Hono();
 
 app.use('/*', cors());
+
+// --- Clerk Auth Middleware ---
+// If CLERK_SECRET_KEY is set, validate Clerk JWTs on all /api/* routes.
+// Falls back to unauthenticated access (default user) if Clerk is not configured.
+const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
+
+app.use('/api/*', async (c, next) => {
+  if (!CLERK_SECRET_KEY) return next(); // No Clerk → legacy mode (no auth)
+
+  // Public endpoints that don't need auth
+  const path = c.req.path;
+  if (path === '/api/health' || path === '/api/bank-callback' || path === '/api/coinbase-callback') return next();
+
+  const authHeader = c.req.header('Authorization');
+
+  // Allow API token access for agents (backward compatible)
+  const API_TOKEN = process.env.API_TOKEN;
+  if (API_TOKEN && authHeader === `Bearer ${API_TOKEN}`) {
+    return next();
+  }
+
+  // Verify Clerk JWT
+  if (authHeader?.startsWith('Bearer ')) {
+    const token = authHeader.slice(7);
+    try {
+      const payload = await verifyToken(token, { secretKey: CLERK_SECRET_KEY });
+      (c as any).clerkUserId = payload.sub;
+      return next();
+    } catch {
+      // Invalid token — fall through to 401
+    }
+  }
+
+  return c.json({ error: 'Unauthorized' }, 401);
+});
 
 // --- Config ---
 const POWENS_CLIENT_ID = process.env.POWENS_CLIENT_ID || '91825215';

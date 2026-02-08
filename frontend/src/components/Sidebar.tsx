@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { UserButton } from '@clerk/clerk-react';
+
+const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 import {
   LayoutDashboard,
   Landmark,
@@ -246,8 +249,21 @@ export default function Sidebar({ onLogout }: Props) {
         })}
       </nav>
 
-      {/* Settings + Logout */}
+      {/* Settings + Logout / Clerk UserButton */}
       <div className="px-2 py-3 border-t border-border space-y-0.5">
+        {clerkEnabled && (
+          <div className={`flex items-center ${collapsed ? 'justify-center py-2' : 'px-2.5 py-2 gap-2.5'}`}>
+            <UserButton
+              afterSignOutUrl="/kompta/"
+              appearance={{
+                elements: {
+                  avatarBox: 'w-7 h-7',
+                },
+              }}
+            />
+            {!collapsed && <span className="text-sm text-muted">Account</span>}
+          </div>
+        )}
         <button
           onClick={() => navigate('/settings')}
           title={collapsed ? t('settings') : undefined}
@@ -262,16 +278,18 @@ export default function Sidebar({ onLogout }: Props) {
           <Settings size={18} strokeWidth={pathname === '/settings' ? 2.5 : 1.5} />
           {!collapsed && <span>{t('settings')}</span>}
         </button>
-        <button
-          onClick={onLogout}
-          title={collapsed ? t('logout') : undefined}
-          className={`w-full flex items-center gap-2.5 rounded-lg text-sm font-medium text-muted hover:text-red-400 hover:bg-surface-hover transition-colors ${
-            collapsed ? 'justify-center px-0 py-2.5' : 'px-2.5 py-2'
-          }`}
-        >
-          <LogOut size={18} strokeWidth={1.5} />
-          {!collapsed && <span>{t('logout')}</span>}
-        </button>
+        {!clerkEnabled && (
+          <button
+            onClick={onLogout}
+            title={collapsed ? t('logout') : undefined}
+            className={`w-full flex items-center gap-2.5 rounded-lg text-sm font-medium text-muted hover:text-red-400 hover:bg-surface-hover transition-colors ${
+              collapsed ? 'justify-center px-0 py-2.5' : 'px-2.5 py-2'
+            }`}
+          >
+            <LogOut size={18} strokeWidth={1.5} />
+            {!collapsed && <span>{t('logout')}</span>}
+          </button>
+        )}
       </div>
     </aside>
   );
