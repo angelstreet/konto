@@ -12,6 +12,7 @@ export async function initDatabase() {
       email TEXT NOT NULL UNIQUE,
       name TEXT NOT NULL,
       role TEXT NOT NULL DEFAULT 'user',
+      clerk_id TEXT UNIQUE,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -223,6 +224,36 @@ export async function initDatabase() {
       UNIQUE(drive_file_id)
     );
   `);
+}
+
+// Migration: add clerk_id column if missing (for existing databases)
+export async function migrateDatabase() {
+  try {
+    await db.execute("SELECT clerk_id FROM users LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE users ADD COLUMN clerk_id TEXT UNIQUE");
+  }
+}
+
+// Find or create user by Clerk ID. On first login, migrates existing user_id=1 data.
+export async function ensureUser(clerkId: string): Promise<number> {
+  // Try to find existing user with this clerk_id
+  const existing = await db.execute({ sql: 'SELECT id FROM users WHERE clerk_id = ?', args: [clerkId] });
+  if (existing.rows.length > 0) return existing.rows[0].id as number;
+
+  // Check if there's a legacy user (id=1) without a clerk_id — migrate it
+  const legacy = await db.execute({ sql: 'SELECT id FROM users WHERE id = 1 AND clerk_id IS NULL', args: [] });
+  if (legacy.rows.length > 0) {
+    await db.execute({ sql: 'UPDATE users SET clerk_id = ? WHERE id = 1', args: [clerkId] });
+    return 1;
+  }
+
+  // Create new user
+  const ins = await db.execute({
+    sql: 'INSERT INTO users (email, name, role, clerk_id) VALUES (?, ?, ?, ?)',
+    args: [`user_${clerkId}@kompta.app`, 'User', 'user', clerkId]
+  });
+  return Number(ins.lastInsertRowid);
 }
 
 export default db;

@@ -1,13 +1,18 @@
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { invalidateAllApi } from './useApi';
+import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
+import { useApi, invalidateAllApi } from './useApi';
 
 type Scope = 'all' | 'personal' | 'pro' | number;
+
+interface Company {
+  id: number;
+  name: string;
+}
 
 interface FilterContextValue {
   scope: Scope;
   setScope: (s: Scope) => void;
   appendScope: (url: string) => string;
-  companies: { id: number; name: string }[];
+  companies: Company[];
 }
 
 const FilterContext = createContext<FilterContextValue>({
@@ -32,23 +37,23 @@ function readScope(): Scope {
 
 export function FilterProvider({ children }: { children: ReactNode }) {
   const [scope, setScopeState] = useState<Scope>(readScope);
-  const [companies, setCompanies] = useState<{ id: number; name: string }[]>([]);
+  const { data: rawCompanies } = useApi<any[]>('/kompta/api/companies');
 
+  const companies = useMemo(() => {
+    if (!rawCompanies) return [];
+    return rawCompanies.map((c: any) => ({ id: c.id, name: c.name }));
+  }, [rawCompanies]);
+
+  // Validate stored scope — if company_id doesn't exist, fallback
   useEffect(() => {
-    fetch('/kompta/api/companies')
-      .then(r => r.json())
-      .then((data: any[]) => {
-        const list = data.map(c => ({ id: c.id, name: c.name }));
-        setCompanies(list);
-        // Validate stored scope — if company_id doesn't exist, fallback
-        const current = readScope();
-        if (typeof current === 'number' && !list.some(c => c.id === current)) {
-          setScopeState('all');
-          localStorage.setItem('kompta_scope', 'all');
-        }
-      })
-      .catch(() => {});
-  }, []);
+    if (companies.length > 0) {
+      const current = readScope();
+      if (typeof current === 'number' && !companies.some(c => c.id === current)) {
+        setScopeState('all');
+        localStorage.setItem('kompta_scope', 'all');
+      }
+    }
+  }, [companies]);
 
   const setScope = (s: Scope) => {
     localStorage.setItem('kompta_scope', String(s));

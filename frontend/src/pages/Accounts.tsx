@@ -5,8 +5,10 @@ import { useApi, invalidateAllApi } from '../useApi';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { useAuth } from '@clerk/clerk-react';
 
 const API = '/kompta/api';
+const clerkEnabledAcc = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 interface BankAccount {
   id: number;
@@ -64,6 +66,16 @@ type AddMode = null | 'choose' | 'manual' | 'blockchain';
 
 export default function Accounts() {
   const { t } = useTranslation();
+  let getTokenAcc: (() => Promise<string | null>) | undefined;
+  if (clerkEnabledAcc) { try { const auth = useAuth(); getTokenAcc = auth.getToken; } catch {} }
+  const authFetch = async (url: string, opts?: RequestInit) => {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(opts?.headers as Record<string,string> || {}) };
+    if (clerkEnabledAcc && getTokenAcc) {
+      const token = await getTokenAcc();
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+    }
+    return fetch(url, { ...opts, headers });
+  };
   const { appendScope } = useFilter();
   const { data: accounts, loading: loadingAccounts, refetch: refetchAccounts, setData: setAccounts } = useApi<BankAccount[]>(appendScope(`${API}/bank/accounts`));
   const { data: connections, loading: loadingConnections, refetch: refetchConnections } = useApi<BankConnection[]>(`${API}/bank/connections`);
@@ -98,13 +110,13 @@ export default function Accounts() {
   };
 
   const connectBank = async () => {
-    const res = await fetch(`${API}/bank/connect-url`);
+    const res = await authFetch(`${API}/bank/connect-url`);
     const { url } = await res.json();
     window.location.href = url;
   };
 
   const connectCoinbase = async () => {
-    const res = await fetch(`${API}/coinbase/connect-url`);
+    const res = await authFetch(`${API}/coinbase/connect-url`);
     const data = await res.json();
     if (data.error) {
       alert(data.error);
@@ -116,11 +128,11 @@ export default function Accounts() {
   const syncAccount = async (id: number) => {
     const acc = (accounts || []).find(a => a.id === id);
     if (acc?.provider === 'blockchain') {
-      await fetch(`${API}/accounts/${id}/sync-blockchain`, { method: 'POST' });
+      await authFetch(`${API}/accounts/${id}/sync-blockchain`, { method: 'POST' });
     } else if (acc?.provider === 'coinbase') {
-      await fetch(`${API}/coinbase/sync`, { method: 'POST' });
+      await authFetch(`${API}/coinbase/sync`, { method: 'POST' });
     } else {
-      await fetch(`${API}/bank/accounts/${id}/sync`, { method: 'POST' });
+      await authFetch(`${API}/bank/accounts/${id}/sync`, { method: 'POST' });
     }
     refetchAll();
   };
@@ -128,7 +140,7 @@ export default function Accounts() {
   const toggleHidden = async (acc: BankAccount) => {
     const newHidden = acc.hidden ? 0 : 1;
     updateAccount(acc.id, { hidden: newHidden });
-    await fetch(`${API}/bank/accounts/${acc.id}`, {
+    await authFetch(`${API}/bank/accounts/${acc.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ hidden: newHidden }),
@@ -144,7 +156,7 @@ export default function Accounts() {
   const saveEdit = async (id: number) => {
     updateAccount(id, { custom_name: editName });
     setEditingId(null);
-    await fetch(`${API}/bank/accounts/${id}`, {
+    await authFetch(`${API}/bank/accounts/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ custom_name: editName }),
@@ -158,7 +170,7 @@ export default function Accounts() {
       onConfirm: async () => {
         setConfirmAction(null);
         if (accounts) setAccounts(accounts.filter(a => a.id !== id));
-        await fetch(`${API}/bank/accounts/${id}`, { method: 'DELETE' });
+        await authFetch(`${API}/bank/accounts/${id}`, { method: 'DELETE' });
         refetchAll();
       },
     });
@@ -167,7 +179,7 @@ export default function Accounts() {
   const submitManual = async () => {
     if (!manualForm.name.trim()) return;
     setAddLoading(true);
-    await fetch(`${API}/accounts/manual`, {
+    await authFetch(`${API}/accounts/manual`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -187,7 +199,7 @@ export default function Accounts() {
   const submitBlockchain = async () => {
     if (!blockchainForm.address.trim()) return;
     setAddLoading(true);
-    await fetch(`${API}/accounts/blockchain`, {
+    await authFetch(`${API}/accounts/blockchain`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -203,7 +215,7 @@ export default function Accounts() {
   };
 
   const submitBalanceUpdate = async (id: number) => {
-    await fetch(`${API}/accounts/${id}/update-balance`, {
+    await authFetch(`${API}/accounts/${id}/update-balance`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ balance: parseFloat(newBalance) || 0 }),
@@ -232,7 +244,7 @@ export default function Accounts() {
     const idx = ACCOUNT_TYPES.indexOf(acc.type as typeof ACCOUNT_TYPES[number]);
     const next = ACCOUNT_TYPES[(idx + 1) % ACCOUNT_TYPES.length];
     updateAccount(acc.id, { type: next });
-    await fetch(`${API}/bank/accounts/${acc.id}`, {
+    await authFetch(`${API}/bank/accounts/${acc.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ type: next }),
@@ -244,7 +256,7 @@ export default function Accounts() {
     const idx = ACCOUNT_USAGES.indexOf(acc.usage as typeof ACCOUNT_USAGES[number]);
     const next = ACCOUNT_USAGES[(idx + 1) % ACCOUNT_USAGES.length];
     updateAccount(acc.id, { usage: next });
-    await fetch(`${API}/bank/accounts/${acc.id}`, {
+    await authFetch(`${API}/bank/accounts/${acc.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ usage: next }),

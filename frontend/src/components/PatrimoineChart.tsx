@@ -29,6 +29,8 @@ export default function PatrimoineChart() {
   const change = latestValue - firstValue;
   const changePct = firstValue !== 0 ? (change / Math.abs(firstValue)) * 100 : 0;
 
+  if (!loading && data.length < 2) return null;
+
   return (
     <div className="bg-surface rounded-xl border border-border p-4 mb-4">
       <div className="flex items-center justify-between mb-3">
@@ -59,11 +61,7 @@ export default function PatrimoineChart() {
       </div>
 
       {loading ? (
-        <div className="h-48 flex items-center justify-center text-muted text-sm">Chargement...</div>
-      ) : data.length < 2 ? (
-        <div className="h-48 flex items-center justify-center text-muted text-sm">
-          Pas assez de données. Les snapshots quotidiens s'accumulent au fil du temps.
-        </div>
+        <div className="h-48 flex items-center justify-center text-muted text-sm">...</div>
       ) : (
         <ResponsiveContainer width="100%" height={200}>
           <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
