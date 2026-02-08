@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useTranslation } from 'react-i18next';
 import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign } from 'lucide-react';
 import { useState } from 'react';
-import { useApi, invalidateAllApi } from '../useApi';
+import { useApi } from '../useApi';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -67,7 +67,7 @@ type AddMode = null | 'choose' | 'manual' | 'blockchain' | 'metamask-scanning';
 
 export default function Accounts() {
   const { t } = useTranslation();
-  const { formatCurrency: fc, convertToDisplay } = usePreferences();
+  const { convertToDisplay } = usePreferences();
   let getTokenAcc: (() => Promise<string | null>) | undefined;
   if (clerkEnabledAcc) { try { const auth = useAuth(); getTokenAcc = auth.getToken; } catch {} }
   const authFetch = async (url: string, opts?: RequestInit) => {
