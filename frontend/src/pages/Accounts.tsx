@@ -551,6 +551,7 @@ export default function Accounts() {
                       <option value="avalanche">Avalanche (AVAX)</option>
                       <option value="arbitrum">Arbitrum (ETH)</option>
                       <option value="optimism">Optimism (ETH)</option>
+                      <option value="xrp">XRP (Ripple)</option>
                       <option value="solana">{t('network_solana')}</option>
                     </select>
                   </div>
@@ -723,7 +724,7 @@ export default function Accounts() {
             const prov = providerBadge(acc.provider);
             const { text: syncText, isStale } = getRelativeTime(acc.last_sync, t);
             return (
-              <div key={acc.id} className={`bg-surface rounded-xl border border-border p-3 sm:p-4 ${acc.hidden ? 'opacity-50' : ''}`}>
+              <div key={acc.id} className="bg-surface rounded-xl border border-border p-3 sm:p-4">
                 {/* Row 1: Name + Balance */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">

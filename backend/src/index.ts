@@ -754,6 +754,11 @@ app.post('/api/accounts/:id/update-balance', async (c) => {
 // ========== BLOCKCHAIN WALLETS ==========
 
 async function fetchBlockchainBalance(network: string, address: string): Promise<{ balance: number; currency: string }> {
+  if (network === 'xrp' || network === 'ripple') {
+    const res = await fetch(`https://api.xrpscan.com/api/v1/account/${address}`);
+    const data = await res.json() as any;
+    return { balance: (data.xrpBalance || 0), currency: 'XRP' };
+  }
   if (network === 'solana') {
     const res = await fetch('https://api.mainnet-beta.solana.com', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -827,7 +832,7 @@ app.post('/api/accounts/blockchain', async (c) => {
 
   const network = body.network.toLowerCase();
   let balance = 0;
-  const currencyMap: Record<string, string> = { bitcoin: 'BTC', ethereum: 'ETH', solana: 'SOL', base: 'ETH', polygon: 'POL', bnb: 'BNB', avalanche: 'AVAX', arbitrum: 'ETH', optimism: 'ETH' };
+  const currencyMap: Record<string, string> = { bitcoin: 'BTC', ethereum: 'ETH', solana: 'SOL', xrp: 'XRP', ripple: 'XRP', base: 'ETH', polygon: 'POL', bnb: 'BNB', avalanche: 'AVAX', arbitrum: 'ETH', optimism: 'ETH' };
   let currency = currencyMap[network] || network.toUpperCase();
 
   try {
@@ -862,7 +867,7 @@ app.post('/api/accounts/:id/sync-blockchain', async (c) => {
 
 // ========== CRYPTO PRICES ==========
 app.get('/api/crypto/prices', async (c) => {
-  const ids = c.req.query('ids') || 'bitcoin,ethereum,solana,matic-network,binancecoin,avalanche-2';
+  const ids = c.req.query('ids') || 'bitcoin,ethereum,solana,ripple,matic-network,binancecoin,avalanche-2';
   try {
     const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=eur,usd&include_24hr_change=true`);
     const data = await res.json();
