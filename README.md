@@ -1,23 +1,93 @@
-# Kompta
+# Kompta 🦎
 
-Accounting automation for micro-entreprises and freelancers in France.
+> Personal accounting & patrimoine tracker for micro-entreprises and freelancers in France.
 
-## Stack
+Kompta aggregates all your financial accounts (banks, crypto, manual), tracks your patrimoine (real estate, vehicles, valuables), and provides budgeting, tax estimation, and credit simulation tools — all in one place.
 
-- **Frontend:** React + TypeScript + Tailwind CSS + shadcn/ui
-- **Backend:** Hono + SQLite (better-sqlite3)
-- **Monorepo:** npm workspaces
+## Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 18 + TypeScript + Tailwind CSS + Recharts |
+| Backend | Hono (Node.js) + TypeScript |
+| Database | Turso (libSQL) — SQLite-compatible, local or cloud |
+| Dev Server | Vite 5 (frontend) + tsx watch (backend) |
+| Process Manager | PM2 |
+| i18n | i18next (FR/EN) |
+
+## Quick Start
+
+```bash
+# Install dependencies (monorepo workspaces)
+npm install
+
+# Run both frontend + backend
+npm run dev
+
+# Or separately
+npm run dev:frontend   # → http://localhost:5173/kompta/
+npm run dev:backend    # → http://localhost:3004/api/
+```
+
+## Environment Variables
+
+### Backend (`backend/.env`)
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `TURSO_DATABASE_URL` | Turso DB URL (default: `file:./db/kompta.db`) | No |
+| `TURSO_AUTH_TOKEN` | Turso auth token | Only for cloud DB |
+| `POWENS_CLIENT_ID` | Powens API client ID | For bank sync |
+| `POWENS_CLIENT_SECRET` | Powens API client secret | For bank sync |
+| `POWENS_DOMAIN` | Powens domain (default: sandbox) | No |
+| `POWENS_REDIRECT_URI` | OAuth callback URL | For bank sync |
+| `COINBASE_CLIENT_ID` | Coinbase OAuth2 client ID | For Coinbase sync |
+| `COINBASE_CLIENT_SECRET` | Coinbase OAuth2 client secret | For Coinbase sync |
+| `COINBASE_REDIRECT_URI` | Coinbase callback URL | For Coinbase sync |
+| `PAPPERS_API_TOKEN` | Pappers API token (company enrichment) | Optional |
+| `CLERK_SECRET_KEY` | Clerk auth secret key | For auth (planned) |
+
+### Frontend (`frontend/.env`)
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key | For auth (planned) |
+
+## Project Structure
+
+```
+kompta/
+├── frontend/          # React SPA
+│   └── src/
+│       ├── App.tsx           # Router + auth gate
+│       ├── main.tsx          # Entry point (BrowserRouter /kompta)
+│       ├── pages/            # Route components
+│       ├── components/       # Shared UI
+│       ├── i18n/             # Translations
+│       ├── FilterContext.tsx  # Global scope filter
+│       └── useApi.ts         # API client hook
+├── backend/           # Hono API server
+│   └── src/
+│       ├── index.ts   # All routes (single file)
+│       └── db.ts      # Turso client + schema
+├── docs/              # Documentation
+├── tests/             # Vitest tests
+└── backups/           # Daily DB backups
+```
+
+## Cron Jobs
+
+| Schedule | Script | Purpose |
+|----------|--------|---------|
+| `0 3 * * *` | `backup.sh` | Daily database backup |
 
 ## Development
 
-```bash
-npm install
-npm run dev
-```
+- Frontend: `http://localhost:5173/kompta/`
+- Backend API: `http://localhost:3004/api/`
+- PM2 processes: `kompta-frontend`, `kompta-backend`
+- **Never run `npm run build`** — all dev servers served through nginx
 
-Frontend: http://localhost:5173/kompta/
-Backend: http://localhost:3001
+## License
 
-## Auth (dev)
-
-Login: `user` / `user`
+Private — all rights reserved.
