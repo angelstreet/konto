@@ -378,6 +378,64 @@ app.get('/api/transactions', (c) => {
   return c.json({ transactions: rows, total, limit, offset });
 });
 
+// --- Get detailed company info from SIREN ---
+app.get('/api/companies/info/:siren', async (c) => {
+  const siren = c.req.param('siren').replace(/\s/g, '');
+  if (!/^\d{9}$/.test(siren)) return c.json({ error: 'Invalid SIREN' }, 400);
+
+  try {
+    // Fetch from gouv.fr
+    const gouvRes = await fetch(`https://recherche-entreprises.api.gouv.fr/search?q=${siren}&page=1&per_page=1`);
+    const gouvData = await gouvRes.json() as any;
+    const company = gouvData.results?.[0];
+    if (!company || company.siren !== siren) return c.json({ error: 'Company not found' }, 404);
+
+    const siege = company.siege || {};
+
+    // Compute TVA number
+    const sirenNum = parseInt(siren, 10);
+    const tvaKey = (12 + 3 * (sirenNum % 97)) % 97;
+    const tvaNumber = `FR${String(tvaKey).padStart(2, '0')}${siren}`;
+
+    // Try to get capital social from societe.com
+    let capitalSocial: number | null = null;
+    try {
+      const slug = (company.nom_complet || '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+      const url = `https://www.societe.com/societe/${slug}-${siren}.html`;
+      const res = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36' } });
+      const html = await res.text();
+      const match = html.match(/data-copy-id="legal_capital">([\d\s,.]+)</) 
+                || html.match(/Capital\s*social[\s\S]*?([\d\s,.]+)\s*€/i);
+      if (match) capitalSocial = parseFloat(match[1].replace(/\s/g, '').replace(',', '.'));
+    } catch {}
+
+    // Legal form mapping
+    const FORMS: Record<string, string> = {
+      '1000': 'Entrepreneur individuel', '5410': 'SARL', '5485': 'EURL',
+      '5499': 'SAS', '5710': 'SAS', '5720': 'SASU', '6540': 'SCI',
+    };
+
+    return c.json({
+      siren: company.siren,
+      siret: siege.siret || '',
+      name: company.nom_complet || '',
+      legal_form: FORMS[String(company.nature_juridique)] || `Code ${company.nature_juridique}`,
+      capital_social: capitalSocial,
+      address: siege.geo_adresse || siege.adresse || '',
+      postal_code: siege.code_postal || '',
+      city: siege.libelle_commune || '',
+      naf_code: company.activite_principale || '',
+      naf_label: company.libelle_activite_principale || '',
+      date_creation: company.date_creation || '',
+      tva_number: tvaNumber,
+      rcs: `${siren} R.C.S. ${siege.libelle_commune || ''}`,
+      category: company.categorie_entreprise || '',
+    });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
 // --- Sync transactions for an account ---
 app.post('/api/bank/accounts/:id/sync', async (c) => {
   const accountId = c.req.param('id');
