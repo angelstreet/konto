@@ -103,6 +103,7 @@
   "edit_asset": "Modifier le bien",
   "asset_name": "Nom du bien",
   "purchase_price": "Prix d'achat",
+  "notary_fees": "Frais de notaire / huissier",
   "purchase_date": "Date d'achat",
   "current_value": "Valeur estimée actuelle",
   "link_loan": "Lier un prêt",
@@ -132,6 +133,8 @@
   "total_patrimoine": "Patrimoine total",
   "financial_assets": "Financier",
   "physical_assets": "Patrimoine physique",
+  "immobilier": "Immobilier",
+  "other_assets": "Autres actifs",
   "view_all_assets": "Voir tous les biens",
   "total_loans": "Emprunts",
   "total_balance": "Total",
@@ -227,7 +230,9 @@
   "onboarding_subtitle": "Commencez par connecter votre banque pour suivre vos finances automatiquement.",
   "add_account_manually": "Ajouter un compte manuellement",
   "skip_for_now": "Passer pour le moment",
+  "currency": "Devise",
   "display_currency": "Devise d'affichage",
+  "filter_crypto": "Crypto",
   "crypto_display_mode": "Affichage crypto",
   "crypto_native": "Natif (BTC, ETH...)",
   "crypto_converted": "Converti en devise",
@@ -240,5 +245,6 @@
   "kozy_occupancy": "Taux d'occupation",
   "currency_eur": "EUR (€)",
   "currency_usd": "USD ($)",
-  "currency_chf": "CHF (Fr.)"
+  "currency_chf": "CHF (Fr.)",
+  "btc_xpub_hint": "Ledger : utilisez votre clé xpub (Ledger Live → Compte → Avancé → Clé publique étendue) pour voir le solde total du portefeuille."
 }

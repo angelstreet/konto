@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Home, Car, Watch, Package, ArrowRight, ChevronDown, Volume2, VolumeX, Eye, EyeOff, Download } from 'lucide-react';
 import { useApi } from '../useApi';
 import { useFilter } from '../FilterContext';
+import { usePreferences } from '../PreferencesContext';
 import ScopeSelect from '../components/ScopeSelect';
 import { Link } from 'react-router-dom';
 import PatrimoineChart from '../components/PatrimoineChart';
@@ -15,6 +16,7 @@ interface DashboardAccount {
   name: string;
   balance: number;
   type: string;
+  currency: string;
 }
 
 interface DashboardAsset {
@@ -46,9 +48,6 @@ interface DashboardData {
   distribution: { personal: number; pro: number };
 }
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(value);
-}
 
 function typeBadgeColor(type: string): string {
   if (type === 'savings') return 'bg-blue-500/20 text-blue-400';
@@ -72,6 +71,7 @@ const sizeClasses: Record<string, string> = { sm: 'text-sm', base: 'text-base', 
 export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const { appendScope } = useFilter();
+  const { formatCurrency, convertToDisplay } = usePreferences();
   const { data, loading } = useApi<DashboardData>(appendScope(`${API}/dashboard`));
   const [viewMode, setViewMode] = useState<'brut' | 'net'>('brut');
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
@@ -98,33 +98,35 @@ export default function Dashboard() {
 
   const toggle = (key: string) => setCollapsed(prev => ({ ...prev, [key]: !prev[key] }));
 
-  const totalValue = data ? (viewMode === 'brut' ? data.totals.brut : data.totals.net) : 0;
-  const financialValue = data ? (viewMode === 'brut' ? data.financial.brutBalance : data.financial.netBalance) : 0;
+  const convertAcc = (a: DashboardAccount) => convertToDisplay(a.balance, a.currency || 'EUR');
+  const brutBalance = data ? [...(data.financial.accountsByType.checking || []), ...(data.financial.accountsByType.savings || []), ...(data.financial.accountsByType.investment || [])].reduce((s, a) => s + convertAcc(a), 0) : 0;
+  const loanTotal = data ? (data.financial.accountsByType.loan || []).reduce((s, a) => s + convertAcc(a), 0) : 0;
+  const financialValue = data ? (viewMode === 'brut' ? brutBalance : brutBalance + loanTotal) : 0;
   const patrimoineValue = data ? (viewMode === 'brut' ? data.patrimoine.brutValue : data.patrimoine.netValue) : 0;
-  const loanTotal = data ? (data.financial.accountsByType.loan || []).reduce((s: number, a: DashboardAccount) => s + a.balance, 0) : 0;
+  const totalValue = financialValue + patrimoineValue;
 
   return (
     <div>
       {/* Title row with total + controls */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">{t('dashboard')}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <h1 className="text-xl font-semibold whitespace-nowrap">{t('dashboard')}</h1>
           <button
             onClick={() => setHideAmounts(h => !h)}
-            className="text-muted hover:text-white transition-colors p-1"
+            className="text-muted hover:text-white transition-colors p-2"
             title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
           >
             {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
           {data && (
-            <span className="text-sm font-semibold text-accent-400">{fc(totalValue)}</span>
+            <span className="text-sm font-semibold text-accent-400 truncate">{fc(totalValue)}</span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-shrink-0">
           <div className="flex rounded-lg border border-border overflow-hidden">
             <button
               onClick={() => setViewMode('brut')}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`px-3 py-2 text-xs font-medium transition-colors ${
                 viewMode === 'brut'
                   ? 'bg-accent-500/20 text-accent-400 border-r border-accent-500/30'
                   : 'bg-surface text-muted border-r border-border'
@@ -134,7 +136,7 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => setViewMode('net')}
-              className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+              className={`px-3 py-2 text-xs font-medium transition-colors ${
                 viewMode === 'net'
                   ? 'bg-accent-500/20 text-accent-400'
                   : 'bg-surface text-muted'
@@ -163,15 +165,19 @@ export default function Dashboard() {
           {/* Distribution bar — by asset category */}
           {(() => {
             const segments: { key: string; label: string; value: number; color: string }[] = [];
-            const checking = (data.financial.accountsByType.checking || []).reduce((s: number, a: DashboardAccount) => s + a.balance, 0);
-            const savings = (data.financial.accountsByType.savings || []).reduce((s: number, a: DashboardAccount) => s + a.balance, 0);
-            const investment = (data.financial.accountsByType.investment || []).reduce((s: number, a: DashboardAccount) => s + a.balance, 0);
-            const immo = patrimoineValue;
+            const checking = (data.financial.accountsByType.checking || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
+            const savings = (data.financial.accountsByType.savings || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
+            const investment = (data.financial.accountsByType.investment || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
+            const immoAssets = data.patrimoine.assets.filter(a => a.type === 'real_estate');
+            const otherAssets = data.patrimoine.assets.filter(a => a.type !== 'real_estate');
+            const immoValue = immoAssets.reduce((s, a) => s + (viewMode === 'net' && a.loanBalance ? a.currentValue + a.loanBalance : a.currentValue), 0);
+            const otherValue = otherAssets.reduce((s, a) => s + (viewMode === 'net' && a.loanBalance ? a.currentValue + a.loanBalance : a.currentValue), 0);
 
             if (checking > 0) segments.push({ key: 'checking', label: t('account_type_checking'), value: checking, color: 'bg-white/30' });
             if (savings > 0) segments.push({ key: 'savings', label: t('account_type_savings'), value: savings, color: 'bg-blue-500/70' });
             if (investment > 0) segments.push({ key: 'investment', label: t('account_type_investment'), value: investment, color: 'bg-purple-500/70' });
-            if (immo > 0) segments.push({ key: 'immo', label: t('physical_assets'), value: immo, color: 'bg-green-500/70' });
+            if (immoValue > 0) segments.push({ key: 'immo', label: t('immobilier') || 'Immobilier', value: immoValue, color: 'bg-green-500/70' });
+            if (otherValue > 0) segments.push({ key: 'other_assets', label: t('other_assets') || 'Autres actifs', value: otherValue, color: 'bg-yellow-500/70' });
 
             const total = segments.reduce((s, seg) => s + seg.value, 0);
             if (total <= 0) return null;
@@ -212,9 +218,9 @@ export default function Dashboard() {
           {/* Distribution donut */}
           {(() => {
             const distData: { key: string; value: number }[] = [];
-            const checking = (data.financial.accountsByType.checking || []).reduce((s: number, a: DashboardAccount) => s + a.balance, 0);
-            const savings = (data.financial.accountsByType.savings || []).reduce((s: number, a: DashboardAccount) => s + a.balance, 0);
-            const investment = (data.financial.accountsByType.investment || []).reduce((s: number, a: DashboardAccount) => s + a.balance, 0);
+            const checking = (data.financial.accountsByType.checking || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
+            const savings = (data.financial.accountsByType.savings || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
+            const investment = (data.financial.accountsByType.investment || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
             if (checking > 0) distData.push({ key: 'checking', value: checking });
             if (savings > 0) distData.push({ key: 'savings', value: savings });
             if (investment > 0) distData.push({ key: 'investment', value: investment });
@@ -256,7 +262,7 @@ export default function Dashboard() {
                   if (accounts.length === 0) return null;
                   if (viewMode === 'brut' && type === 'loan') return null;
 
-                  const groupTotal = accounts.reduce((s: number, a: DashboardAccount) => s + a.balance, 0);
+                  const groupTotal = accounts.reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
 
                   return (
                     <div key={type} className="mb-3">
@@ -281,7 +287,7 @@ export default function Dashboard() {
                             <div key={acc.id} className="flex items-center justify-between px-4 py-3">
                               <p className="text-sm font-medium">{acc.name}</p>
                               <p className={`text-sm font-semibold ${acc.balance < 0 ? 'text-red-400' : 'text-accent-400'}`}>
-                                {fc(acc.balance)}
+                                {fc(convertAcc(acc))}
                               </p>
                             </div>
                           ))}

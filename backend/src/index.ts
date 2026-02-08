@@ -336,10 +336,15 @@ app.get('/api/dashboard', async (c) => {
     else personalBalance += (a.balance || 0);
   }
 
+  let assetWhere = 'a.user_id = ?';
+  const assetParams: any[] = [userId];
+  if (usage === 'personal') { assetWhere += ' AND a.usage = ?'; assetParams.push('personal'); }
+  else if (usage === 'professional') { assetWhere += ' AND a.usage = ?'; assetParams.push('professional'); }
+  else if (companyId) { assetWhere += ' AND a.company_id = ?'; assetParams.push(companyId); }
   const assetsResult = await db.execute({
     sql: `SELECT a.id, a.type, a.name, a.current_value, a.purchase_price, ba.balance as loan_balance
-          FROM assets a LEFT JOIN bank_accounts ba ON ba.id = a.linked_loan_account_id WHERE a.user_id = ?`,
-    args: [userId]
+          FROM assets a LEFT JOIN bank_accounts ba ON ba.id = a.linked_loan_account_id WHERE ${assetWhere}`,
+    args: assetParams
   });
   const assets = assetsResult.rows as any[];
 
@@ -610,8 +615,8 @@ app.post('/api/import', async (c) => {
   if (data.assets?.length) {
     for (const a of data.assets) {
       const r = await db.execute({
-        sql: `INSERT INTO assets (user_id, type, name, purchase_price, purchase_date, current_value, current_value_date, photo_url, linked_loan_account_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [userId, a.type, a.name, a.purchase_price, a.purchase_date, a.current_value, a.current_value_date, a.photo_url, a.linked_loan_account_id, a.notes]
+        sql: `INSERT INTO assets (user_id, type, name, purchase_price, notary_fees, purchase_date, current_value, current_value_date, photo_url, linked_loan_account_id, notes) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [userId, a.type, a.name, a.purchase_price, a.notary_fees || null, a.purchase_date, a.current_value, a.current_value_date, a.photo_url, a.linked_loan_account_id, a.notes]
       });
       const newId = Number(r.lastInsertRowid);
       if (a.costs) for (const co of a.costs) {
@@ -631,9 +636,14 @@ app.post('/api/import', async (c) => {
 
 app.get('/api/assets', async (c) => {
   const type = c.req.query('type');
+  const usage = c.req.query('usage');
+  const companyId = c.req.query('company_id');
   let where = '1=1';
   const params: any[] = [];
   if (type) { where += ' AND a.type = ?'; params.push(type); }
+  if (usage === 'personal') { where += " AND (a.usage = 'personal' OR a.usage IS NULL)"; }
+  else if (usage === 'professional') { where += " AND a.usage = 'professional'"; }
+  if (companyId) { where += ' AND a.company_id = ?'; params.push(companyId); }
 
   const result = await db.execute({
     sql: `SELECT a.*, ba.name as loan_name, ba.balance as loan_balance FROM assets a LEFT JOIN bank_accounts ba ON ba.id = a.linked_loan_account_id WHERE ${where} ORDER BY a.created_at DESC`,
@@ -648,8 +658,9 @@ app.get('/api/assets', async (c) => {
     asset.revenues = revenuesResult.rows;
     asset.monthly_costs = (asset.costs as any[]).reduce((sum: number, c: any) => sum + (c.frequency === 'yearly' ? c.amount / 12 : c.frequency === 'one_time' ? 0 : c.amount), 0);
     asset.monthly_revenues = (asset.revenues as any[]).reduce((sum: number, r: any) => sum + (r.frequency === 'yearly' ? r.amount / 12 : r.frequency === 'one_time' ? 0 : r.amount), 0);
-    asset.pnl = asset.current_value && asset.purchase_price ? asset.current_value - asset.purchase_price : null;
-    asset.pnl_percent = asset.pnl != null && asset.purchase_price ? (asset.pnl / asset.purchase_price) * 100 : null;
+    const totalAcquisition = asset.purchase_price ? asset.purchase_price + (asset.notary_fees || 0) : null;
+    asset.pnl = asset.current_value && totalAcquisition ? asset.current_value - totalAcquisition : null;
+    asset.pnl_percent = asset.pnl != null && totalAcquisition ? (asset.pnl / totalAcquisition) * 100 : null;
   }
 
   return c.json(assets);
@@ -669,8 +680,8 @@ app.get('/api/assets/:id', async (c) => {
 app.post('/api/assets', async (c) => {
   const body = await c.req.json() as any;
   const result = await db.execute({
-    sql: `INSERT INTO assets (type, name, purchase_price, purchase_date, current_value, current_value_date, photo_url, linked_loan_account_id, notes, address, citycode, latitude, longitude, surface, property_type, estimated_value, estimated_price_m2, estimation_date, property_usage, monthly_rent, tenant_name, kozy_property_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [body.type, body.name, body.purchase_price || null, body.purchase_date || null, body.current_value || null, body.current_value_date || null, body.photo_url || null, body.linked_loan_account_id || null, body.notes || null, body.address || null, body.citycode || null, body.latitude || null, body.longitude || null, body.surface || null, body.property_type || null, body.estimated_value || null, body.estimated_price_m2 || null, body.estimated_value ? new Date().toISOString() : null, body.property_usage || 'principal', body.monthly_rent || null, body.tenant_name || null, body.kozy_property_id || null]
+    sql: `INSERT INTO assets (type, name, purchase_price, notary_fees, purchase_date, current_value, current_value_date, photo_url, linked_loan_account_id, notes, address, citycode, latitude, longitude, surface, property_type, estimated_value, estimated_price_m2, estimation_date, property_usage, monthly_rent, tenant_name, kozy_property_id, usage, company_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [body.type, body.name, body.purchase_price || null, body.notary_fees || null, body.purchase_date || null, body.current_value || null, body.current_value_date || null, body.photo_url || null, body.linked_loan_account_id || null, body.notes || null, body.address || null, body.citycode || null, body.latitude || null, body.longitude || null, body.surface || null, body.property_type || null, body.estimated_value || null, body.estimated_price_m2 || null, body.estimated_value ? new Date().toISOString() : null, body.property_usage || 'principal', body.monthly_rent || null, body.tenant_name || null, body.kozy_property_id || null, body.usage || 'personal', body.company_id || null]
   });
 
   const newId = Number(result.lastInsertRowid);
@@ -692,7 +703,7 @@ app.patch('/api/assets/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json() as any;
 
-  const fields = ['type', 'name', 'purchase_price', 'purchase_date', 'current_value', 'current_value_date', 'photo_url', 'linked_loan_account_id', 'notes', 'address', 'citycode', 'latitude', 'longitude', 'surface', 'property_type', 'estimated_value', 'estimated_price_m2', 'estimation_date', 'property_usage', 'monthly_rent', 'tenant_name', 'kozy_property_id'];
+  const fields = ['type', 'name', 'purchase_price', 'notary_fees', 'purchase_date', 'current_value', 'current_value_date', 'photo_url', 'linked_loan_account_id', 'notes', 'address', 'citycode', 'latitude', 'longitude', 'surface', 'property_type', 'estimated_value', 'estimated_price_m2', 'estimation_date', 'property_usage', 'monthly_rent', 'tenant_name', 'kozy_property_id', 'usage', 'company_id'];
   const updates: string[] = [];
   const values: any[] = [];
   for (const f of fields) {
@@ -1187,6 +1198,7 @@ app.get('/api/budget/cashflow', async (c) => {
 
 app.get('/api/report/patrimoine', async (c) => {
   const categoriesParam = c.req.query('categories') || 'all';
+  const scopesParam = c.req.query('scopes') || '';
   const userId = await getUserId(c);
 
   const accountsResult = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE hidden = 0 AND user_id = ?', args: [userId] });
@@ -1195,8 +1207,32 @@ app.get('/api/report/patrimoine', async (c) => {
     args: [userId]
   });
 
-  const accounts = accountsResult.rows as any[];
-  const assets = assetsResult.rows as any[];
+  let accounts = accountsResult.rows as any[];
+  let assets = assetsResult.rows as any[];
+
+  // Apply scope filtering if scopes parameter is provided
+  if (scopesParam) {
+    const scopes = scopesParam.split(',');
+    const wantPersonal = scopes.includes('personal');
+    const wantPro = scopes.includes('pro');
+    const wantedCompanyIds = scopes.filter(s => s.startsWith('company_')).map(s => parseInt(s.replace('company_', ''), 10));
+
+    accounts = accounts.filter((a: any) => {
+      if (a.company_id && wantedCompanyIds.includes(a.company_id)) return true;
+      if (a.usage === 'professional' && wantPro) return true;
+      if (a.usage === 'personal' && wantPersonal) return true;
+      if (!a.usage && wantPersonal) return true; // default to personal
+      return false;
+    });
+
+    assets = assets.filter((a: any) => {
+      if (a.company_id && wantedCompanyIds.includes(a.company_id)) return true;
+      if (a.usage === 'professional' && wantPro) return true;
+      if (a.usage === 'personal' && wantPersonal) return true;
+      if (!a.usage && wantPersonal) return true;
+      return false;
+    });
+  }
   const wantedCategories = categoriesParam === 'all' ? ['bank', 'immobilier', 'crypto', 'stocks'] : categoriesParam.split(',');
   const sections: { title: string; items: { name: string; value: number }[]; total: number }[] = [];
 

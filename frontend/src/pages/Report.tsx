@@ -1,7 +1,8 @@
 import { API } from '../config';
 import { useState, useRef } from 'react';
 import { Download, FileText, Check } from 'lucide-react';
-
+import { useAuthFetch } from '../useApi';
+import { useFilter } from '../FilterContext';
 
 const CATEGORIES = [
   { key: 'bank', label: 'Comptes bancaires', icon: '🏦' },
@@ -21,7 +22,24 @@ interface ReportSection {
 }
 
 export default function Report() {
+  const authFetch = useAuthFetch();
+  const { companies } = useFilter();
   const [selected, setSelected] = useState<Set<string>>(new Set(['bank', 'immobilier', 'crypto', 'stocks']));
+  const [selectedScopes, setSelectedScopes] = useState<Set<string>>(() => {
+    const s = new Set(['personal', 'pro']);
+    return s;
+  });
+  // Add company IDs to scope selection after they load
+  const [companiesAdded, setCompaniesAdded] = useState(false);
+  if (companies.length > 0 && !companiesAdded) {
+    setCompaniesAdded(true);
+    setSelectedScopes(prev => {
+      const next = new Set(prev);
+      companies.forEach(c => next.add(`company_${c.id}`));
+      return next;
+    });
+  }
+
   const [report, setReport] = useState<{ sections: ReportSection[]; grandTotal: number; generatedAt: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -39,10 +57,25 @@ export default function Report() {
     else setSelected(new Set(CATEGORIES.map(c => c.key)));
   };
 
+  const toggleScope = (key: string) => {
+    setSelectedScopes(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
+
+  const toggleAllScopes = () => {
+    const allScopes = ['personal', 'pro', ...companies.map(c => `company_${c.id}`)];
+    if (selectedScopes.size === allScopes.length) setSelectedScopes(new Set());
+    else setSelectedScopes(new Set(allScopes));
+  };
+
   const generate = () => {
-    if (selected.size === 0) return;
+    if (selected.size === 0 || selectedScopes.size === 0) return;
     setLoading(true);
-    fetch(`${API}/report/patrimoine?categories=${Array.from(selected).join(',')}`)
+    const scopeParams = Array.from(selectedScopes).join(',');
+    authFetch(`${API}/report/patrimoine?categories=${Array.from(selected).join(',')}&scopes=${scopeParams}`)
       .then(r => r.json())
       .then(d => setReport(d))
       .finally(() => setLoading(false));
@@ -115,9 +148,60 @@ export default function Report() {
             </button>
           ))}
         </div>
+        {/* Scope selection */}
+        <div className="mt-4 pt-4 border-t border-border">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-muted">Périmètre</h3>
+            <button onClick={toggleAllScopes} className="text-xs text-accent-400 hover:text-accent-300">
+              {selectedScopes.size === 2 + companies.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+            </button>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => toggleScope('personal')}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                selectedScopes.has('personal')
+                  ? 'border-accent-500/50 bg-accent-500/10 text-accent-400'
+                  : 'border-border text-muted hover:border-border/80'
+              }`}
+            >
+              <span>👤</span>
+              <span className="flex-1 text-left">Personnel</span>
+              {selectedScopes.has('personal') && <Check size={14} />}
+            </button>
+            <button
+              onClick={() => toggleScope('pro')}
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                selectedScopes.has('pro')
+                  ? 'border-accent-500/50 bg-accent-500/10 text-accent-400'
+                  : 'border-border text-muted hover:border-border/80'
+              }`}
+            >
+              <span>💼</span>
+              <span className="flex-1 text-left">Professionnel</span>
+              {selectedScopes.has('pro') && <Check size={14} />}
+            </button>
+            {companies.map(c => (
+              <button
+                key={c.id}
+                onClick={() => toggleScope(`company_${c.id}`)}
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                  selectedScopes.has(`company_${c.id}`)
+                    ? 'border-accent-500/50 bg-accent-500/10 text-accent-400'
+                    : 'border-border text-muted hover:border-border/80'
+                }`}
+              >
+                <span>🏢</span>
+                <span className="flex-1 text-left truncate">{c.name}</span>
+                {selectedScopes.has(`company_${c.id}`) && <Check size={14} />}
+              </button>
+            ))}
+          </div>
+        </div>
+
         <button
           onClick={generate}
-          disabled={selected.size === 0 || loading}
+          disabled={selected.size === 0 || selectedScopes.size === 0 || loading}
           className="mt-4 w-full py-2.5 rounded-lg bg-accent-500 text-black font-medium text-sm hover:bg-accent-400 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
         >
           {loading ? 'Génération...' : 'Générer mon rapport'}

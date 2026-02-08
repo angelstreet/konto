@@ -103,6 +103,7 @@
   "edit_asset": "Edit asset",
   "asset_name": "Asset name",
   "purchase_price": "Purchase price",
+  "notary_fees": "Notary / bailiff fees",
   "purchase_date": "Purchase date",
   "current_value": "Current estimated value",
   "link_loan": "Link a loan",
@@ -132,6 +133,8 @@
   "total_patrimoine": "Total patrimoine",
   "financial_assets": "Financial",
   "physical_assets": "Physical assets",
+  "immobilier": "Real estate",
+  "other_assets": "Other assets",
   "view_all_assets": "View all assets",
   "total_loans": "Loans",
   "total_balance": "Total",
@@ -227,7 +230,9 @@
   "onboarding_subtitle": "Start by connecting your bank to automatically track your finances.",
   "add_account_manually": "Add an account manually",
   "skip_for_now": "Skip for now",
+  "currency": "Currency",
   "display_currency": "Display currency",
+  "filter_crypto": "Crypto",
   "crypto_display_mode": "Crypto display",
   "crypto_native": "Native (BTC, ETH...)",
   "crypto_converted": "Converted to currency",
@@ -240,5 +245,6 @@
   "kozy_occupancy": "Occupancy rate",
   "currency_eur": "EUR (€)",
   "currency_usd": "USD ($)",
-  "currency_chf": "CHF (Fr.)"
+  "currency_chf": "CHF (Fr.)",
+  "btc_xpub_hint": "Ledger: use your xpub key (Ledger Live → Account → Advanced → Extended public key) to see the full wallet balance."
 }
