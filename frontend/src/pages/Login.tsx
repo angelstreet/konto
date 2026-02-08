@@ -23,7 +23,7 @@ export default function Login({ onLogin }: Props) {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-center mb-2 text-gold-400">Kompta</h1>
+        <h1 className="text-3xl font-bold text-center mb-2 text-accent-400">Kompta</h1>
         <p className="text-muted text-center mb-8 text-sm">Comptabilité simplifiée</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -33,7 +33,7 @@ export default function Login({ onLogin }: Props) {
               type="text"
               value={username}
               onChange={(e) => { setUsername(e.target.value); setError(false); }}
-              className="w-full bg-surface border border-border rounded-lg px-4 py-3 text-white focus:outline-none focus:border-gold-500 transition-colors"
+              className="w-full bg-surface border border-border rounded-lg px-4 py-3 text-white focus:outline-none focus:border-accent-500 transition-colors"
               autoFocus
             />
           </div>
@@ -43,7 +43,7 @@ export default function Login({ onLogin }: Props) {
               type="password"
               value={password}
               onChange={(e) => { setPassword(e.target.value); setError(false); }}
-              className="w-full bg-surface border border-border rounded-lg px-4 py-3 text-white focus:outline-none focus:border-gold-500 transition-colors"
+              className="w-full bg-surface border border-border rounded-lg px-4 py-3 text-white focus:outline-none focus:border-accent-500 transition-colors"
             />
           </div>
 
@@ -53,7 +53,7 @@ export default function Login({ onLogin }: Props) {
 
           <button
             type="submit"
-            className="w-full bg-gold-500 hover:bg-gold-600 text-black font-semibold rounded-lg py-3 transition-colors"
+            className="w-full bg-accent-500 hover:bg-accent-600 text-black font-semibold rounded-lg py-3 transition-colors"
           >
             {t('sign_in')}
           </button>
