@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Landmark, Plus, RefreshCw, ExternalLink, Pencil, Trash2, Eye, EyeOff, Check, X } from 'lucide-react';
 import { useState } from 'react';
 import { useApi, invalidateApi } from '../useApi';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const API = '/kompta/api';
 
@@ -54,6 +55,7 @@ export default function Accounts() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
   const [allBalancesHidden, setAllBalancesHidden] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
 
   const loading = loadingAccounts || loadingConnections;
 
@@ -98,10 +100,15 @@ export default function Accounts() {
     refetchAll();
   };
 
-  const deleteAccount = async (id: number) => {
-    if (!confirm(t('confirm_delete_account'))) return;
-    await fetch(`${API}/bank/accounts/${id}`, { method: 'DELETE' });
-    refetchAll();
+  const deleteAccount = (id: number) => {
+    setConfirmAction({
+      message: t('confirm_delete_account'),
+      onConfirm: async () => {
+        setConfirmAction(null);
+        await fetch(`${API}/bank/accounts/${id}`, { method: 'DELETE' });
+        refetchAll();
+      },
+    });
   };
 
   const formatBalance = (n: number) =>
@@ -265,6 +272,14 @@ export default function Accounts() {
           ))}
         </div>
       )}
+      <ConfirmDialog
+        open={!!confirmAction}
+        title={t('delete')}
+        message={confirmAction?.message || ''}
+        variant="danger"
+        onConfirm={() => confirmAction?.onConfirm()}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 }

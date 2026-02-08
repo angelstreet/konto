@@ -1,8 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X
+  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X,
 } from 'lucide-react';
+
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const API = '/kompta/api';
 const apiFetch = (url: string, opts?: RequestInit) =>
@@ -41,6 +43,7 @@ export default function Assets() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [form, setForm] = useState({
     type: 'real_estate', name: '', purchase_price: '', purchase_date: '',
     current_value: '', linked_loan_account_id: '', notes: '',
@@ -108,10 +111,15 @@ export default function Assets() {
     load();
   };
 
-  const deleteAsset = async (id: number) => {
-    if (!confirm(t('confirm_delete_asset'))) return;
-    await apiFetch(`${API}/assets/${id}`, { method: 'DELETE' });
-    load();
+  const deleteAsset = (id: number) => {
+    setConfirmAction({
+      message: t('confirm_delete_asset'),
+      onConfirm: async () => {
+        setConfirmAction(null);
+        await apiFetch(`${API}/assets/${id}`, { method: 'DELETE' });
+        load();
+      },
+    });
   };
 
   const addCost = () => setForm(f => ({ ...f, costs: [...f.costs, { label: '', amount: 0, frequency: 'monthly' }] }));
@@ -398,6 +406,14 @@ export default function Assets() {
           })}
         </div>
       )}
+      <ConfirmDialog
+        open={!!confirmAction}
+        title={t('delete')}
+        message={confirmAction?.message || ''}
+        variant="danger"
+        onConfirm={() => confirmAction?.onConfirm()}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 }

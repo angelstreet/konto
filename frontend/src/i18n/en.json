@@ -119,6 +119,7 @@
   "net_cashflow": "Net cashflow",
   "confirm_delete_asset": "Delete this asset and all its costs?",
   "all": "All",
+  "confirm": "Confirm",
   "date": "Date",
   "amount": "Amount",
   "category": "Category",
