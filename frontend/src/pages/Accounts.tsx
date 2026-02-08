@@ -63,7 +63,7 @@ interface BankConnection {
   created_at: string;
 }
 
-type AddMode = null | 'choose' | 'manual' | 'blockchain';
+type AddMode = null | 'choose' | 'manual' | 'blockchain' | 'metamask-scanning';
 
 export default function Accounts() {
   const { t } = useTranslation();
@@ -238,6 +238,42 @@ export default function Accounts() {
     refetchAll();
   };
 
+  const [metamaskStatus, setMetamaskStatus] = useState('');
+  const evmChains = ['ethereum', 'base', 'polygon', 'bnb', 'avalanche', 'arbitrum', 'optimism'];
+
+  const connectMetaMask = async () => {
+    const eth = (window as any).ethereum;
+    if (!eth) {
+      alert('MetaMask not detected. Install MetaMask browser extension first.');
+      return;
+    }
+    try {
+      const accounts = await eth.request({ method: 'eth_requestAccounts' });
+      const address = accounts[0];
+      if (!address) return;
+      setAddMode('metamask-scanning');
+      setMetamaskStatus(`Connected: ${address.slice(0, 6)}...${address.slice(-4)}. Scanning chains...`);
+
+      let added = 0;
+      for (const chain of evmChains) {
+        setMetamaskStatus(`Scanning ${chain}...`);
+        try {
+          const res = await authFetch(`${API}/accounts/blockchain`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ address, network: chain, name: `MetaMask (${chain})` }),
+          });
+          const data = await res.json();
+          if (data.id) added++;
+        } catch {}
+      }
+      setMetamaskStatus(`Done! Added ${added} chain accounts.`);
+      setTimeout(() => { setAddMode(null); setMetamaskStatus(''); refetchAll(); }, 1500);
+    } catch (e: any) {
+      setMetamaskStatus(`Error: ${e.message || 'Connection rejected'}`);
+    }
+  };
+
   const submitBalanceUpdate = async (id: number) => {
     await authFetch(`${API}/accounts/${id}/update-balance`, {
       method: 'POST',
@@ -357,6 +393,13 @@ export default function Accounts() {
                       <p className="text-xs text-muted">{t('add_manual_desc')}</p>
                     </div>
                   </button>
+                  <button onClick={connectMetaMask} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
+                    <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-lg">🦊</div>
+                    <div>
+                      <p className="font-medium">MetaMask</p>
+                      <p className="text-xs text-muted">Auto-scan all EVM chains (ETH, Base, Polygon, BNB...)</p>
+                    </div>
+                  </button>
                   <button onClick={() => setAddMode('blockchain')} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
                     <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center"><Bitcoin size={20} className="text-amber-400" /></div>
                     <div>
@@ -454,6 +497,14 @@ export default function Accounts() {
                   </button>
                 </div>
               </>
+            )}
+
+            {/* MetaMask scanning */}
+            {addMode === 'metamask-scanning' && (
+              <div className="text-center py-8">
+                <div className="text-4xl mb-4">🦊</div>
+                <div className="animate-pulse text-sm text-muted">{metamaskStatus}</div>
+              </div>
             )}
 
             {/* Blockchain wallet form */}
