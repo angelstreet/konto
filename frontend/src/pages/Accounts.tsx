@@ -6,6 +6,7 @@ import { useApi, invalidateAllApi } from '../useApi';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { usePreferences } from '../PreferencesContext';
 import { useAuth } from '@clerk/clerk-react';
 
 const clerkEnabledAcc = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -66,6 +67,7 @@ type AddMode = null | 'choose' | 'manual' | 'blockchain';
 
 export default function Accounts() {
   const { t } = useTranslation();
+  const { formatCurrency: fc, convertToDisplay } = usePreferences();
   let getTokenAcc: (() => Promise<string | null>) | undefined;
   if (clerkEnabledAcc) { try { const auth = useAuth(); getTokenAcc = auth.getToken; } catch {} }
   const authFetch = async (url: string, opts?: RequestInit) => {
@@ -81,10 +83,12 @@ export default function Accounts() {
   const { data: connections, loading: loadingConnections, refetch: refetchConnections } = useApi<BankConnection[]>(`${API}/bank/connections`);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
+  const [editBalance, setEditBalance] = useState('');
   const [allBalancesHidden, setAllBalancesHidden] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
   const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [filterBank, setFilterBank] = useState('');
   const [filterType, setFilterType] = useState('');
+  const [filterCrypto, setFilterCrypto] = useState(false);
 
   // Add account state
   const [addMode, setAddMode] = useState<AddMode>(null);
@@ -104,7 +108,6 @@ export default function Accounts() {
   };
 
   const refetchAll = () => {
-    invalidateAllApi();
     refetchAccounts();
     refetchConnections();
   };
@@ -125,14 +128,25 @@ export default function Accounts() {
     window.location.href = data.url;
   };
 
+  const [syncingId, setSyncingId] = useState<number | null>(null);
+
   const syncAccount = async (id: number) => {
     const acc = (accounts || []).find(a => a.id === id);
-    if (acc?.provider === 'blockchain') {
-      await authFetch(`${API}/accounts/${id}/sync-blockchain`, { method: 'POST' });
-    } else if (acc?.provider === 'coinbase') {
-      await authFetch(`${API}/coinbase/sync`, { method: 'POST' });
-    } else {
-      await authFetch(`${API}/bank/accounts/${id}/sync`, { method: 'POST' });
+    setSyncingId(id);
+    try {
+      if (acc?.provider === 'blockchain') {
+        const res = await authFetch(`${API}/accounts/${id}/sync-blockchain`, { method: 'POST' });
+        const result = await res.json();
+        if (result.balance !== undefined) {
+          updateAccount(id, { balance: result.balance, currency: result.currency, last_sync: new Date().toISOString() });
+        }
+      } else if (acc?.provider === 'coinbase') {
+        await authFetch(`${API}/coinbase/sync`, { method: 'POST' });
+      } else {
+        await authFetch(`${API}/bank/accounts/${id}/sync`, { method: 'POST' });
+      }
+    } finally {
+      setSyncingId(null);
     }
     refetchAll();
   };
@@ -151,15 +165,25 @@ export default function Accounts() {
   const startEdit = (acc: BankAccount) => {
     setEditingId(acc.id);
     setEditName(acc.custom_name || acc.name);
+    setEditBalance(String(acc.balance || 0));
   };
 
   const saveEdit = async (id: number) => {
-    updateAccount(id, { custom_name: editName });
+    const acc = (accounts || []).find(a => a.id === id);
+    const isManual = acc?.provider === 'manual';
+    const patch: Partial<BankAccount> = { custom_name: editName };
+    const body: Record<string, unknown> = { custom_name: editName };
+    if (isManual) {
+      const bal = parseFloat(editBalance) || 0;
+      patch.balance = bal;
+      body.balance = bal;
+    }
+    updateAccount(id, patch);
     setEditingId(null);
     await authFetch(`${API}/bank/accounts/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ custom_name: editName }),
+      body: JSON.stringify(body),
     });
     refetchAll();
   };
@@ -226,10 +250,11 @@ export default function Accounts() {
   };
 
   const formatBalance = (n: number, currency?: string | null) => {
-    if (currency && currency !== 'EUR') {
-      return `${n.toLocaleString('fr-FR', { maximumFractionDigits: 8 })} ${currency}`;
+    const cur = currency || 'EUR';
+    if (cur !== 'EUR' && ['BTC', 'ETH', 'SOL'].includes(cur)) {
+      return `${n.toLocaleString('fr-FR', { maximumFractionDigits: 8 })} ${cur}`;
     }
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur }).format(n);
   };
 
   const maskNumber = (num: string) => {
@@ -267,9 +292,11 @@ export default function Accounts() {
   const allAccounts = accounts || [];
   const uniqueBanks = [...new Set(allAccounts.map(a => a.bank_name).filter(Boolean))] as string[];
   const uniqueTypes = [...new Set(allAccounts.map(a => a.type).filter(Boolean))];
+  const hasCrypto = allAccounts.some(a => a.provider === 'blockchain' || a.provider === 'coinbase');
   const filteredAccounts = allAccounts.filter(acc => {
     if (filterBank && acc.bank_name !== filterBank) return false;
     if (filterType && acc.type !== filterType) return false;
+    if (filterCrypto && acc.provider !== 'blockchain' && acc.provider !== 'coinbase') return false;
     return true;
   });
 
@@ -289,7 +316,7 @@ export default function Accounts() {
           )}
           {!loading && filteredAccounts.length > 0 && (
             <span className="text-sm font-semibold text-accent-400">
-              {allBalancesHidden ? '••••' : formatBalance(filteredAccounts.filter(a => !a.hidden && (!a.currency || a.currency === 'EUR')).reduce((sum, a) => sum + (a.balance || 0), 0))}
+              {allBalancesHidden ? '••••' : formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}
               <span className="text-muted font-normal text-xs ml-1">· {filteredAccounts.filter(a => !a.hidden).length}</span>
             </span>
           )}
@@ -386,18 +413,34 @@ export default function Accounts() {
                       />
                     </div>
                     <div>
-                      <label className="text-xs text-muted mb-1 block">{t('add_account_type')}</label>
+                      <label className="text-xs text-muted mb-1 block">{t('currency')}</label>
                       <select
-                        value={manualForm.type}
-                        onChange={e => setManualForm(f => ({ ...f, type: e.target.value }))}
+                        value={manualForm.currency}
+                        onChange={e => setManualForm(f => ({ ...f, currency: e.target.value }))}
                         className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm"
                       >
-                        <option value="checking">{t('account_type_checking')}</option>
-                        <option value="savings">{t('account_type_savings')}</option>
-                        <option value="investment">{t('account_type_investment')}</option>
-                        <option value="loan">{t('account_type_loan')}</option>
+                        <option value="EUR">EUR (€)</option>
+                        <option value="USD">USD ($)</option>
+                        <option value="GBP">GBP (£)</option>
+                        <option value="CHF">CHF</option>
+                        <option value="CAD">CAD (C$)</option>
+                        <option value="JPY">JPY (¥)</option>
+                        <option value="XOF">XOF (CFA)</option>
                       </select>
                     </div>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted mb-1 block">{t('add_account_type')}</label>
+                    <select
+                      value={manualForm.type}
+                      onChange={e => setManualForm(f => ({ ...f, type: e.target.value }))}
+                      className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm"
+                    >
+                      <option value="checking">{t('account_type_checking')}</option>
+                      <option value="savings">{t('account_type_savings')}</option>
+                      <option value="investment">{t('account_type_investment')}</option>
+                      <option value="loan">{t('account_type_loan')}</option>
+                    </select>
                   </div>
                 </div>
                 <div className="flex gap-3 mt-5">
@@ -427,6 +470,12 @@ export default function Accounts() {
                     >
                       <option value="bitcoin">{t('network_bitcoin')}</option>
                       <option value="ethereum">{t('network_ethereum')}</option>
+                      <option value="base">Base (ETH)</option>
+                      <option value="polygon">Polygon (POL)</option>
+                      <option value="bnb">BNB Chain</option>
+                      <option value="avalanche">Avalanche (AVAX)</option>
+                      <option value="arbitrum">Arbitrum (ETH)</option>
+                      <option value="optimism">Optimism (ETH)</option>
                       <option value="solana">{t('network_solana')}</option>
                     </select>
                   </div>
@@ -436,9 +485,12 @@ export default function Accounts() {
                       value={blockchainForm.address}
                       onChange={e => setBlockchainForm(f => ({ ...f, address: e.target.value }))}
                       className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm font-mono text-xs"
-                      placeholder={blockchainForm.network === 'bitcoin' ? 'bc1q...' : blockchainForm.network === 'ethereum' ? '0x...' : '...'}
+                      placeholder={blockchainForm.network === 'bitcoin' ? 'xpub... / bc1q...' : blockchainForm.network === 'solana' ? 'So1...' : '0x...'}
                       autoFocus
                     />
+                    {blockchainForm.network === 'bitcoin' && (
+                      <p className="text-[10px] text-muted mt-1">{t('btc_xpub_hint')}</p>
+                    )}
                   </div>
                   <div>
                     <label className="text-xs text-muted mb-1 block">{t('wallet_name')}</label>
@@ -492,7 +544,7 @@ export default function Accounts() {
       )}
 
       {/* Filters — dropdowns on mobile, pills on desktop */}
-      {allAccounts.length > 0 && (uniqueBanks.length > 1 || uniqueTypes.length > 1) && (
+      {allAccounts.length > 0 && (uniqueBanks.length > 1 || uniqueTypes.length > 1 || hasCrypto) && (
         <>
           {/* Mobile: dropdowns */}
           <div className="flex gap-2 mb-4 sm:hidden">
@@ -519,6 +571,14 @@ export default function Accounts() {
                   <option key={type} value={type}>{t(`account_type_${type}`)}</option>
                 ))}
               </select>
+            )}
+            {hasCrypto && (
+              <button
+                onClick={() => setFilterCrypto(c => !c)}
+                className={`px-3 py-2 rounded-lg text-xs transition-colors ${filterCrypto ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-surface border border-border text-muted'}`}
+              >
+                {t('filter_crypto')}
+              </button>
             )}
           </div>
 
@@ -553,6 +613,17 @@ export default function Accounts() {
                 {t(`account_type_${type}`)}
               </button>
             ))}
+            {hasCrypto && (
+              <>
+                {(uniqueBanks.length > 1 || uniqueTypes.length > 1) && <span className="w-px h-5 bg-border self-center" />}
+                <button
+                  onClick={() => setFilterCrypto(c => !c)}
+                  className={`text-xs px-3 py-1 rounded-full transition-colors ${filterCrypto ? 'bg-amber-500/20 text-amber-400' : 'bg-white/5 text-muted hover:text-white'}`}
+                >
+                  {t('filter_crypto')}
+                </button>
+              </>
+            )}
           </div>
         </>
       )}
@@ -586,10 +657,22 @@ export default function Accounts() {
                         <input
                           value={editName}
                           onChange={e => setEditName(e.target.value)}
-                          className="bg-black/30 border border-border rounded px-2 py-1 text-sm w-48"
+                          className="bg-black/30 border border-border rounded px-2 py-1 text-sm w-36"
                           autoFocus
                           onKeyDown={e => e.key === 'Enter' && saveEdit(acc.id)}
+                          placeholder={t('account_name')}
                         />
+                        {acc.provider === 'manual' && (
+                          <input
+                            type="number"
+                            step="0.01"
+                            value={editBalance}
+                            onChange={e => setEditBalance(e.target.value)}
+                            className="bg-black/30 border border-border rounded px-2 py-1 text-sm w-28 text-right"
+                            onKeyDown={e => e.key === 'Enter' && saveEdit(acc.id)}
+                            placeholder="0.00"
+                          />
+                        )}
                         <button onClick={() => saveEdit(acc.id)} className="text-green-400 hover:text-green-300">
                           <Check size={16} />
                         </button>
@@ -604,18 +687,15 @@ export default function Accounts() {
                       </div>
                     )}
                   </div>
-                  <span
-                    className={`text-base sm:text-lg font-semibold text-accent-400 whitespace-nowrap ${acc.provider === 'manual' ? 'cursor-pointer hover:underline' : ''}`}
-                    onClick={() => {
-                      if (acc.provider === 'manual') {
-                        setUpdatingBalanceId(acc.id);
-                        setNewBalance(String(acc.balance || 0));
-                      }
-                    }}
-                    title={acc.provider === 'manual' ? t('update_balance') : undefined}
-                  >
-                    {acc.hidden || allBalancesHidden ? '••••' : formatBalance(acc.balance, acc.currency)}
-                  </span>
+                  {editingId !== acc.id && (
+                    <span
+                      className={`text-base sm:text-lg font-semibold text-accent-400 whitespace-nowrap ${acc.provider === 'manual' ? 'cursor-pointer hover:underline' : ''}`}
+                      onClick={() => acc.provider === 'manual' && startEdit(acc)}
+                      title={acc.provider === 'manual' ? t('update_balance') : undefined}
+                    >
+                      {acc.hidden || allBalancesHidden ? '••••' : formatBalance(acc.balance, acc.currency)}
+                    </span>
+                  )}
                 </div>
 
                 {/* Row 2: Badges + Sync */}
@@ -666,10 +746,11 @@ export default function Accounts() {
                   </button>
                   <button
                     onClick={() => syncAccount(acc.id)}
-                    className={`transition-colors p-1 ${isStale ? 'text-orange-400 hover:text-orange-300' : 'text-muted hover:text-white'}`}
+                    disabled={syncingId === acc.id}
+                    className={`transition-colors p-1 ${isStale ? 'text-orange-400 hover:text-orange-300' : 'text-muted hover:text-white'} disabled:opacity-50`}
                     title={t('sync')}
                   >
-                    <RefreshCw size={14} />
+                    <RefreshCw size={14} className={syncingId === acc.id ? 'animate-spin' : ''} />
                   </button>
                   <button onClick={() => deleteAccount(acc.id)} className="text-muted hover:text-red-400 transition-colors p-1" title={t('delete')}>
                     <Trash2 size={14} />
