@@ -1,7 +1,7 @@
+import { API } from '../config';
 import { useState, useRef } from 'react';
 import { Download, FileText, Check } from 'lucide-react';
 
-const API = '/kompta/api';
 
 const CATEGORIES = [
   { key: 'bank', label: 'Comptes bancaires', icon: '🏦' },

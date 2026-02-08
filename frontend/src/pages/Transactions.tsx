@@ -1,3 +1,4 @@
+import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, Eye, EyeOff } from 'lucide-react';
@@ -63,7 +64,7 @@ export default function Transactions() {
       else if (scope === 'pro') params.set('usage', 'professional');
       else if (typeof scope === 'number') params.set('company_id', String(scope));
 
-      const res = await apiFetch(`/kompta/api/transactions?${params}`);
+      const res = await apiFetch(`${API}/transactions?${params}`);
       setTransactions(res.transactions);
       setTotal(res.total);
     } catch {
@@ -73,7 +74,7 @@ export default function Transactions() {
   }, [page, accountFilter, search, scope]);
 
   useEffect(() => {
-    apiFetch(appendScope('/kompta/api/bank/accounts')).then((accs: Account[]) => setAccounts(accs)).catch(() => {});
+    apiFetch(appendScope(API + '/bank/accounts')).then((accs: Account[]) => setAccounts(accs)).catch(() => {});
   }, [scope, appendScope]);
 
   useEffect(() => {

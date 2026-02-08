@@ -1,3 +1,4 @@
+import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
@@ -8,7 +9,6 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { usePreferences } from '../PreferencesContext';
 import { useAuth } from '@clerk/clerk-react';
 
-const API = '/kompta/api';
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 const TYPES = [
@@ -257,7 +257,7 @@ export default function Assets() {
         <div>
           <div className="flex items-center gap-3">
             <h1 className="text-xl font-semibold">{t('nav_assets')}</h1>
-            {assets.length > 0 && (
+            {assets.length > 0 ? (
               <button
                 onClick={() => setHideAmounts(h => !h)}
                 className="text-muted hover:text-white transition-colors p-1"
@@ -265,9 +265,9 @@ export default function Assets() {
               >
                 {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
               </button>
-            )}
+            ) : null}
           </div>
-          {assets.length > 0 && (
+          {assets.length > 0 ? (
             <p className="text-sm text-muted mt-1">
               {t('total_value')}: <span className="text-accent-400 font-semibold">{f(totalValue)}</span>
               {totalPnl !== 0 && (
@@ -276,7 +276,7 @@ export default function Assets() {
                 </span>
               )}
             </p>
-          )}
+          ) : null}
         </div>
         <button onClick={() => startCreate()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black">
           <Plus size={16} /> {t('add_asset')}

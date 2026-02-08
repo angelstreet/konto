@@ -1,3 +1,4 @@
+import { API } from '../config';
 import { useTranslation } from 'react-i18next';
 import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign } from 'lucide-react';
 import { useState } from 'react';
@@ -7,7 +8,6 @@ import ScopeSelect from '../components/ScopeSelect';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useAuth } from '@clerk/clerk-react';
 
-const API = '/kompta/api';
 const clerkEnabledAcc = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 interface BankAccount {

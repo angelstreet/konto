@@ -1,9 +1,9 @@
+import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Plus, Trash2, Edit3, X, Check, Briefcase, TrendingUp, Calculator, CreditCard } from 'lucide-react';
 
-const API = '/kompta/api';
 
 interface IncomeEntry {
   id: number;

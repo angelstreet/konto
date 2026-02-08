@@ -1,10 +1,10 @@
+import { API } from '../config';
 import { useTranslation } from 'react-i18next';
 import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, Info, X, Eye, EyeOff } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { useApi, invalidateApi } from '../useApi';
 import ConfirmDialog from '../components/ConfirmDialog';
 
-const API = '/kompta/api';
 
 interface Company {
   id: number;

@@ -1,8 +1,8 @@
+import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileText, Search, RefreshCw, CheckCircle, AlertTriangle, Link2, Unlink, Trash2 } from 'lucide-react';
 
-const API = '/kompta/api';
 
 interface Invoice {
   id: number;

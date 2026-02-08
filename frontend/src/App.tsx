@@ -71,15 +71,31 @@ function ClerkApp() {
           <SignIn
             routing="hash"
             appearance={{
+              baseTheme: undefined,
+              variables: {
+                colorBackground: '#1a1a1a',
+                colorText: '#e5e5e5',
+                colorTextSecondary: '#888',
+                colorPrimary: 'var(--accent-500, #d4a812)',
+                colorInputBackground: '#111',
+                colorInputText: '#e5e5e5',
+                borderRadius: '0.5rem',
+              },
               elements: {
                 rootBox: 'w-full',
-                card: 'bg-surface border border-border shadow-none',
+                card: 'bg-[#1a1a1a] border border-[#333] shadow-none',
                 headerTitle: 'text-white',
-                headerSubtitle: 'text-muted',
-                formButtonPrimary: 'bg-accent-500 hover:bg-accent-600',
-                formFieldInput: 'bg-background border-border text-white',
-                formFieldLabel: 'text-muted',
-                footerActionLink: 'text-accent-400',
+                headerSubtitle: 'text-[#888]',
+                formButtonPrimary: 'bg-[var(--accent-500,#d4a812)] hover:bg-[var(--accent-600,#b8920f)] text-black',
+                formFieldInput: 'bg-[#111] border-[#333] text-white',
+                formFieldLabel: 'text-[#888]',
+                footerActionLink: 'text-[var(--accent-400,#e0b830)]',
+                socialButtonsBlockButton: 'bg-[#222] border-[#333] text-white hover:bg-[#2a2a2a]',
+                socialButtonsBlockButtonText: 'text-white',
+                dividerLine: 'bg-[#333]',
+                dividerText: 'text-[#666]',
+                footer: 'bg-[#1a1a1a]',
+                footerAction: 'bg-[#1a1a1a]',
               },
             }}
           />

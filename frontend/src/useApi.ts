@@ -17,7 +17,6 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
   const [data, setData] = useState<T | null>(cache.get(url) ?? null);
   const [loading, setLoading] = useState(!cache.has(url));
   const urlRef = useRef(url);
-  urlRef.current = url;
 
   let getToken: (() => Promise<string | null>) | undefined;
   if (clerkEnabled) {
@@ -43,8 +42,15 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
       .finally(() => setLoading(false));
   }, [url]);
 
+  // When URL changes, immediately sync state with cache for the new URL
   useEffect(() => {
-    if (!cache.has(url)) {
+    urlRef.current = url;
+    const cached = cache.get(url);
+    if (cached !== undefined) {
+      setData(cached);
+      setLoading(false);
+    } else {
+      setData(null);
       fetchData();
     }
   }, [url, fetchData]);

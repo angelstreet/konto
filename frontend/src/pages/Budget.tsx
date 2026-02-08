@@ -1,8 +1,8 @@
+import { API } from '../config';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
-const API = '/kompta/api';
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Alimentation': '#22c55e',

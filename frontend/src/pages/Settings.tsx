@@ -1,3 +1,4 @@
+import { API } from '../config';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
@@ -252,7 +253,7 @@ export default function Settings() {
         {/* Export data */}
         <button
           onClick={async () => {
-            const res = await fetch('/kompta/api/export');
+            const res = await fetch(API + '/export');
             const data = await res.json();
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -281,7 +282,7 @@ export default function Settings() {
               if (!file) return;
               const text = await file.text();
               const data = JSON.parse(text);
-              const res = await fetch('/kompta/api/import', {
+              const res = await fetch(API + '/import', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),

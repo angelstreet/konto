@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useMemo, ReactNode } from 'react';
-import { useApi, invalidateAllApi } from './useApi';
+import { useApi } from './useApi';
 
 type Scope = 'all' | 'personal' | 'pro' | number;
 
@@ -57,7 +57,6 @@ export function FilterProvider({ children }: { children: ReactNode }) {
 
   const setScope = (s: Scope) => {
     localStorage.setItem('kompta_scope', String(s));
-    invalidateAllApi();
     setScopeState(s);
   };
 

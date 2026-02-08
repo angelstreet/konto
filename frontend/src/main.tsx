@@ -14,7 +14,7 @@ const clerkPubKey = import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 const app = (
   <React.StrictMode>
-    <BrowserRouter basename="/kompta">
+    <BrowserRouter basename={import.meta.env.VITE_BASE_PATH || '/kompta'}>
       <App />
     </BrowserRouter>
   </React.StrictMode>
@@ -22,6 +22,6 @@ const app = (
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   clerkPubKey
-    ? <ClerkProvider publishableKey={clerkPubKey} afterSignInUrl="/kompta/" afterSignUpUrl="/kompta/">{app}</ClerkProvider>
+    ? <ClerkProvider publishableKey={clerkPubKey} afterSignInUrl={import.meta.env.VITE_BASE_PATH || '/kompta/'} afterSignUpUrl={import.meta.env.VITE_BASE_PATH || '/kompta/'}>{app}</ClerkProvider>
     : app
 );

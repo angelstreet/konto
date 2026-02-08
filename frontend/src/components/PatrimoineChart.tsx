@@ -1,8 +1,8 @@
+import { API } from '../config';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
-const API = '/kompta/api';
 const ranges = ['1m', '3m', '6m', '1y', 'max'] as const;
 const rangeLabels: Record<string, string> = { '1m': '1M', '3m': '3M', '6m': '6M', '1y': '1A', max: 'Max' };
 

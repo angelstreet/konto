@@ -1,8 +1,8 @@
+import { API } from '../config';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileBarChart, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Receipt, Building2 } from 'lucide-react';
 
-const API = '/kompta/api';
 
 interface BilanData {
   year: number;

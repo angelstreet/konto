@@ -1,7 +1,7 @@
+import { API } from '../config';
 import { useTranslation } from 'react-i18next';
 import { Landmark, PlusCircle } from 'lucide-react';
 
-const API = '/kompta/api';
 
 interface Props {
   onComplete: () => void;

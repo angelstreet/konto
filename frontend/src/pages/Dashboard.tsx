@@ -1,3 +1,4 @@
+import { API } from '../config';
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Home, Car, Watch, Package, ArrowRight, ChevronDown, Volume2, VolumeX, Eye, EyeOff, Download } from 'lucide-react';
@@ -8,7 +9,6 @@ import { Link } from 'react-router-dom';
 import PatrimoineChart from '../components/PatrimoineChart';
 import DistributionDonut from '../components/DistributionDonut';
 
-const API = '/kompta/api';
 
 interface DashboardAccount {
   id: number;
@@ -146,7 +146,7 @@ export default function Dashboard() {
           <ScopeSelect />
           <button
             onClick={() => {
-              window.open('/kompta/api/report/patrimoine?categories=all', '_blank');
+              window.open(API + '/report/patrimoine?categories=all', '_blank');
             }}
             className="p-2 rounded-lg text-muted hover:text-accent-400 hover:bg-surface-hover transition-colors"
             title="Télécharger rapport PDF"

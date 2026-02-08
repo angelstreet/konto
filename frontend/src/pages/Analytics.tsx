@@ -1,10 +1,10 @@
+import { API } from '../config';
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useApi, apiFetch } from '../useApi';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { RefreshCw, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
-const API = '/kompta/api';
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#22c55e', '#ec4899', '#6b7280'];
 
