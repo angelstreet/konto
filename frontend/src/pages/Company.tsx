@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, Info } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { useApi, invalidateApi } from '../useApi';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -64,7 +64,11 @@ export default function CompanyPage() {
     }, 300);
   };
 
-  const selectSearchResult = (r: any) => {
+  const [enrichedInfo, setEnrichedInfo] = useState<any>(null);
+  const [enrichLoading, setEnrichLoading] = useState(false);
+  const [showDetails, setShowDetails] = useState(true);
+
+  const selectSearchResult = async (r: any) => {
     setForm({
       name: r.name || '',
       siren: r.siren || '',
@@ -77,6 +81,27 @@ export default function CompanyPage() {
     setSelectedCompanyInfo(r);
     setShowSearch(false);
     setSearchResults([]);
+    setShowDetails(true);
+
+    // Fetch enriched info (TVA, capital, RCS, etc.)
+    if (r.siren) {
+      setEnrichLoading(true);
+      try {
+        const res = await fetch(`${API}/companies/info/${r.siren}`);
+        if (res.ok) {
+          const data = await res.json();
+          setEnrichedInfo(data);
+          // Auto-fill form with enriched data
+          setForm(prev => ({
+            ...prev,
+            capital: data.capital_social ? String(data.capital_social) : prev.capital,
+            legal_form: data.legal_form || prev.legal_form,
+            address: data.address || prev.address,
+          }));
+        }
+      } catch {}
+      setEnrichLoading(false);
+    }
   };
 
   const startCreate = () => {
@@ -267,73 +292,90 @@ export default function CompanyPage() {
               className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm col-span-full"
             />
           </div>
-          {/* Company info from gouv.fr */}
-          {selectedCompanyInfo && (
-            <div className="col-span-full bg-black/20 border border-border rounded-lg p-4 mt-2">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-xs text-muted uppercase tracking-wide font-medium">Données publiques (gouv.fr)</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${selectedCompanyInfo.etat === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
-                  {selectedCompanyInfo.etat}
-                </span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-sm">
-                {selectedCompanyInfo.date_creation && (
-                  <div>
-                    <p className="text-xs text-muted">Création</p>
-                    <p>{selectedCompanyInfo.date_creation}</p>
-                  </div>
-                )}
-                {selectedCompanyInfo.siret && (
-                  <div>
-                    <p className="text-xs text-muted">SIRET (siège)</p>
-                    <p className="font-mono text-xs">{selectedCompanyInfo.siret}</p>
-                  </div>
-                )}
-                {selectedCompanyInfo.naf_code && (
-                  <div>
-                    <p className="text-xs text-muted">Code NAF</p>
-                    <p>{selectedCompanyInfo.naf_code}</p>
-                  </div>
-                )}
-                {selectedCompanyInfo.categorie && (
-                  <div>
-                    <p className="text-xs text-muted">Catégorie</p>
-                    <p>{selectedCompanyInfo.categorie}</p>
-                  </div>
-                )}
-                {selectedCompanyInfo.effectif && (
-                  <div>
-                    <p className="text-xs text-muted">Tranche effectif</p>
-                    <p>{selectedCompanyInfo.effectif}</p>
-                  </div>
-                )}
-                {selectedCompanyInfo.finances && (
-                  <>
-                    <div>
-                      <p className="text-xs text-muted">CA ({selectedCompanyInfo.finances.year})</p>
-                      <p className="text-accent-400 font-semibold">
-                        {selectedCompanyInfo.finances.ca ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(selectedCompanyInfo.finances.ca) : '—'}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-xs text-muted">Résultat net ({selectedCompanyInfo.finances.year})</p>
-                      <p className={selectedCompanyInfo.finances.resultat_net >= 0 ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}>
+          {/* Company info — collapsible detail panel */}
+          {(selectedCompanyInfo || enrichedInfo) && (
+            <div className="col-span-full bg-black/20 border border-border rounded-lg mt-2 overflow-hidden">
+              <button
+                onClick={() => setShowDetails(!showDetails)}
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-white/5 transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Info size={14} className="text-accent-400" />
+                  <span className="text-xs text-muted uppercase tracking-wide font-medium">Informations juridiques</span>
+                  {enrichLoading && <span className="text-xs text-muted animate-pulse">Chargement...</span>}
+                </div>
+                <div className="flex items-center gap-2">
+                  {selectedCompanyInfo?.etat && (
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${selectedCompanyInfo.etat === 'active' ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                      {selectedCompanyInfo.etat}
+                    </span>
+                  )}
+                  <ChevronDown size={14} className={`text-muted transition-transform duration-200 ${showDetails ? '' : '-rotate-90'}`} />
+                </div>
+              </button>
+              {showDetails && (
+                <div className="px-4 pb-4">
+                  {(() => {
+                    const info = enrichedInfo || selectedCompanyInfo || {};
+                    const sc = selectedCompanyInfo || {};
+                    const fields = [
+                      { label: 'SIREN', value: info.siren || sc.siren, mono: true },
+                      { label: 'SIRET (siège)', value: info.siret || sc.siret, mono: true },
+                      { label: 'Numéro TVA', value: info.tva_number, mono: true },
+                      { label: 'Numéro RCS', value: info.rcs },
+                      { label: 'Forme juridique', value: info.legal_form || sc.legal_form },
+                      { label: 'Capital social', value: info.capital_social ? `${new Intl.NumberFormat('fr-FR').format(info.capital_social)} €` : null, accent: true },
+                      { label: 'Date de création', value: info.date_creation || sc.date_creation },
+                      { label: 'Adresse', value: info.address || sc.address, full: true },
+                      { label: 'Code postal', value: info.postal_code || sc.code_postal },
+                      { label: 'Ville', value: info.city || sc.commune },
+                      { label: 'Code NAF', value: info.naf_code || sc.naf_code },
+                      { label: 'Activité', value: info.naf_label },
+                      { label: 'Catégorie', value: info.category || sc.categorie },
+                    ];
+                    return (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5 text-sm">
+                        {fields.filter(f => f.value).map((f, i) => (
+                          <div key={i} className={f.full ? 'col-span-full' : ''}>
+                            <p className="text-[10px] text-muted uppercase tracking-wide">{f.label}</p>
+                            <p className={`${f.mono ? 'font-mono text-xs' : ''} ${f.accent ? 'text-accent-400 font-semibold' : ''}`}>
+                              {f.value}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  })()}
+                  {/* Financial data from search */}
+                  {selectedCompanyInfo?.finances && (
+                    <div className="mt-3 pt-3 border-t border-border/50 grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5 text-sm">
+                      <div>
+                        <p className="text-[10px] text-muted uppercase tracking-wide">CA ({selectedCompanyInfo.finances.year})</p>
+                        <p className="text-accent-400 font-semibold">
+                          {selectedCompanyInfo.finances.ca ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(selectedCompanyInfo.finances.ca) : '—'}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-[10px] text-muted uppercase tracking-wide">Résultat net ({selectedCompanyInfo.finances.year})</p>
+                        <p className={selectedCompanyInfo.finances.resultat_net >= 0 ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}>
                         {selectedCompanyInfo.finances.resultat_net != null ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(selectedCompanyInfo.finances.resultat_net) : '—'}
                       </p>
                     </div>
-                  </>
-                )}
-              </div>
-              {selectedCompanyInfo.dirigeants?.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-border">
-                  <p className="text-xs text-muted mb-1">Dirigeants</p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedCompanyInfo.dirigeants.filter((d: any) => d.nom).map((d: any, i: number) => (
-                      <span key={i} className="text-xs bg-white/5 px-2 py-1 rounded">
-                        {d.nom} <span className="text-muted">({d.qualite})</span>
-                      </span>
-                    ))}
-                  </div>
+                    </div>
+                  )}
+                  {/* Dirigeants */}
+                  {selectedCompanyInfo?.dirigeants?.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-border/50">
+                      <p className="text-[10px] text-muted uppercase tracking-wide mb-1.5">Dirigeants</p>
+                      <div className="flex flex-wrap gap-2">
+                        {selectedCompanyInfo.dirigeants.filter((d: any) => d.nom).map((d: any, i: number) => (
+                          <span key={i} className="text-xs bg-white/5 px-2 py-1 rounded">
+                            {d.nom} <span className="text-muted">({d.qualite})</span>
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
