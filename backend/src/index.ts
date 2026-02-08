@@ -316,7 +316,7 @@ app.get('/api/dashboard', async (c) => {
   for (const a of accounts) {
     const type = a.type || 'checking';
     if (!accountsByType[type]) accountsByType[type] = [];
-    accountsByType[type].push({ id: a.id, name: a.custom_name || a.name, balance: a.balance || 0, type });
+    accountsByType[type].push({ id: a.id, name: a.custom_name || a.name, balance: a.balance || 0, type, currency: a.currency || 'EUR' });
   }
 
   const brutBalance = [...accountsByType.checking, ...accountsByType.savings, ...accountsByType.investment]
@@ -379,6 +379,7 @@ app.patch('/api/bank/accounts/:id', async (c) => {
   if (body.hidden !== undefined) { updates.push('hidden = ?'); params.push(body.hidden ? 1 : 0); }
   if (body.type !== undefined) { updates.push('type = ?'); params.push(body.type); }
   if (body.usage !== undefined) { updates.push('usage = ?'); params.push(body.usage); }
+  if (body.balance !== undefined) { updates.push('balance = ?'); params.push(body.balance); updates.push('last_sync = ?'); params.push(new Date().toISOString()); }
   if (body.company_id !== undefined) {
     updates.push('company_id = ?'); params.push(body.company_id);
     updates.push('usage = ?'); params.push(body.company_id ? 'professional' : 'personal');
@@ -757,6 +758,14 @@ async function fetchBlockchainBalance(network: string, address: string): Promise
     return { balance: (data.result?.value || 0) / 1e9, currency: 'SOL' };
   }
   if (network === 'bitcoin') {
+    // xpub/ypub/zpub → use blockchain.info for full HD wallet balance
+    if (/^[xyz]pub/.test(address)) {
+      const res = await fetch(`https://blockchain.info/balance?active=${address}`);
+      const data = await res.json() as any;
+      const info = data[address];
+      return { balance: (info?.final_balance || 0) / 1e8, currency: 'BTC' };
+    }
+    // Single address → use Blockstream
     const res = await fetch(`https://blockstream.info/api/address/${address}`);
     const data = await res.json() as any;
     const funded = data.chain_stats?.funded_txo_sum || 0;
@@ -764,9 +773,15 @@ async function fetchBlockchainBalance(network: string, address: string): Promise
     return { balance: (funded - spent) / 1e8, currency: 'BTC' };
   }
   if (network === 'ethereum') {
-    const res = await fetch(`https://api.etherscan.io/api?module=account&action=balance&address=${address}&tag=latest`);
+    // Use public RPC (free, no API key needed) instead of Etherscan
+    const res = await fetch('https://eth.llamarpc.com', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getBalance', params: [address, 'latest'], id: 1 }),
+    });
     const data = await res.json() as any;
-    return { balance: data.status === '1' ? parseInt(data.result, 10) / 1e18 : 0, currency: 'ETH' };
+    const balance = data.result ? parseInt(data.result, 16) / 1e18 : 0;
+    return { balance, currency: 'ETH' };
   }
   throw new Error(`Unsupported network: ${network}`);
 }
