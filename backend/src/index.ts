@@ -84,8 +84,15 @@ app.patch('/api/companies/:id', async (c) => {
 // Delete company
 app.delete('/api/companies/:id', (c) => {
   const id = c.req.param('id');
-  db.prepare('UPDATE bank_accounts SET company_id = NULL WHERE company_id = ?').run(id);
+  db.prepare('UPDATE bank_accounts SET company_id = NULL, usage = \'personal\' WHERE company_id = ?').run(id);
   db.prepare('DELETE FROM companies WHERE id = ?').run(id);
+  return c.json({ ok: true });
+});
+
+// Unlink all accounts from a company
+app.post('/api/companies/:id/unlink-all', (c) => {
+  const id = c.req.param('id');
+  db.prepare('UPDATE bank_accounts SET company_id = NULL, usage = \'personal\' WHERE company_id = ?').run(id);
   return c.json({ ok: true });
 });
 

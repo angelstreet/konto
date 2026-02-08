@@ -48,6 +48,7 @@
   "confirm_delete_company": "Supprimer cette entreprise ? Les comptes liés seront détachés.",
   "link_account": "Lier un compte",
   "unlink": "Détacher",
+  "unlink_all": "Tout détacher",
   "no_linked_accounts": "Aucun compte lié",
   "select_account_to_link": "Sélectionner un compte à lier",
   "all_accounts_linked": "Tous les comptes sont déjà liés",

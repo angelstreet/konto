@@ -59,7 +59,7 @@ export default function Dashboard() {
           {data.accounts.map((acc) => (
             <div key={acc.id} className="flex items-center justify-between px-4 py-3">
               <p className="text-sm font-medium">{acc.name}</p>
-              <p className="text-sm font-semibold" style={{ color: '#d4a812' }}>
+              <p className="text-sm font-semibold text-accent-400">
                 {formatCurrency(acc.balance)}
               </p>
             </div>

@@ -48,6 +48,7 @@
   "confirm_delete_company": "Delete this company? Linked accounts will be detached.",
   "link_account": "Link account",
   "unlink": "Unlink",
+  "unlink_all": "Unlink all",
   "no_linked_accounts": "No linked accounts",
   "select_account_to_link": "Select an account to link",
   "all_accounts_linked": "All accounts are already linked",

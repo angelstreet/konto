@@ -128,8 +128,7 @@ export default function Accounts() {
         </div>
         <button
           onClick={connectBank}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
-          style={{ backgroundColor: '#d4a812', color: '#000' }}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black"
         >
           <Plus size={16} />
           {t('connect_bank')}
@@ -144,8 +143,7 @@ export default function Accounts() {
           <p className="text-muted text-sm mb-4">{t('no_accounts')}</p>
           <button
             onClick={connectBank}
-            className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-            style={{ backgroundColor: '#d4a812', color: '#000' }}
+            className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-colors bg-accent-500 text-black"
           >
             <ExternalLink size={14} />
             {t('connect_bank')}
@@ -212,7 +210,7 @@ export default function Accounts() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 ml-4">
-                  <span className="text-lg font-semibold mr-2" style={{ color: '#d4a812' }}>
+                  <span className="text-lg font-semibold mr-2 text-accent-400">
                     {acc.hidden || allBalancesHidden ? '••••' : formatBalance(acc.balance)}
                   </span>
                   <button onClick={() => startEdit(acc)} className="text-muted hover:text-white transition-colors p-1" title={t('edit')}>

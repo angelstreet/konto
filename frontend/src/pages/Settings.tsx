@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { Globe, Palette, Bell, Building2, LogOut, Shield, Check } from 'lucide-react';
 
 const THEMES = [
+  { id: 'gold', label: 'Gold', color: '#d4a812' },
   { id: 'blue', label: 'Steel Blue', color: '#3b82f6' },
   { id: 'silver', label: 'Silver', color: '#94a3b8' },
   { id: 'red', label: 'Ruby', color: '#ef4444' },
@@ -15,7 +16,7 @@ export default function Settings() {
   const navigate = useNavigate();
   const [showThemes, setShowThemes] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(
-    () => localStorage.getItem('kompta_theme') || 'blue'
+    () => localStorage.getItem('kompta_theme') || 'gold'
   );
 
   const toggleLang = () => {
