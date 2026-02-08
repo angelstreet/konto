@@ -13,6 +13,7 @@ import {
   Receipt,
   Calculator,
   Wallet,
+  Banknote,
   FileSpreadsheet,
   FileText,
   Upload,
@@ -73,6 +74,12 @@ const navGroups: NavGroup[] = [
       { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
       { path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
       { path: '/fec-export', icon: FileText, labelKey: 'nav_fec_export', disabled: true },
+    ],
+  },
+  {
+    labelKey: 'nav_group_revenus',
+    items: [
+      { path: '/income', icon: Banknote, labelKey: 'nav_income' },
     ],
   },
   {

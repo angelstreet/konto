@@ -12,6 +12,7 @@ import ComingSoon from './pages/ComingSoon';
 import Budget from './pages/Budget';
 import CreditSimulator from './pages/CreditSimulator';
 import Report from './pages/Report';
+import Income from './pages/Income';
 import { FilterProvider } from './FilterContext';
 
 export default function App() {
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/vat" element={<ComingSoon titleKey="nav_vat" />} />
         <Route path="/fec-export" element={<ComingSoon titleKey="nav_fec_export" />} />
         <Route path="/budget" element={<Budget />} />
+        <Route path="/income" element={<Income />} />
         <Route path="/import" element={<ComingSoon titleKey="nav_import" />} />
         <Route path="/reconciliation" element={<ComingSoon titleKey="nav_reconciliation" />} />
         <Route path="/simulators" element={<CreditSimulator />} />

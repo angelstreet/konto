@@ -151,6 +151,17 @@ export async function initDatabase() {
       UNIQUE(date, user_id, category)
     );
 
+    CREATE TABLE IF NOT EXISTS income_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
+      year INTEGER NOT NULL,
+      employer TEXT NOT NULL,
+      job_title TEXT,
+      country TEXT NOT NULL DEFAULT 'FR',
+      gross_annual REAL NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
     CREATE TABLE IF NOT EXISTS market_rates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       duration INTEGER NOT NULL,

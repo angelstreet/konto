@@ -1140,6 +1140,143 @@ app.get('/api/rates/current', async (c) => {
   return c.json({ rates: result.rows });
 });
 
+// ========== INCOME ENTRIES ==========
+
+app.get('/api/income', async (c) => {
+  const userId = await ensureDefaultUser();
+  const result = await db.execute({ sql: 'SELECT * FROM income_entries WHERE user_id = ? ORDER BY year DESC, employer', args: [userId] });
+  return c.json({ entries: result.rows });
+});
+
+app.post('/api/income', async (c) => {
+  const userId = await ensureDefaultUser();
+  const { year, employer, job_title, country, gross_annual } = await c.req.json();
+  if (!year || !employer || !gross_annual) return c.json({ error: 'Missing required fields' }, 400);
+  const result = await db.execute({
+    sql: 'INSERT INTO income_entries (user_id, year, employer, job_title, country, gross_annual) VALUES (?, ?, ?, ?, ?, ?)',
+    args: [userId, year, employer, job_title || null, country || 'FR', gross_annual]
+  });
+  return c.json({ id: Number(result.lastInsertRowid), year, employer, job_title, country, gross_annual });
+});
+
+app.put('/api/income/:id', async (c) => {
+  const id = c.req.param('id');
+  const { year, employer, job_title, country, gross_annual } = await c.req.json();
+  await db.execute({
+    sql: 'UPDATE income_entries SET year=?, employer=?, job_title=?, country=?, gross_annual=? WHERE id=?',
+    args: [year, employer, job_title || null, country || 'FR', gross_annual, id]
+  });
+  return c.json({ success: true });
+});
+
+app.delete('/api/income/:id', async (c) => {
+  const id = c.req.param('id');
+  await db.execute({ sql: 'DELETE FROM income_entries WHERE id = ?', args: [id] });
+  return c.json({ success: true });
+});
+
+// ========== TAX ESTIMATION ==========
+
+app.post('/api/tax/estimate', async (c) => {
+  const { gross_annual, country, canton, situation, children } = await c.req.json();
+  if (!gross_annual || !country) return c.json({ error: 'Missing fields' }, 400);
+
+  const kids = children || 0;
+  let parts = 1;
+  if (situation === 'married') parts = 2;
+  parts += kids * 0.5;
+  if (kids >= 3) parts += (kids - 2) * 0.5; // 3rd+ kid = 1 full part
+
+  let tax = 0, brackets: { rate: number; amount: number }[] = [];
+
+  if (country === 'FR') {
+    // French progressive income tax (barème progressif IR 2024)
+    const taxableIncome = gross_annual * 0.9; // 10% deduction
+    const perPart = taxableIncome / parts;
+    const frBrackets = [
+      { limit: 11294, rate: 0 },
+      { limit: 28797, rate: 0.11 },
+      { limit: 82341, rate: 0.30 },
+      { limit: 177106, rate: 0.41 },
+      { limit: Infinity, rate: 0.45 },
+    ];
+    let prev = 0;
+    for (const b of frBrackets) {
+      const slice = Math.max(0, Math.min(perPart, b.limit) - prev);
+      const amount = slice * b.rate * parts;
+      if (slice > 0) brackets.push({ rate: b.rate * 100, amount });
+      tax += amount;
+      prev = b.limit;
+      if (perPart <= b.limit) break;
+    }
+  } else if (country === 'CH') {
+    // Simplified Swiss tax (federal + cantonal estimate)
+    // Federal rates simplified
+    const chfGross = gross_annual;
+    const deductions = situation === 'married' ? 5400 : 2700;
+    const childDeduction = kids * 6700;
+    const taxable = Math.max(0, chfGross - deductions - childDeduction);
+
+    // Simplified federal tax brackets
+    const fedBrackets = [
+      { limit: 17800, rate: 0 },
+      { limit: 31600, rate: 0.0077 },
+      { limit: 41400, rate: 0.0088 },
+      { limit: 55200, rate: 0.026 },
+      { limit: 72500, rate: 0.0307 },
+      { limit: 78100, rate: 0.0334 },
+      { limit: 103600, rate: 0.0361 },
+      { limit: 134600, rate: 0.0388 },
+      { limit: 176000, rate: 0.0415 },
+      { limit: 755200, rate: 0.1315 },
+      { limit: Infinity, rate: 0.135 },
+    ];
+    let fedTax = 0, prev = 0;
+    for (const b of fedBrackets) {
+      const slice = Math.max(0, Math.min(taxable, b.limit) - prev);
+      fedTax += slice * b.rate;
+      prev = b.limit;
+      if (taxable <= b.limit) break;
+    }
+
+    // Cantonal multiplier
+    const cantonMultipliers: Record<string, number> = {
+      'ZH': 1.19, 'GE': 1.48, 'VD': 1.55, 'BE': 1.54, 'BS': 1.26,
+      'LU': 1.05, 'AG': 1.09, 'SG': 1.15, 'TI': 1.30, 'VS': 1.25,
+    };
+    const multiplier = cantonMultipliers[canton || 'ZH'] || 1.19;
+    tax = fedTax * (1 + multiplier);
+    brackets = [{ rate: multiplier * 100, amount: tax }];
+  }
+
+  const netIncome = gross_annual - tax;
+  const effectiveRate = gross_annual > 0 ? (tax / gross_annual) * 100 : 0;
+
+  return c.json({ gross_annual, tax: Math.round(tax), netIncome: Math.round(netIncome), effectiveRate: Math.round(effectiveRate * 100) / 100, brackets, country, situation, children: kids, parts });
+});
+
+// ========== BORROWING CAPACITY ==========
+
+app.post('/api/borrowing-capacity', async (c) => {
+  const { net_monthly, existing_payments, rate, duration_years } = await c.req.json();
+  if (!net_monthly) return c.json({ error: 'Missing net_monthly' }, 400);
+
+  const maxPayment = net_monthly * 0.33;
+  const available = Math.max(0, maxPayment - (existing_payments || 0));
+  const r = (rate || 3.35) / 100 / 12;
+  const n = (duration_years || 20) * 12;
+  const maxLoan = r > 0 ? available * (1 - Math.pow(1 + r, -n)) / r : available * n;
+
+  return c.json({
+    net_monthly,
+    max_payment: Math.round(maxPayment),
+    available_payment: Math.round(available),
+    max_loan: Math.round(maxLoan),
+    rate: rate || 3.35,
+    duration_years: duration_years || 20,
+  });
+});
+
 // ========== START SERVER ==========
 
 export { app };
