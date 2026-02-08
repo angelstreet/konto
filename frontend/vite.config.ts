@@ -5,10 +5,11 @@ export default defineConfig({
   plugins: [react()],
   base: '/kompta/',
   server: {
-    port: 5173,
+    host: true,
+    port: 5176,
     proxy: {
       '/kompta/api': {
-        target: 'http://localhost:3001',
+        target: 'http://localhost:3004',
         rewrite: (path) => path.replace(/^\/kompta/, ''),
       },
     },

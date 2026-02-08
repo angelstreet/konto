@@ -14,6 +14,6 @@ app.get('/api/users', (c) => {
   return c.json(users);
 });
 
-serve({ fetch: app.fetch, port: 3001 }, (info) => {
+serve({ fetch: app.fetch, port: 3004 }, (info) => {
   console.log(`🦎 Kompta API running on http://localhost:${info.port}`);
 });
