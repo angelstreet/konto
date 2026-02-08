@@ -45,13 +45,17 @@ npm run dev:backend    # → http://localhost:3004/api/
 | `COINBASE_CLIENT_SECRET` | Coinbase OAuth2 client secret | For Coinbase sync |
 | `COINBASE_REDIRECT_URI` | Coinbase callback URL | For Coinbase sync |
 | `PAPPERS_API_TOKEN` | Pappers API token (company enrichment) | Optional |
-| `CLERK_SECRET_KEY` | Clerk auth secret key | For auth (planned) |
+| `CLERK_SECRET_KEY` | Clerk auth secret key | Yes |
+| `GOOGLE_CLIENT_ID` | Google OAuth client ID | For Drive invoice scan |
+| `GOOGLE_CLIENT_SECRET` | Google OAuth client secret | For Drive invoice scan |
+| `GOOGLE_REDIRECT_URI` | Google OAuth callback URL | For Drive invoice scan |
+| `KOZY_API_URL` | Kozy API base URL | For property sync |
 
 ### Frontend (`frontend/.env`)
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key | For auth (planned) |
+| `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key | Yes |
 
 ## Project Structure
 

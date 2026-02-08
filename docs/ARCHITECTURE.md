@@ -22,6 +22,10 @@ All routes are under the `/kompta` base path.
 | `/reports` | `Report` | Patrimoine report generator |
 | `/simulators` | `CreditSimulator` | Credit simulation + borrowing capacity |
 | `/settings` | `Settings` | App settings |
+| `/analytics` | `Analytics` | Revenue & expense analytics with cached metrics |
+| `/bilan` | `Bilan` | Annual balance sheet (bilan annuel) |
+| `/invoices` | `Invoices` | Invoice management with Google Drive scanning & transaction matching |
+| `/onboarding` | `Onboarding` | New user onboarding wizard |
 | `/analysis` | ComingSoon | Placeholder |
 | `/cashflow` | ComingSoon | Placeholder |
 | `/ledger` | ComingSoon | Placeholder |
@@ -141,6 +145,39 @@ All endpoints are prefixed with `/api/`.
 | PUT | `/api/income/:id` | Update income entry |
 | DELETE | `/api/income/:id` | Delete income entry |
 | POST | `/api/tax/estimate` | Estimate income tax (FR progressive / CH cantonal) |
+
+#### Analytics
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/analytics` | Get cached analytics (query: `period`) |
+| POST | `/api/analytics/recompute` | Force recompute analytics |
+
+#### Bilan
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/bilan/:year` | Annual balance sheet (actif/passif) |
+
+#### Invoices
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/invoices` | List invoices |
+| POST | `/api/invoices/scan` | Scan invoices from Google Drive |
+| DELETE | `/api/invoices/:id` | Delete invoice |
+| POST | `/api/invoices/:id/match` | Match invoice to transaction |
+| POST | `/api/invoices/:id/unmatch` | Unmatch invoice from transaction |
+| GET | `/api/invoices/stats` | Invoice matching statistics |
+
+#### Google Drive
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/drive/status` | Check Drive connection status |
+| POST | `/api/drive/connect` | Connect Google Drive (OAuth) |
+| DELETE | `/api/drive/disconnect` | Disconnect Google Drive |
+
+#### Kozy Integration
+| Method | Path | Description |
+|--------|------|-------------|
+| GET | `/api/kozy/properties` | Fetch properties from Kozy |
 
 #### Crypto Prices
 | Method | Path | Description |
@@ -296,6 +333,15 @@ All endpoints are prefixed with `/api/`.
 | country | TEXT | Country code (FR, CH) |
 | gross_annual | REAL | Gross annual salary |
 
+### `analytics_cache`
+| Column | Type | Description |
+|--------|------|-------------|
+| user_id | INTEGER | Owner |
+| metric_key | TEXT | Metric identifier (e.g. `full`) |
+| period | TEXT | Period (e.g. `2026`) |
+| value | TEXT | JSON-serialized analytics data |
+| computed_at | TEXT | ISO datetime of last computation |
+
 ### `market_rates`
 | Column | Type | Description |
 |--------|------|-------------|
@@ -303,14 +349,13 @@ All endpoints are prefixed with `/api/`.
 | best_rate | REAL | Best market rate |
 | avg_rate | REAL | Average market rate |
 
-## Auth Flow (Current)
+## Auth Flow (Clerk)
 
-1. Frontend checks `localStorage.kompta_auth`
-2. If not set → shows `Login` page
-3. Login sets flag → renders app
-4. Backend has no auth — all requests go through as default user (`jo@kompta.fr`)
-
-**Planned:** Replace with Clerk (task #409). Frontend will use `@clerk/clerk-react`, backend will use `@hono/clerk-auth` middleware with Clerk JWT. Agent access via API token will be preserved.
+1. Frontend uses `@clerk/clerk-react` — wraps app in `ClerkProvider`
+2. Unauthenticated users see Clerk sign-in page
+3. Backend uses `@hono/clerk-auth` middleware — validates Clerk JWT on every request
+4. User isolation: all queries filter by Clerk `userId` (no more hardcoded user)
+5. Agent access via API token is preserved alongside Clerk auth
 
 ## External Integrations
 
@@ -327,6 +372,8 @@ All endpoints are prefixed with `/api/`.
 | **societe.com** | Company data scraping | HTML scraping |
 | **DVF (data.gouv.fr)** | Property sales data for estimation | CSV download |
 | **api-adresse.data.gouv.fr** | Address geocoding | Free REST API |
+| **Google Drive** | Invoice PDF scanning & matching | OAuth2 + REST |
+| **Kozy** | Property management sync | REST API |
 
 See `docs/INTEGRATIONS.md` for detailed integration status.
 
