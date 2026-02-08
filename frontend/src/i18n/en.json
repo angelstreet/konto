@@ -51,11 +51,15 @@
   "unlink_all": "Unlink all",
   "no_linked_accounts": "No linked accounts",
   "select_account_to_link": "Select an account to link",
+  "confirm": "Confirm",
+  "confirm_unlink_all": "Unlink all accounts from this company? They will become personal accounts.",
   "all_accounts_linked": "All accounts are already linked",
   "search_or_enter_company": "Search for a company (name or SIREN)...",
   "account_type_checking": "Checking",
   "account_type_savings": "Savings",
   "account_type_loan": "Loan",
+  "account_type_investment": "Investment",
+  "account_usage_personal": "Personal",
   "account_usage_professional": "Pro",
   "sync_just_now": "Just now",
   "sync_minutes_ago": "{{count}}m ago",
@@ -85,5 +89,7 @@
   "nav_group_outils": "Tools",
   "nav_import": "Import CSV / FEC",
   "nav_reconciliation": "Reconciliation",
-  "nav_simulators": "Simulators"
+  "nav_simulators": "Simulators",
+  "search_transactions": "Search transactions...",
+  "all_accounts_filter": "All accounts"
 }

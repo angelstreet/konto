@@ -36,6 +36,7 @@ function getRelativeTime(isoDate: string | null, t: (key: string, opts?: Record<
 function typeBadgeColor(type: string): string {
   if (type === 'savings') return 'bg-blue-500/20 text-blue-400';
   if (type === 'loan') return 'bg-orange-500/20 text-orange-400';
+  if (type === 'investment') return 'bg-purple-500/20 text-purple-400';
   return 'bg-white/5 text-muted';
 }
 
@@ -111,6 +112,31 @@ export default function Accounts() {
     return '••••' + num.slice(-4);
   };
 
+  const ACCOUNT_TYPES = ['checking', 'savings', 'loan', 'investment'] as const;
+  const ACCOUNT_USAGES = ['personal', 'professional'] as const;
+
+  const cycleType = async (acc: BankAccount) => {
+    const idx = ACCOUNT_TYPES.indexOf(acc.type as typeof ACCOUNT_TYPES[number]);
+    const next = ACCOUNT_TYPES[(idx + 1) % ACCOUNT_TYPES.length];
+    await fetch(`${API}/bank/accounts/${acc.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: next }),
+    });
+    refetchAll();
+  };
+
+  const cycleUsage = async (acc: BankAccount) => {
+    const idx = ACCOUNT_USAGES.indexOf(acc.usage as typeof ACCOUNT_USAGES[number]);
+    const next = ACCOUNT_USAGES[(idx + 1) % ACCOUNT_USAGES.length];
+    await fetch(`${API}/bank/accounts/${acc.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usage: next }),
+    });
+    refetchAll();
+  };
+
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
@@ -178,14 +204,18 @@ export default function Accounts() {
                     {acc.bank_name && (
                       <span className="text-xs px-2 py-0.5 rounded-full bg-white/5 text-muted">{acc.bank_name}</span>
                     )}
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${typeBadgeColor(acc.type)}`}>
+                    <button
+                      onClick={() => cycleType(acc)}
+                      className={`text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all ${typeBadgeColor(acc.type)}`}
+                    >
                       {t(`account_type_${acc.type || 'checking'}`)}
-                    </span>
-                    {acc.usage === 'professional' && (
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-green-500/20 text-green-400">
-                        {t('account_usage_professional')}
-                      </span>
-                    )}
+                    </button>
+                    <button
+                      onClick={() => cycleUsage(acc)}
+                      className={`text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all ${acc.usage === 'professional' ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-muted'}`}
+                    >
+                      {t(`account_usage_${acc.usage || 'personal'}`)}
+                    </button>
                     {acc.account_number && (
                       <span className="text-xs text-muted font-mono">
                         {acc.hidden || allBalancesHidden ? '••••••••' : maskNumber(acc.account_number)}
