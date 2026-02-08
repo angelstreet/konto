@@ -772,16 +772,27 @@ async function fetchBlockchainBalance(network: string, address: string): Promise
     const spent = data.chain_stats?.spent_txo_sum || 0;
     return { balance: (funded - spent) / 1e8, currency: 'BTC' };
   }
-  if (network === 'ethereum') {
-    // Use public RPC (free, no API key needed) instead of Etherscan
-    const res = await fetch('https://eth.llamarpc.com', {
+  // EVM chains — all use the same eth_getBalance RPC, different endpoints
+  const evmChains: Record<string, { rpc: string; currency: string; decimals: number }> = {
+    ethereum:  { rpc: 'https://eth.llamarpc.com', currency: 'ETH', decimals: 18 },
+    base:      { rpc: 'https://mainnet.base.org', currency: 'ETH', decimals: 18 },
+    polygon:   { rpc: 'https://polygon-rpc.com', currency: 'POL', decimals: 18 },
+    bnb:       { rpc: 'https://bsc-dataseed.binance.org', currency: 'BNB', decimals: 18 },
+    avalanche: { rpc: 'https://api.avax.network/ext/bc/C/rpc', currency: 'AVAX', decimals: 18 },
+    arbitrum:  { rpc: 'https://arb1.arbitrum.io/rpc', currency: 'ETH', decimals: 18 },
+    optimism:  { rpc: 'https://mainnet.optimism.io', currency: 'ETH', decimals: 18 },
+  };
+
+  const chain = evmChains[network];
+  if (chain) {
+    const res = await fetch(chain.rpc, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getBalance', params: [address, 'latest'], id: 1 }),
     });
     const data = await res.json() as any;
-    const balance = data.result ? parseInt(data.result, 16) / 1e18 : 0;
-    return { balance, currency: 'ETH' };
+    const balance = data.result ? parseInt(data.result, 16) / Math.pow(10, chain.decimals) : 0;
+    return { balance, currency: chain.currency };
   }
   throw new Error(`Unsupported network: ${network}`);
 }
@@ -793,7 +804,8 @@ app.post('/api/accounts/blockchain', async (c) => {
 
   const network = body.network.toLowerCase();
   let balance = 0;
-  let currency = network === 'bitcoin' ? 'BTC' : network === 'ethereum' ? 'ETH' : network === 'solana' ? 'SOL' : network.toUpperCase();
+  const currencyMap: Record<string, string> = { bitcoin: 'BTC', ethereum: 'ETH', solana: 'SOL', base: 'ETH', polygon: 'POL', bnb: 'BNB', avalanche: 'AVAX', arbitrum: 'ETH', optimism: 'ETH' };
+  let currency = currencyMap[network] || network.toUpperCase();
 
   try {
     const result = await fetchBlockchainBalance(network, body.address);
@@ -827,7 +839,7 @@ app.post('/api/accounts/:id/sync-blockchain', async (c) => {
 
 // ========== CRYPTO PRICES ==========
 app.get('/api/crypto/prices', async (c) => {
-  const ids = c.req.query('ids') || 'bitcoin,ethereum,solana';
+  const ids = c.req.query('ids') || 'bitcoin,ethereum,solana,matic-network,binancecoin,avalanche-2';
   try {
     const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=eur,usd&include_24hr_change=true`);
     const data = await res.json();
