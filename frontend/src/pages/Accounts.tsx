@@ -256,7 +256,10 @@ export default function Accounts() {
   const connectMetaMask = async () => {
     const eth = (window as any).ethereum;
     if (!eth) {
-      setMetamaskError(t('metamask_not_detected') || 'No wallet detected. Open this page from MetaMask mobile browser, or install a wallet extension.');
+      const isMobile = /iPhone|iPad|Android/i.test(navigator.userAgent);
+      setMetamaskError(isMobile
+        ? '🦊 Aucun wallet détecté. Ouvrez cette page depuis le navigateur intégré de MetaMask (MetaMask → ☰ → Navigateur) ou utilisez Brave avec le wallet activé.'
+        : '🦊 Aucun wallet détecté. Installez l\'extension MetaMask depuis metamask.io/download puis rechargez la page.');
       return;
     }
     setMetamaskError('');
