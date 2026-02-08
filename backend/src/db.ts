@@ -180,6 +180,37 @@ export async function initDatabase() {
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(duration)
     );
+
+    CREATE TABLE IF NOT EXISTS drive_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      company_id INTEGER REFERENCES companies(id),
+      folder_id TEXT,
+      folder_path TEXT,
+      access_token TEXT,
+      refresh_token TEXT,
+      token_expiry TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS invoice_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL DEFAULT 1,
+      company_id INTEGER REFERENCES companies(id),
+      transaction_id INTEGER REFERENCES transactions(id),
+      drive_file_id TEXT,
+      filename TEXT,
+      vendor TEXT,
+      amount_ht REAL,
+      tva_amount REAL,
+      tva_rate REAL,
+      date TEXT,
+      invoice_number TEXT,
+      match_confidence REAL,
+      scanned_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(drive_file_id)
+    );
   `);
 }
 

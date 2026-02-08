@@ -1463,6 +1463,451 @@ app.post('/api/analytics/recompute', async (c) => {
   return c.json({ ...result, cached: false });
 });
 
+// ========== INVOICE MATCHING (Google Drive) ==========
+
+// Get drive connection status
+app.get('/api/drive/status', async (c) => {
+  const userId = await ensureDefaultUser();
+  const result = await db.execute({
+    sql: 'SELECT id, folder_id, folder_path, status, created_at FROM drive_connections WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    args: [userId]
+  });
+  if (result.rows.length === 0) return c.json({ connected: false });
+  const conn: any = result.rows[0];
+  return c.json({ connected: conn.status === 'active', ...conn });
+});
+
+// Save drive connection (manual token input for now — OAuth flow later)
+app.post('/api/drive/connect', async (c) => {
+  const userId = await ensureDefaultUser();
+  const body = await c.req.json();
+  const { access_token, refresh_token, folder_id, folder_path } = body;
+
+  // Upsert connection
+  await db.execute({
+    sql: `INSERT INTO drive_connections (user_id, access_token, refresh_token, folder_id, folder_path, status)
+          VALUES (?, ?, ?, ?, ?, 'active')
+          ON CONFLICT(id) DO UPDATE SET access_token=?, refresh_token=?, folder_id=?, folder_path=?, status='active'`,
+    args: [userId, access_token, refresh_token || null, folder_id || null, folder_path || null,
+           access_token, refresh_token || null, folder_id || null, folder_path || null]
+  });
+  return c.json({ ok: true });
+});
+
+app.delete('/api/drive/disconnect', async (c) => {
+  const userId = await ensureDefaultUser();
+  await db.execute({ sql: 'DELETE FROM drive_connections WHERE user_id = ?', args: [userId] });
+  return c.json({ ok: true });
+});
+
+// Scan invoices from Drive folder (simulated — real OCR needs pdf-parse/tesseract)
+app.post('/api/invoices/scan', async (c) => {
+  const userId = await ensureDefaultUser();
+  const body = await c.req.json().catch(() => ({}));
+  const companyId = body.company_id || null;
+
+  // Check drive connection
+  const conn = await db.execute({
+    sql: 'SELECT * FROM drive_connections WHERE user_id = ? AND status = ?',
+    args: [userId, 'active']
+  });
+  if (conn.rows.length === 0) {
+    return c.json({ error: 'No active Google Drive connection. Connect in Settings first.' }, 400);
+  }
+
+  const driveConn: any = conn.rows[0];
+  const accessToken = driveConn.access_token;
+  const folderId = driveConn.folder_id;
+
+  if (!accessToken) {
+    return c.json({ error: 'Missing Drive access token' }, 400);
+  }
+
+  try {
+    // List PDF files in Drive folder
+    let query = "mimeType='application/pdf'";
+    if (folderId) query += ` and '${folderId}' in parents`;
+
+    const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=100`;
+    const listRes = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (!listRes.ok) {
+      const err = await listRes.text();
+      return c.json({ error: 'Drive API error', details: err }, 502);
+    }
+
+    const listData: any = await listRes.json();
+    const files = listData.files || [];
+
+    let scanned = 0;
+    let matched = 0;
+    let errors: string[] = [];
+
+    for (const file of files) {
+      // Skip if already cached
+      const existing = await db.execute({
+        sql: 'SELECT id FROM invoice_cache WHERE drive_file_id = ?',
+        args: [file.id]
+      });
+      if (existing.rows.length > 0) continue;
+
+      try {
+        // Download file content for OCR
+        const dlRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+          headers: { Authorization: `Bearer ${accessToken}` }
+        });
+
+        if (!dlRes.ok) {
+          errors.push(`Failed to download ${file.name}`);
+          continue;
+        }
+
+        const buffer = await dlRes.arrayBuffer();
+
+        // Extract metadata from filename as fallback
+        // Pattern: YYYY-MM-DD_Vendor_Amount.pdf or similar
+        const extracted = extractInvoiceMetadata(file.name, Buffer.from(buffer));
+
+        // Try to match with transaction
+        let matchedTxId: number | null = null;
+        let confidence = 0;
+
+        if (extracted.amount) {
+          // Look for transactions within ±5 days with similar amount
+          const dateStr = extracted.date || file.modifiedTime?.slice(0, 10) || '';
+          const matchQuery = companyId
+            ? `SELECT t.id, t.label, t.amount, t.date FROM transactions t
+               JOIN bank_accounts ba ON t.bank_account_id = ba.id
+               WHERE ba.company_id = ? AND ABS(ABS(t.amount) - ?) < 0.02
+               AND t.date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
+               AND t.id NOT IN (SELECT transaction_id FROM invoice_cache WHERE transaction_id IS NOT NULL)
+               ORDER BY ABS(julianday(t.date) - julianday(?)) LIMIT 1`
+            : `SELECT t.id, t.label, t.amount, t.date FROM transactions t
+               WHERE ABS(ABS(t.amount) - ?) < 0.02
+               AND t.date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
+               AND t.id NOT IN (SELECT transaction_id FROM invoice_cache WHERE transaction_id IS NOT NULL)
+               ORDER BY ABS(julianday(t.date) - julianday(?)) LIMIT 1`;
+
+          const matchArgs = companyId
+            ? [companyId, Math.abs(extracted.amount), dateStr, dateStr, dateStr]
+            : [Math.abs(extracted.amount), dateStr, dateStr, dateStr];
+
+          const txMatch = await db.execute({ sql: matchQuery, args: matchArgs });
+
+          if (txMatch.rows.length > 0) {
+            const tx: any = txMatch.rows[0];
+            matchedTxId = tx.id;
+            confidence = 0.8; // Base confidence for amount+date match
+
+            // Boost if vendor name matches label
+            if (extracted.vendor && tx.label) {
+              const vendorLower = extracted.vendor.toLowerCase();
+              const labelLower = (tx.label as string).toLowerCase();
+              if (labelLower.includes(vendorLower) || vendorLower.includes(labelLower)) {
+                confidence = 0.95;
+              }
+            }
+            matched++;
+          }
+        }
+
+        // Insert metadata into cache
+        await db.execute({
+          sql: `INSERT INTO invoice_cache (user_id, company_id, transaction_id, drive_file_id, filename, vendor, amount_ht, tva_amount, tva_rate, date, invoice_number, match_confidence)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          args: [userId, companyId, matchedTxId, file.id, file.name,
+                 extracted.vendor || null, extracted.amount || null,
+                 extracted.tva_amount || null, extracted.tva_rate || null,
+                 extracted.date || null, extracted.invoice_number || null,
+                 matchedTxId ? confidence : null]
+        });
+        scanned++;
+      } catch (e: any) {
+        errors.push(`Error processing ${file.name}: ${e.message}`);
+      }
+    }
+
+    return c.json({
+      ok: true,
+      total_files: files.length,
+      scanned,
+      matched,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Scan failed', details: e.message }, 500);
+  }
+});
+
+// Extract invoice metadata from filename (and basic text extraction)
+function extractInvoiceMetadata(filename: string, _buffer: Buffer) {
+  const result: { vendor?: string; amount?: number; date?: string; invoice_number?: string; tva_amount?: number; tva_rate?: number } = {};
+
+  // Try to extract date from filename: YYYY-MM-DD or DD-MM-YYYY
+  const dateMatch = filename.match(/(\d{4})-(\d{2})-(\d{2})/) || filename.match(/(\d{2})-(\d{2})-(\d{4})/);
+  if (dateMatch) {
+    if (dateMatch[1].length === 4) {
+      result.date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
+    } else {
+      result.date = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
+    }
+  }
+
+  // Try to extract amount: look for numbers like 123.45 or 1234,56
+  const amountMatch = filename.match(/(\d+[.,]\d{2})/);
+  if (amountMatch) {
+    result.amount = parseFloat(amountMatch[1].replace(',', '.'));
+  }
+
+  // Vendor: take the part between date and amount, or first meaningful word
+  const cleaned = filename.replace(/\.pdf$/i, '').replace(/[\d_-]+/g, ' ').trim();
+  const words = cleaned.split(/\s+/).filter(w => w.length > 2);
+  if (words.length > 0) {
+    result.vendor = words.join(' ');
+  }
+
+  // Invoice number: look for patterns like F-2024-001, INV-123, etc.
+  const invMatch = filename.match(/(F|FA|INV|FACT)[- ]?\d+[- ]?\d*/i);
+  if (invMatch) {
+    result.invoice_number = invMatch[0];
+  }
+
+  return result;
+}
+
+// Get all cached invoices
+app.get('/api/invoices', async (c) => {
+  const userId = await ensureDefaultUser();
+  const companyId = c.req.query('company_id');
+  const matched = c.req.query('matched'); // 'true', 'false', or omit for all
+
+  let sql = 'SELECT ic.*, t.label as tx_label, t.amount as tx_amount, t.date as tx_date FROM invoice_cache ic LEFT JOIN transactions t ON ic.transaction_id = t.id WHERE ic.user_id = ?';
+  const args: any[] = [userId];
+
+  if (companyId) {
+    sql += ' AND ic.company_id = ?';
+    args.push(Number(companyId));
+  }
+  if (matched === 'true') {
+    sql += ' AND ic.transaction_id IS NOT NULL';
+  } else if (matched === 'false') {
+    sql += ' AND ic.transaction_id IS NULL';
+  }
+
+  sql += ' ORDER BY ic.date DESC, ic.scanned_at DESC';
+
+  const result = await db.execute({ sql, args });
+  return c.json(result.rows);
+});
+
+// Delete cached invoice
+app.delete('/api/invoices/:id', async (c) => {
+  const id = c.req.param('id');
+  await db.execute({ sql: 'DELETE FROM invoice_cache WHERE id = ?', args: [Number(id)] });
+  return c.json({ ok: true });
+});
+
+// Manual match: link invoice to transaction
+app.post('/api/invoices/:id/match', async (c) => {
+  const id = c.req.param('id');
+  const body = await c.req.json();
+  const { transaction_id } = body;
+  await db.execute({
+    sql: 'UPDATE invoice_cache SET transaction_id = ?, match_confidence = 1.0 WHERE id = ?',
+    args: [transaction_id, Number(id)]
+  });
+  return c.json({ ok: true });
+});
+
+// Unmatch invoice
+app.post('/api/invoices/:id/unmatch', async (c) => {
+  const id = c.req.param('id');
+  await db.execute({
+    sql: 'UPDATE invoice_cache SET transaction_id = NULL, match_confidence = NULL WHERE id = ?',
+    args: [Number(id)]
+  });
+  return c.json({ ok: true });
+});
+
+// Invoice stats
+app.get('/api/invoices/stats', async (c) => {
+  const userId = await ensureDefaultUser();
+  const companyId = c.req.query('company_id');
+
+  let whereClause = 'WHERE user_id = ?';
+  const args: any[] = [userId];
+  if (companyId) {
+    whereClause += ' AND company_id = ?';
+    args.push(Number(companyId));
+  }
+
+  const total = await db.execute({ sql: `SELECT COUNT(*) as c FROM invoice_cache ${whereClause}`, args });
+  const matchedCount = await db.execute({ sql: `SELECT COUNT(*) as c FROM invoice_cache ${whereClause} AND transaction_id IS NOT NULL`, args });
+  const unmatchedCount = await db.execute({ sql: `SELECT COUNT(*) as c FROM invoice_cache ${whereClause} AND transaction_id IS NULL`, args });
+
+  const totalVal = Number(total.rows[0]?.c || 0);
+  const matchedVal = Number(matchedCount.rows[0]?.c || 0);
+
+  return c.json({
+    total: totalVal,
+    matched: matchedVal,
+    unmatched: Number(unmatchedCount.rows[0]?.c || 0),
+    match_rate: totalVal > 0 ? Math.round((matchedVal / totalVal) * 100) : 0
+  });
+});
+
+// ========== BILAN ANNUEL ==========
+
+app.get('/api/bilan/:year', async (c) => {
+  const year = parseInt(c.req.param('year'));
+  const companyId = c.req.query('company_id');
+  const userId = await ensureDefaultUser();
+
+  const startDate = `${year}-01-01`;
+  const endDate = `${year + 1}-01-01`;
+
+  // Base query filter
+  let accountFilter = '';
+  const baseArgs: any[] = [startDate, endDate];
+  if (companyId) {
+    accountFilter = 'AND ba.company_id = ?';
+    baseArgs.push(Number(companyId));
+  }
+
+  // Chiffre d'affaires (income)
+  const caRes = await db.execute({
+    sql: `SELECT COALESCE(SUM(t.amount), 0) as total
+          FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id
+          WHERE t.date >= ? AND t.date < ? ${accountFilter} AND t.amount > 0`,
+    args: baseArgs
+  });
+  const ca = Number(caRes.rows[0]?.total || 0);
+
+  // Charges (expenses) by category
+  const chargesRes = await db.execute({
+    sql: `SELECT COALESCE(t.category, 'Non catégorisé') as category,
+          SUM(ABS(t.amount)) as total, COUNT(*) as count
+          FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id
+          WHERE t.date >= ? AND t.date < ? ${accountFilter} AND t.amount < 0
+          GROUP BY t.category ORDER BY total DESC`,
+    args: [...baseArgs]
+  });
+  const charges = chargesRes.rows.map((r: any) => ({
+    category: r.category,
+    total: Math.round(Number(r.total) * 100) / 100,
+    count: Number(r.count)
+  }));
+  const totalCharges = charges.reduce((s: number, c: any) => s + c.total, 0);
+
+  // Résultat net
+  const resultatNet = Math.round((ca - totalCharges) * 100) / 100;
+
+  // TVA analysis
+  const tvaRes = await db.execute({
+    sql: `SELECT
+          COALESCE(SUM(CASE WHEN t.amount > 0 THEN t.amount * 0.2 ELSE 0 END), 0) as tva_collectee,
+          COALESCE(SUM(CASE WHEN t.amount < 0 THEN ABS(t.amount) * 0.2 ELSE 0 END), 0) as tva_deductible
+          FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id
+          WHERE t.date >= ? AND t.date < ? ${accountFilter}`,
+    args: [...baseArgs]
+  });
+  const tvaCollectee = Math.round(Number(tvaRes.rows[0]?.tva_collectee || 0) * 100) / 100;
+  const tvaDeductible = Math.round(Number(tvaRes.rows[0]?.tva_deductible || 0) * 100) / 100;
+  const tvaNette = Math.round((tvaCollectee - tvaDeductible) * 100) / 100;
+
+  // Use invoice_cache TVA data if available
+  const invoiceTvaRes = await db.execute({
+    sql: `SELECT COALESCE(SUM(tva_amount), 0) as total_tva,
+          COALESCE(SUM(amount_ht), 0) as total_ht
+          FROM invoice_cache
+          WHERE user_id = ? AND date >= ? AND date < ? AND tva_amount IS NOT NULL`,
+    args: [userId, startDate, endDate]
+  });
+  const invoiceTva = Number(invoiceTvaRes.rows[0]?.total_tva || 0);
+  const invoiceHt = Number(invoiceTvaRes.rows[0]?.total_ht || 0);
+
+  // Monthly breakdown
+  const monthlyBreakdown = [];
+  for (let m = 1; m <= 12; m++) {
+    const mStart = `${year}-${String(m).padStart(2, '0')}-01`;
+    const mEnd = m === 12 ? `${year + 1}-01-01` : `${year}-${String(m + 1).padStart(2, '0')}-01`;
+    const mArgs = [mStart, mEnd];
+    if (companyId) mArgs.push(companyId as any);
+
+    const inc = await db.execute({
+      sql: `SELECT COALESCE(SUM(t.amount), 0) as t FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE t.date >= ? AND t.date < ? ${accountFilter} AND t.amount > 0`,
+      args: mArgs
+    });
+    const exp = await db.execute({
+      sql: `SELECT COALESCE(SUM(ABS(t.amount)), 0) as t FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE t.date >= ? AND t.date < ? ${accountFilter} AND t.amount < 0`,
+      args: mArgs
+    });
+    monthlyBreakdown.push({
+      month: m,
+      income: Math.round(Number(inc.rows[0]?.t || 0) * 100) / 100,
+      expenses: Math.round(Number(exp.rows[0]?.t || 0) * 100) / 100,
+    });
+  }
+
+  // Invoice matching stats for the year
+  const invStats = await db.execute({
+    sql: `SELECT COUNT(*) as total,
+          SUM(CASE WHEN transaction_id IS NOT NULL THEN 1 ELSE 0 END) as matched
+          FROM invoice_cache WHERE user_id = ? AND date >= ? AND date < ?`,
+    args: [userId, startDate, endDate]
+  });
+  const invTotal = Number(invStats.rows[0]?.total || 0);
+  const invMatched = Number(invStats.rows[0]?.matched || 0);
+
+  // Account balances at year end (simplified bilan actif/passif)
+  const accountsRes = await db.execute({
+    sql: `SELECT ba.name, ba.type, ba.balance, ba.currency
+          FROM bank_accounts ba
+          ${companyId ? 'WHERE ba.company_id = ?' : ''}
+          ORDER BY ba.type, ba.name`,
+    args: companyId ? [Number(companyId)] : []
+  });
+
+  const actif = accountsRes.rows
+    .filter((a: any) => !['loan'].includes(a.type))
+    .map((a: any) => ({ name: a.name, type: a.type, balance: Number(a.balance), currency: a.currency }));
+  const passif = accountsRes.rows
+    .filter((a: any) => ['loan'].includes(a.type))
+    .map((a: any) => ({ name: a.name, type: a.type, balance: Math.abs(Number(a.balance)), currency: a.currency }));
+
+  const totalActif = actif.reduce((s: number, a: any) => s + a.balance, 0);
+  const totalPassif = passif.reduce((s: number, a: any) => s + a.balance, 0);
+
+  return c.json({
+    year,
+    company_id: companyId ? Number(companyId) : null,
+    compte_de_resultat: {
+      chiffre_affaires: Math.round(ca * 100) / 100,
+      charges: { total: Math.round(totalCharges * 100) / 100, details: charges },
+      resultat_net: resultatNet,
+    },
+    tva: {
+      collectee: tvaCollectee,
+      deductible: tvaDeductible,
+      nette: tvaNette,
+      from_invoices: invoiceTva > 0 ? { tva: Math.round(invoiceTva * 100) / 100, ht: Math.round(invoiceHt * 100) / 100 } : null,
+    },
+    bilan: {
+      actif: { items: actif, total: Math.round(totalActif * 100) / 100 },
+      passif: { items: passif, total: Math.round(totalPassif * 100) / 100 },
+      capitaux_propres: Math.round((totalActif - totalPassif) * 100) / 100,
+    },
+    monthly_breakdown: monthlyBreakdown,
+    justificatifs: {
+      total: invTotal,
+      matched: invMatched,
+      match_rate: invTotal > 0 ? Math.round((invMatched / invTotal) * 100) : null,
+    },
+  });
+});
+
 // ========== START SERVER ==========
 
 export { app };

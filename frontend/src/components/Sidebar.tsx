@@ -19,6 +19,7 @@ import {
   Banknote,
   FileSpreadsheet,
   FileText,
+  FileBarChart,
   Upload,
   GitCompareArrows,
   Settings,
@@ -77,6 +78,7 @@ const navGroups: NavGroup[] = [
       { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
       { path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
       { path: '/fec-export', icon: FileText, labelKey: 'nav_fec_export', disabled: true },
+      { path: '/bilan', icon: FileBarChart, labelKey: 'nav_bilan' },
     ],
   },
   {
@@ -95,7 +97,7 @@ const navGroups: NavGroup[] = [
     labelKey: 'nav_group_outils',
     items: [
       { path: '/import', icon: Upload, labelKey: 'nav_import', disabled: true },
-      { path: '/reconciliation', icon: GitCompareArrows, labelKey: 'nav_reconciliation', disabled: true },
+      { path: '/reconciliation', icon: GitCompareArrows, labelKey: 'nav_reconciliation' },
       { path: '/simulators', icon: Calculator, labelKey: 'nav_simulators' },
     ],
   },
