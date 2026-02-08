@@ -92,14 +92,21 @@ try { db.exec(`ALTER TABLE bank_accounts ADD COLUMN usage TEXT NOT NULL DEFAULT 
 db.exec(`
   UPDATE bank_accounts SET type = 'savings'
   WHERE type = 'checking'
-    AND (LOWER(name) LIKE '%livret%' OR LOWER(name) LIKE '%épargne%' OR LOWER(name) LIKE '%epargne%' OR LOWER(name) LIKE '%pea%' OR LOWER(name) LIKE '%ldd%');
+    AND (LOWER(name) LIKE '%livret%' OR LOWER(name) LIKE '%épargne%' OR LOWER(name) LIKE '%epargne%' OR LOWER(name) LIKE '%ldd%');
+
+  UPDATE bank_accounts SET type = 'investment'
+  WHERE type = 'checking'
+    AND (LOWER(name) LIKE '%pea%' OR LOWER(name) LIKE '%per %' OR LOWER(name) LIKE '%assurance%');
 
   UPDATE bank_accounts SET type = 'loan'
   WHERE type = 'checking'
-    AND (LOWER(name) LIKE '%prêt%' OR LOWER(name) LIKE '%pret%' OR LOWER(name) LIKE '%crédit%' OR LOWER(name) LIKE '%credit%' OR LOWER(name) LIKE '%loan%');
+    AND (LOWER(name) LIKE '%prêt%' OR LOWER(name) LIKE '%pret%' OR LOWER(name) LIKE '%crédit%' OR LOWER(name) LIKE '%credit%' OR LOWER(name) LIKE '%loan%' OR LOWER(name) LIKE '%immo%');
 
   UPDATE bank_accounts SET usage = 'professional'
   WHERE company_id IS NOT NULL;
+
+  UPDATE bank_accounts SET last_sync = created_at
+  WHERE last_sync IS NULL;
 `);
 
 export default db;

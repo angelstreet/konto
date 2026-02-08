@@ -2,6 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { useApi, invalidateApi } from '../useApi';
+import ConfirmDialog from '../components/ConfirmDialog';
 
 const API = '/kompta/api';
 
@@ -36,6 +37,11 @@ export default function CompanyPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null);
   const searchTimeout = useRef<any>(null);
+  const [confirmAction, setConfirmAction] = useState<{
+    title: string;
+    message: string;
+    onConfirm: () => void;
+  } | null>(null);
 
   const loading = loadingCompanies || loadingAccounts;
 
@@ -123,10 +129,16 @@ export default function CompanyPage() {
     refetchAll();
   };
 
-  const deleteCompany = async (id: number) => {
-    if (!confirm(t('confirm_delete_company'))) return;
-    await fetch(`${API}/companies/${id}`, { method: 'DELETE' });
-    refetchAll();
+  const deleteCompany = (id: number) => {
+    setConfirmAction({
+      title: t('delete'),
+      message: t('confirm_delete_company'),
+      onConfirm: async () => {
+        setConfirmAction(null);
+        await fetch(`${API}/companies/${id}`, { method: 'DELETE' });
+        refetchAll();
+      },
+    });
   };
 
   const linkAccount = async (accountId: number, companyId: number) => {
@@ -148,9 +160,16 @@ export default function CompanyPage() {
     refetchAll();
   };
 
-  const unlinkAllAccounts = async (companyId: number) => {
-    await fetch(`${API}/companies/${companyId}/unlink-all`, { method: 'POST' });
-    refetchAll();
+  const unlinkAllAccounts = (companyId: number) => {
+    setConfirmAction({
+      title: t('unlink_all'),
+      message: t('confirm_unlink_all'),
+      onConfirm: async () => {
+        setConfirmAction(null);
+        await fetch(`${API}/companies/${companyId}/unlink-all`, { method: 'POST' });
+        refetchAll();
+      },
+    });
   };
 
   const linkedAccounts = (companyId: number) => (accounts || []).filter(a => a.company_id === companyId);
@@ -441,6 +460,15 @@ export default function CompanyPage() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={!!confirmAction}
+        title={confirmAction?.title || ''}
+        message={confirmAction?.message || ''}
+        variant="danger"
+        onConfirm={() => confirmAction?.onConfirm()}
+        onCancel={() => setConfirmAction(null)}
+      />
     </div>
   );
 }

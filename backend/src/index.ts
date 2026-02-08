@@ -15,17 +15,33 @@ const POWENS_API = `https://${POWENS_DOMAIN}/2.0`;
 const REDIRECT_URI = process.env.POWENS_REDIRECT_URI || 'https://65.108.14.251:8080/kompta/api/bank-callback';
 
 // --- Account classification helpers ---
-function classifyAccountType(powensType: number | undefined, name: string): string {
-  if (powensType === 2) return 'savings';
-  if (powensType === 4) return 'loan';
-  if (powensType === 1) return 'checking';
+// Powens type is a string: checking, savings, deposit, card, loan, market, pea, pee, per, perco,
+// perp, lifeinsurance, madelin, capitalisation, crowdlending, realEstate, livreta, livretb, ldds, cel, pel, etc.
+const SAVINGS_TYPES = new Set(['savings', 'deposit', 'livreta', 'livretb', 'ldds', 'cel', 'pel']);
+const INVESTMENT_TYPES = new Set(['market', 'pea', 'pee', 'per', 'perco', 'perp', 'lifeinsurance', 'madelin', 'capitalisation', 'crowdlending', 'realEstate', 'article83']);
+const LOAN_TYPES = new Set(['loan']);
+
+function classifyAccountType(powensType: string | undefined, name: string): string {
+  if (powensType) {
+    if (powensType === 'checking' || powensType === 'card') return 'checking';
+    if (SAVINGS_TYPES.has(powensType)) return 'savings';
+    if (LOAN_TYPES.has(powensType)) return 'loan';
+    if (INVESTMENT_TYPES.has(powensType)) return 'investment';
+    return powensType; // store the raw Powens type if unknown
+  }
+  // Fallback: name heuristic
   const lower = (name || '').toLowerCase();
-  if (lower.includes('livret') || lower.includes('épargne') || lower.includes('epargne') || lower.includes('pea') || lower.includes('ldd')) return 'savings';
-  if (lower.includes('prêt') || lower.includes('pret') || lower.includes('crédit') || lower.includes('credit') || lower.includes('loan')) return 'loan';
+  if (lower.includes('livret') || lower.includes('épargne') || lower.includes('epargne') || lower.includes('ldd')) return 'savings';
+  if (lower.includes('pea') || lower.includes('per ') || lower.includes('assurance')) return 'investment';
+  if (lower.includes('prêt') || lower.includes('pret') || lower.includes('crédit') || lower.includes('credit') || lower.includes('loan') || lower.includes('immo')) return 'loan';
   return 'checking';
 }
 
-function classifyAccountUsage(companyId: number | null): string {
+// Powens usage field: "private", "professional", or null
+function classifyAccountUsage(powensUsage: string | undefined | null, companyId: number | null): string {
+  if (powensUsage === 'professional') return 'professional';
+  if (powensUsage === 'private') return 'personal';
+  // Fallback: infer from company link
   return companyId ? 'professional' : 'personal';
 }
 
@@ -204,8 +220,8 @@ app.get('/api/bank-callback', async (c) => {
         if (!existing) {
           const companyId = company?.id || null;
           db.prepare(
-            'INSERT INTO bank_accounts (company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, type, usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-          ).run(companyId, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(companyId));
+            'INSERT INTO bank_accounts (company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, type, usage, last_sync) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+          ).run(companyId, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, companyId), new Date().toISOString());
         }
       }
     } catch (e) {
@@ -254,11 +270,11 @@ app.post('/api/bank/sync', async (c) => {
         if (existing) {
           const full = db.prepare('SELECT company_id FROM bank_accounts WHERE id = ?').get(existing.id) as any;
           db.prepare('UPDATE bank_accounts SET balance = ?, last_sync = ?, type = ?, usage = ? WHERE id = ?')
-            .run(acc.balance || 0, new Date().toISOString(), classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(full?.company_id || null), existing.id);
+            .run(acc.balance || 0, new Date().toISOString(), classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, full?.company_id || null), existing.id);
         } else {
           db.prepare(
             'INSERT INTO bank_accounts (company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, last_sync, type, usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-          ).run(null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, new Date().toISOString(), classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(null));
+          ).run(null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, new Date().toISOString(), classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, null));
         }
         totalSynced++;
       }
@@ -307,6 +323,8 @@ app.patch('/api/bank/accounts/:id', async (c) => {
 
   if (body.custom_name !== undefined) { updates.push('custom_name = ?'); params.push(body.custom_name); }
   if (body.hidden !== undefined) { updates.push('hidden = ?'); params.push(body.hidden ? 1 : 0); }
+  if (body.type !== undefined) { updates.push('type = ?'); params.push(body.type); }
+  if (body.usage !== undefined) { updates.push('usage = ?'); params.push(body.usage); }
   if (body.company_id !== undefined) {
     updates.push('company_id = ?'); params.push(body.company_id);
     updates.push('usage = ?'); params.push(body.company_id ? 'professional' : 'personal');
@@ -325,6 +343,39 @@ app.delete('/api/bank/accounts/:id', (c) => {
   db.prepare('DELETE FROM transactions WHERE bank_account_id = ?').run(id);
   db.prepare('DELETE FROM bank_accounts WHERE id = ?').run(id);
   return c.json({ ok: true });
+});
+
+// --- List transactions ---
+app.get('/api/transactions', (c) => {
+  const accountId = c.req.query('account_id');
+  const limit = parseInt(c.req.query('limit') || '100', 10);
+  const offset = parseInt(c.req.query('offset') || '0', 10);
+  const search = c.req.query('search');
+
+  let where = '1=1';
+  const params: any[] = [];
+
+  if (accountId) {
+    where += ' AND t.bank_account_id = ?';
+    params.push(accountId);
+  }
+  if (search) {
+    where += ' AND t.label LIKE ?';
+    params.push(`%${search}%`);
+  }
+
+  const total = (db.prepare(`SELECT COUNT(*) as count FROM transactions t WHERE ${where}`).get(...params) as any).count;
+
+  const rows = db.prepare(
+    `SELECT t.*, ba.name as account_name, ba.custom_name as account_custom_name
+     FROM transactions t
+     LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+     WHERE ${where}
+     ORDER BY t.date DESC, t.id DESC
+     LIMIT ? OFFSET ?`
+  ).all(...params, limit, offset);
+
+  return c.json({ transactions: rows, total, limit, offset });
 });
 
 // --- Sync transactions for an account ---
