@@ -241,12 +241,15 @@ export default function Accounts() {
   const [metamaskStatus, setMetamaskStatus] = useState('');
   const evmChains = ['ethereum', 'base', 'polygon', 'bnb', 'avalanche', 'arbitrum', 'optimism'];
 
+  const [metamaskError, setMetamaskError] = useState('');
+
   const connectMetaMask = async () => {
     const eth = (window as any).ethereum;
     if (!eth) {
-      alert('MetaMask not detected. Install MetaMask browser extension first.');
+      setMetamaskError(t('metamask_not_detected') || 'MetaMask not detected. Install the browser extension or use the MetaMask mobile browser.');
       return;
     }
+    setMetamaskError('');
     try {
       const accounts = await eth.request({ method: 'eth_requestAccounts' });
       const address = accounts[0];
@@ -270,7 +273,7 @@ export default function Accounts() {
       setMetamaskStatus(`Done! Added ${added} chain accounts.`);
       setTimeout(() => { setAddMode(null); setMetamaskStatus(''); refetchAll(); }, 1500);
     } catch (e: any) {
-      setMetamaskStatus(`Error: ${e.message || 'Connection rejected'}`);
+      setMetamaskError(e.message || 'Connection rejected');
     }
   };
 
@@ -404,6 +407,11 @@ export default function Accounts() {
                           <p className="text-xs text-muted">Auto-scan all EVM chains (ETH, Base, Polygon, BNB...)</p>
                         </div>
                       </button>
+                      {metamaskError && (
+                        <div className="mx-1 p-3 rounded-lg bg-red-500/10 border border-red-500/20 text-sm text-red-400">
+                          {metamaskError}
+                        </div>
+                      )}
                       <button onClick={() => setAddMode('blockchain')} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
                         <div className="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center"><Bitcoin size={20} className="text-amber-400" /></div>
                         <div>
