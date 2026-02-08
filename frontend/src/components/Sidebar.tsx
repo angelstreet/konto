@@ -66,7 +66,7 @@ const navGroups: NavGroup[] = [
   {
     labelKey: 'nav_group_analyse',
     items: [
-      { path: '/analysis', icon: BarChart3, labelKey: 'nav_analysis', disabled: true },
+      { path: '/analysis', icon: BarChart3, labelKey: 'nav_analysis' },
       { path: '/cashflow', icon: LineChart, labelKey: 'nav_cashflow', disabled: true },
     ],
   },

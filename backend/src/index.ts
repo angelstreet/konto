@@ -1313,6 +1313,156 @@ app.post('/api/borrowing-capacity', async (c) => {
   });
 });
 
+// ========== ANALYTICS ==========
+
+async function computeAnalytics(period: string, userId: number = 1) {
+  const [year, month] = period.split('-').map(Number);
+  const startDate = `${period}-01`;
+  const endDate = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`;
+  
+  // Total income & expenses for the period
+  const incomeRes = await db.execute({
+    sql: `SELECT COALESCE(SUM(t.amount), 0) as total FROM transactions t 
+          LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+          WHERE t.date >= ? AND t.date < ? AND t.amount > 0`,
+    args: [startDate, endDate]
+  });
+  const expenseRes = await db.execute({
+    sql: `SELECT COALESCE(SUM(ABS(t.amount)), 0) as total FROM transactions t 
+          LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+          WHERE t.date >= ? AND t.date < ? AND t.amount < 0`,
+    args: [startDate, endDate]
+  });
+
+  const totalIncome = Number(incomeRes.rows[0]?.total || 0);
+  const totalExpenses = Number(expenseRes.rows[0]?.total || 0);
+  const savingsRate = totalIncome > 0 ? Math.round(((totalIncome - totalExpenses) / totalIncome) * 100) : 0;
+
+  // Top 5 expense categories
+  const topCatsRes = await db.execute({
+    sql: `SELECT COALESCE(t.category, 'Non catégorisé') as category, SUM(ABS(t.amount)) as total
+          FROM transactions t WHERE t.date >= ? AND t.date < ? AND t.amount < 0
+          GROUP BY t.category ORDER BY total DESC LIMIT 5`,
+    args: [startDate, endDate]
+  });
+  const topCategories = topCatsRes.rows.map((r: any) => ({
+    category: r.category,
+    amount: Number(r.total),
+    percentage: totalExpenses > 0 ? Math.round((Number(r.total) / totalExpenses) * 100) : 0,
+  }));
+
+  // Previous month for MoM
+  const prevMonth = month === 1 ? 12 : month - 1;
+  const prevYear = month === 1 ? year - 1 : year;
+  const prevPeriod = `${prevYear}-${String(prevMonth).padStart(2, '0')}`;
+  const prevStart = `${prevPeriod}-01`;
+  const prevEnd = prevMonth === 12 ? `${prevYear + 1}-01-01` : `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-01`;
+
+  const prevIncomeRes = await db.execute({
+    sql: `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE date >= ? AND date < ? AND amount > 0`,
+    args: [prevStart, prevEnd]
+  });
+  const prevExpenseRes = await db.execute({
+    sql: `SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM transactions WHERE date >= ? AND date < ? AND amount < 0`,
+    args: [prevStart, prevEnd]
+  });
+  const prevIncome = Number(prevIncomeRes.rows[0]?.total || 0);
+  const prevExpenses = Number(prevExpenseRes.rows[0]?.total || 0);
+
+  const momIncome = prevIncome > 0 ? Math.round(((totalIncome - prevIncome) / prevIncome) * 100) : 0;
+  const momExpenses = prevExpenses > 0 ? Math.round(((totalExpenses - prevExpenses) / prevExpenses) * 100) : 0;
+
+  // YoY
+  const yoyPeriod = `${year - 1}-${String(month).padStart(2, '0')}`;
+  const yoyStart = `${yoyPeriod}-01`;
+  const yoyEnd = month === 12 ? `${year}-01-01` : `${year - 1}-${String(month + 1).padStart(2, '0')}-01`;
+
+  const yoyIncomeRes = await db.execute({
+    sql: `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE date >= ? AND date < ? AND amount > 0`,
+    args: [yoyStart, yoyEnd]
+  });
+  const yoyExpenseRes = await db.execute({
+    sql: `SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM transactions WHERE date >= ? AND date < ? AND amount < 0`,
+    args: [yoyStart, yoyEnd]
+  });
+  const yoyIncome = Number(yoyIncomeRes.rows[0]?.total || 0);
+  const yoyExpenses = Number(yoyExpenseRes.rows[0]?.total || 0);
+
+  // Recurring expenses (labels appearing 2+ months in last 3 months)
+  const threeMonthsAgo = month <= 3
+    ? `${year - 1}-${String(12 + month - 3).padStart(2, '0')}-01`
+    : `${year}-${String(month - 3).padStart(2, '0')}-01`;
+
+  const recurringRes = await db.execute({
+    sql: `SELECT t.label, COUNT(DISTINCT strftime('%Y-%m', t.date)) as months, AVG(ABS(t.amount)) as avg_amount
+          FROM transactions t WHERE t.date >= ? AND t.date < ? AND t.amount < 0 AND t.label IS NOT NULL
+          GROUP BY LOWER(t.label) HAVING months >= 2 ORDER BY avg_amount DESC LIMIT 10`,
+    args: [threeMonthsAgo, endDate]
+  });
+  const recurring = recurringRes.rows.map((r: any) => ({
+    label: r.label,
+    avgAmount: Math.round(Number(r.avg_amount) * 100) / 100,
+    months: Number(r.months),
+  }));
+
+  // Spending trends (last 6 months)
+  const trends = [];
+  for (let i = 5; i >= 0; i--) {
+    let m = month - i;
+    let y = year;
+    while (m <= 0) { m += 12; y--; }
+    const p = `${y}-${String(m).padStart(2, '0')}`;
+    const s = `${p}-01`;
+    const e = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
+    const inc = await db.execute({ sql: `SELECT COALESCE(SUM(amount), 0) as t FROM transactions WHERE date >= ? AND date < ? AND amount > 0`, args: [s, e] });
+    const exp = await db.execute({ sql: `SELECT COALESCE(SUM(ABS(amount)), 0) as t FROM transactions WHERE date >= ? AND date < ? AND amount < 0`, args: [s, e] });
+    trends.push({ period: p, income: Number(inc.rows[0]?.t || 0), expenses: Number(exp.rows[0]?.t || 0) });
+  }
+
+  const metrics = {
+    totalIncome, totalExpenses, savingsRate,
+    topCategories, recurring, trends,
+    mom: { income: momIncome, expenses: momExpenses },
+    yoy: { income: yoyIncome, expenses: yoyExpenses, incomeChange: yoyIncome > 0 ? Math.round(((totalIncome - yoyIncome) / yoyIncome) * 100) : 0, expensesChange: yoyExpenses > 0 ? Math.round(((totalExpenses - yoyExpenses) / yoyExpenses) * 100) : 0 },
+  };
+
+  // Cache it
+  const now = new Date().toISOString();
+  await db.execute({
+    sql: `INSERT OR REPLACE INTO analytics_cache (user_id, metric_key, period, value, computed_at) VALUES (?, 'full', ?, ?, ?)`,
+    args: [userId, period, JSON.stringify(metrics), now]
+  });
+
+  return { ...metrics, computed_at: now };
+}
+
+app.get('/api/analytics', async (c) => {
+  const period = c.req.query('period') || new Date().toISOString().slice(0, 7);
+  const userId = 1;
+
+  // Try cache first
+  const cached = await db.execute({
+    sql: `SELECT value, computed_at FROM analytics_cache WHERE user_id = ? AND metric_key = 'full' AND period = ?`,
+    args: [userId, period]
+  });
+
+  if (cached.rows.length > 0) {
+    const row: any = cached.rows[0];
+    return c.json({ ...JSON.parse(row.value), computed_at: row.computed_at, cached: true });
+  }
+
+  // Compute on first access
+  const result = await computeAnalytics(period, userId);
+  return c.json({ ...result, cached: false });
+});
+
+app.post('/api/analytics/recompute', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const period = body.period || new Date().toISOString().slice(0, 7);
+  const result = await computeAnalytics(period, 1);
+  return c.json({ ...result, cached: false });
+});
+
 // ========== START SERVER ==========
 
 export { app };

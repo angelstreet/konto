@@ -162,6 +162,16 @@ export async function initDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS analytics_cache (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL DEFAULT 1,
+      metric_key TEXT NOT NULL,
+      period TEXT NOT NULL,
+      value TEXT,
+      computed_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, metric_key, period)
+    );
+
     CREATE TABLE IF NOT EXISTS market_rates (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       duration INTEGER NOT NULL,

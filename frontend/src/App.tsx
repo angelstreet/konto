@@ -14,6 +14,7 @@ import Budget from './pages/Budget';
 import CreditSimulator from './pages/CreditSimulator';
 import Report from './pages/Report';
 import Income from './pages/Income';
+import Analytics from './pages/Analytics';
 import { FilterProvider } from './FilterContext';
 
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -27,7 +28,7 @@ function AppRoutes() {
       <Route path="/companies" element={<Company />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/assets" element={<Assets />} />
-      <Route path="/analysis" element={<ComingSoon titleKey="nav_analysis" />} />
+      <Route path="/analysis" element={<Analytics />} />
       <Route path="/cashflow" element={<ComingSoon titleKey="nav_cashflow" />} />
       <Route path="/ledger" element={<ComingSoon titleKey="nav_ledger" />} />
       <Route path="/reports" element={<Report />} />
