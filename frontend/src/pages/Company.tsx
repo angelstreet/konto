@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, Info } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, Info, X, Eye, EyeOff } from 'lucide-react';
 import { useState, useRef } from 'react';
 import { useApi, invalidateApi } from '../useApi';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -32,11 +32,13 @@ export default function CompanyPage() {
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [linkingCompanyId, setLinkingCompanyId] = useState<number | null>(null);
+  const [selectedLinkIds, setSelectedLinkIds] = useState<Set<number>>(new Set());
   const [form, setForm] = useState({ name: '', siren: '', legal_form: '', address: '', naf_code: '', capital: '', date_creation: '' });
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [showSearch, setShowSearch] = useState(false);
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null);
   const searchTimeout = useRef<any>(null);
+  const [allAmountsHidden, setAllAmountsHidden] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
   const [confirmAction, setConfirmAction] = useState<{
     title: string;
     message: string;
@@ -67,6 +69,9 @@ export default function CompanyPage() {
   const [enrichedInfo, setEnrichedInfo] = useState<any>(null);
   const [enrichLoading, setEnrichLoading] = useState(false);
   const [showDetails, setShowDetails] = useState(true);
+  const [viewingCompanyId, setViewingCompanyId] = useState<number | null>(null);
+  const [viewingCache, setViewingCache] = useState<Record<number, any>>({});
+  const [viewingLoading, setViewingLoading] = useState(false);
 
   const selectSearchResult = async (r: any) => {
     setForm({
@@ -166,14 +171,25 @@ export default function CompanyPage() {
     });
   };
 
-  const linkAccount = async (accountId: number, companyId: number) => {
-    await fetch(`${API}/bank/accounts/${accountId}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ company_id: companyId }),
-    });
+  const linkAccounts = async (accountIds: number[], companyId: number) => {
+    await Promise.all(accountIds.map(id =>
+      fetch(`${API}/bank/accounts/${id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ company_id: companyId }),
+      })
+    ));
     setLinkingCompanyId(null);
+    setSelectedLinkIds(new Set());
     refetchAll();
+  };
+
+  const toggleLinkId = (id: number) => {
+    setSelectedLinkIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
   };
 
   const unlinkAccount = async (accountId: number) => {
@@ -197,6 +213,25 @@ export default function CompanyPage() {
     });
   };
 
+  const toggleViewDetails = async (c: Company) => {
+    if (viewingCompanyId === c.id) {
+      setViewingCompanyId(null);
+      return;
+    }
+    setViewingCompanyId(c.id);
+    if (!viewingCache[c.id] && c.siren) {
+      setViewingLoading(true);
+      try {
+        const res = await fetch(`${API}/companies/info/${c.siren}`);
+        if (res.ok) {
+          const data = await res.json();
+          setViewingCache(prev => ({ ...prev, [c.id]: data }));
+        }
+      } catch {}
+      setViewingLoading(false);
+    }
+  };
+
   const linkedAccounts = (companyId: number) => (accounts || []).filter(a => a.company_id === companyId);
   const unlinkedAccounts = (accounts || []).filter(a => !a.company_id);
 
@@ -210,7 +245,16 @@ export default function CompanyPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">{t('company_profile')}</h1>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-semibold">{t('company_profile')}</h1>
+          <button
+            onClick={() => setAllAmountsHidden(h => !h)}
+            className="text-muted hover:text-white transition-colors p-1"
+            title={allAmountsHidden ? t('show_all_balances') : t('hide_all_balances')}
+          >
+            {allAmountsHidden ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </div>
         <button
           onClick={startCreate}
           className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black"
@@ -428,15 +472,83 @@ export default function CompanyPage() {
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted">
                       {c.legal_form && <span className="px-2 py-0.5 rounded-full bg-white/5">{c.legal_form}</span>}
                       {c.siren && <span className="font-mono">SIREN: {c.siren}</span>}
-                      {c.capital && <span>Capital: {formatBalance(c.capital)}</span>}
+                      {c.capital && <span>Capital: {allAmountsHidden ? '••••' : formatBalance(c.capital)}</span>}
                     </div>
                     {c.address && <p className="text-xs text-muted mt-1">{c.address}</p>}
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => startEdit(c)} className="text-muted hover:text-white p-1"><Pencil size={14} /></button>
-                    <button onClick={() => deleteCompany(c.id)} className="text-muted hover:text-red-400 p-1"><Trash2 size={14} /></button>
+                    <button onClick={() => toggleViewDetails(c)} className={`p-1 transition-colors ${viewingCompanyId === c.id ? 'text-accent-400' : 'text-muted hover:text-white'}`} title={t('details')}><Info size={14} /></button>
+                    <button onClick={() => startEdit(c)} className="text-muted hover:text-white p-1" title={t('edit')}><Pencil size={14} /></button>
+                    <button onClick={() => deleteCompany(c.id)} className="text-muted hover:text-red-400 p-1" title={t('delete')}><Trash2 size={14} /></button>
                   </div>
                 </div>
+
+                {/* Company details panel */}
+                {viewingCompanyId === c.id && (
+                  <div className="bg-black/20 border border-border rounded-lg mt-3 p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Info size={14} className="text-accent-400" />
+                      <span className="text-xs text-muted uppercase tracking-wide font-medium">{t('details')}</span>
+                      {viewingLoading && <span className="text-xs text-muted animate-pulse">...</span>}
+                    </div>
+                    {viewingCache[c.id] ? (
+                      <>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5 text-sm">
+                          {[
+                            { label: 'SIREN', value: viewingCache[c.id].siren || c.siren, mono: true },
+                            { label: 'SIRET', value: viewingCache[c.id].siret, mono: true },
+                            { label: 'TVA', value: viewingCache[c.id].tva_number, mono: true },
+                            { label: 'RCS', value: viewingCache[c.id].rcs },
+                            { label: t('legal_form'), value: viewingCache[c.id].legal_form || c.legal_form },
+                            { label: t('capital'), value: viewingCache[c.id].capital_social ? `${new Intl.NumberFormat('fr-FR').format(viewingCache[c.id].capital_social)} €` : null, accent: true },
+                            { label: 'Date', value: viewingCache[c.id].date_creation },
+                            { label: t('address'), value: viewingCache[c.id].address || c.address, full: true },
+                            { label: 'Code NAF', value: viewingCache[c.id].naf_code || c.naf_code },
+                            { label: 'Activité', value: viewingCache[c.id].naf_label },
+                            { label: 'Objet social', value: viewingCache[c.id].activity_description, full: true },
+                            { label: 'Convention collective', value: viewingCache[c.id].collective_agreement },
+                          ].filter(f => f.value).map((f, i) => (
+                            <div key={i} className={f.full ? 'col-span-full' : ''}>
+                              <p className="text-[10px] text-muted uppercase tracking-wide">{f.label}</p>
+                              <p className={`${f.mono ? 'font-mono text-xs' : ''} ${f.accent ? 'text-accent-400 font-semibold' : ''}`}>
+                                {f.value}
+                              </p>
+                            </div>
+                          ))}
+                        </div>
+                        {viewingCache[c.id].dirigeants?.length > 0 && (
+                          <div className="mt-3 pt-3 border-t border-border/50">
+                            <p className="text-[10px] text-muted uppercase tracking-wide mb-1.5">Dirigeants</p>
+                            <div className="flex flex-wrap gap-2">
+                              {viewingCache[c.id].dirigeants.filter((d: any) => d.nom).map((d: any, i: number) => (
+                                <span key={i} className="text-xs bg-white/5 px-2 py-1 rounded">
+                                  {d.nom} <span className="text-muted">({d.qualite})</span>
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </>
+                    ) : !viewingLoading ? (
+                      <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-4 gap-y-2.5 text-sm">
+                        {[
+                          { label: 'SIREN', value: c.siren, mono: true },
+                          { label: t('legal_form'), value: c.legal_form },
+                          { label: t('capital'), value: c.capital ? formatBalance(c.capital) : null, accent: true },
+                          { label: 'Code NAF', value: c.naf_code },
+                          { label: t('address'), value: c.address, full: true },
+                        ].filter(f => f.value).map((f, i) => (
+                          <div key={i} className={f.full ? 'col-span-full' : ''}>
+                            <p className="text-[10px] text-muted uppercase tracking-wide">{f.label}</p>
+                            <p className={`${f.mono ? 'font-mono text-xs' : ''} ${f.accent ? 'text-accent-400 font-semibold' : ''}`}>
+                              {f.value}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                    ) : null}
+                  </div>
+                )}
 
                 {/* Linked accounts */}
                 <div className="border-t border-border pt-3 mt-3">
@@ -452,7 +564,7 @@ export default function CompanyPage() {
                         </button>
                       )}
                       <button
-                        onClick={() => setLinkingCompanyId(linkingCompanyId === c.id ? null : c.id)}
+                        onClick={() => { setLinkingCompanyId(linkingCompanyId === c.id ? null : c.id); setSelectedLinkIds(new Set()); }}
                         className="text-xs flex items-center gap-1 hover:text-white text-muted"
                       >
                         <Link size={12} /> {t('link_account')}
@@ -471,7 +583,7 @@ export default function CompanyPage() {
                             <span className="text-sm">{acc.custom_name || acc.name}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-accent-400">{formatBalance(acc.balance)}</span>
+                            <span className="text-sm font-medium text-accent-400">{allAmountsHidden ? '••••' : formatBalance(acc.balance)}</span>
                             <button onClick={() => unlinkAccount(acc.id)} className="text-muted hover:text-red-400" title={t('unlink')}>
                               <Unlink size={12} />
                             </button>
@@ -481,20 +593,53 @@ export default function CompanyPage() {
                     </div>
                   )}
 
-                  {/* Link account dropdown */}
+                  {/* Link account multi-select */}
                   {linkingCompanyId === c.id && unlinkedAccounts.length > 0 && (
-                    <div className="mt-2 border border-border rounded-lg bg-black/30 p-2">
-                      <p className="text-xs text-muted mb-2">{t('select_account_to_link')}</p>
-                      {unlinkedAccounts.map(acc => (
+                    <div
+                      className="mt-2 border border-border rounded-lg bg-black/30 p-2"
+                      onKeyDown={e => { if (e.key === 'Escape') { setLinkingCompanyId(null); setSelectedLinkIds(new Set()); } }}
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs text-muted">{t('select_account_to_link')}</p>
                         <button
-                          key={acc.id}
-                          onClick={() => linkAccount(acc.id, c.id)}
-                          className="w-full text-left flex items-center justify-between py-1.5 px-2 rounded hover:bg-white/10 text-sm"
+                          onClick={() => { setLinkingCompanyId(null); setSelectedLinkIds(new Set()); }}
+                          className="text-muted hover:text-white p-0.5"
                         >
-                          <span>{acc.custom_name || acc.name} {acc.bank_name && `(${acc.bank_name})`}</span>
-                          <span className="text-muted">{formatBalance(acc.balance)}</span>
+                          <X size={14} />
                         </button>
+                      </div>
+                      {unlinkedAccounts.map(acc => (
+                        <label
+                          key={acc.id}
+                          className="flex items-center justify-between py-1.5 px-2 rounded hover:bg-white/10 text-sm cursor-pointer"
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={selectedLinkIds.has(acc.id)}
+                              onChange={() => toggleLinkId(acc.id)}
+                              className="accent-[#d4a812] w-4 h-4 rounded"
+                            />
+                            <span>{acc.custom_name || acc.name} {acc.bank_name && `(${acc.bank_name})`}</span>
+                          </div>
+                          <span className="text-muted">{allAmountsHidden ? '••••' : formatBalance(acc.balance)}</span>
+                        </label>
                       ))}
+                      <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-border/50">
+                        <button
+                          onClick={() => { setLinkingCompanyId(null); setSelectedLinkIds(new Set()); }}
+                          className="text-xs px-3 py-1.5 rounded text-muted hover:text-white border border-border"
+                        >
+                          {t('cancel')}
+                        </button>
+                        <button
+                          onClick={() => linkAccounts([...selectedLinkIds], c.id)}
+                          disabled={selectedLinkIds.size === 0}
+                          className="text-xs px-3 py-1.5 rounded font-medium disabled:opacity-40 bg-accent-500 text-black"
+                        >
+                          {t('confirm')} ({selectedLinkIds.size})
+                        </button>
+                      </div>
                     </div>
                   )}
                   {linkingCompanyId === c.id && unlinkedAccounts.length === 0 && (

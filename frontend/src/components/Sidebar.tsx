@@ -70,7 +70,7 @@ const navGroups: NavGroup[] = [
     labelKey: 'nav_group_comptabilite',
     items: [
       { path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
-      { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports', disabled: true },
+      { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
       { path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
       { path: '/fec-export', icon: FileText, labelKey: 'nav_fec_export', disabled: true },
     ],
@@ -78,7 +78,7 @@ const navGroups: NavGroup[] = [
   {
     labelKey: 'nav_group_budget',
     items: [
-      { path: '/budget', icon: Wallet, labelKey: 'nav_budget', disabled: true },
+      { path: '/budget', icon: Wallet, labelKey: 'nav_budget' },
     ],
   },
   {
@@ -86,7 +86,7 @@ const navGroups: NavGroup[] = [
     items: [
       { path: '/import', icon: Upload, labelKey: 'nav_import', disabled: true },
       { path: '/reconciliation', icon: GitCompareArrows, labelKey: 'nav_reconciliation', disabled: true },
-      { path: '/simulators', icon: Calculator, labelKey: 'nav_simulators', disabled: true },
+      { path: '/simulators', icon: Calculator, labelKey: 'nav_simulators' },
     ],
   },
 ];

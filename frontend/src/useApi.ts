@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 
 const cache = new Map<string, any>();
 
-export function useApi<T>(url: string): { data: T | null; loading: boolean; refetch: () => void } {
+export function useApi<T>(url: string): { data: T | null; loading: boolean; refetch: () => void; setData: (d: T) => void } {
   const [data, setData] = useState<T | null>(cache.get(url) ?? null);
   const [loading, setLoading] = useState(!cache.has(url));
   const urlRef = useRef(url);
@@ -25,9 +25,18 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
     }
   }, [url, fetchData]);
 
-  return { data, loading, refetch: fetchData };
+  const updateData = useCallback((d: T) => {
+    cache.set(url, d);
+    setData(d);
+  }, [url]);
+
+  return { data, loading, refetch: fetchData, setData: updateData };
 }
 
 export function invalidateApi(url: string) {
   cache.delete(url);
+}
+
+export function invalidateAllApi() {
+  cache.clear();
 }

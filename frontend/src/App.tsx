@@ -9,6 +9,10 @@ import Company from './pages/Company';
 import Settings from './pages/Settings';
 import Assets from './pages/Assets';
 import ComingSoon from './pages/ComingSoon';
+import Budget from './pages/Budget';
+import CreditSimulator from './pages/CreditSimulator';
+import Report from './pages/Report';
+import { FilterProvider } from './FilterContext';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
@@ -30,6 +34,7 @@ export default function App() {
   }
 
   return (
+    <FilterProvider>
     <Layout onLogout={logout}>
       <Routes>
         <Route path="/" element={<Dashboard />} />
@@ -42,15 +47,16 @@ export default function App() {
         <Route path="/analysis" element={<ComingSoon titleKey="nav_analysis" />} />
         <Route path="/cashflow" element={<ComingSoon titleKey="nav_cashflow" />} />
         <Route path="/ledger" element={<ComingSoon titleKey="nav_ledger" />} />
-        <Route path="/reports" element={<ComingSoon titleKey="nav_reports" />} />
+        <Route path="/reports" element={<Report />} />
         <Route path="/vat" element={<ComingSoon titleKey="nav_vat" />} />
         <Route path="/fec-export" element={<ComingSoon titleKey="nav_fec_export" />} />
-        <Route path="/budget" element={<ComingSoon titleKey="nav_budget" />} />
+        <Route path="/budget" element={<Budget />} />
         <Route path="/import" element={<ComingSoon titleKey="nav_import" />} />
         <Route path="/reconciliation" element={<ComingSoon titleKey="nav_reconciliation" />} />
-        <Route path="/simulators" element={<ComingSoon titleKey="nav_simulators" />} />
+        <Route path="/simulators" element={<CreditSimulator />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
+    </FilterProvider>
   );
 }

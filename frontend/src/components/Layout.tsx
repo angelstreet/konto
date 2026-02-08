@@ -1,6 +1,7 @@
 import { ReactNode, useState, useEffect } from 'react';
 import BottomNav from './BottomNav';
 import Sidebar from './Sidebar';
+import { isSandbox, disableSandbox } from '../sandbox';
 
 interface Props {
   children: ReactNode;
@@ -16,6 +17,11 @@ export default function Layout({ children, onLogout }: Props) {
   );
 
   useEffect(() => {
+    const theme = localStorage.getItem('kompta_theme') || 'gold';
+    document.documentElement.setAttribute('data-theme', theme);
+  }, []);
+
+  useEffect(() => {
     const handler = (e: Event) => {
       const detail = (e as CustomEvent).detail;
       setCollapsed(detail.collapsed);
@@ -24,29 +30,34 @@ export default function Layout({ children, onLogout }: Props) {
     return () => window.removeEventListener('sidebar-toggle', handler);
   }, []);
 
-  // Apply theme from localStorage on mount
-  useEffect(() => {
-    const theme = localStorage.getItem('kompta_theme') || 'gold';
-    document.documentElement.setAttribute('data-theme', theme);
-  }, []);
+  const sandbox = isSandbox();
+
+  const handleLogout = () => {
+    if (sandbox) disableSandbox();
+    onLogout();
+  };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Desktop sidebar */}
+      {sandbox && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 text-center text-xs text-amber-400 flex items-center justify-center gap-2">
+          <span>🎮</span>
+          <span>Mode démo — données fictives, rien n'est sauvegardé</span>
+          <button onClick={handleLogout} className="ml-2 underline hover:text-amber-300">Quitter</button>
+        </div>
+      )}
       <div className="hidden md:block">
-        <Sidebar onLogout={onLogout} />
+        <Sidebar onLogout={handleLogout} />
       </div>
 
-      {/* Main content */}
       <main
-        className={`pb-20 md:pb-0 px-4 md:px-8 pt-6 max-w-6xl w-full transition-all duration-200 ${
+        className={`pb-20 md:pb-0 px-4 md:px-8 pt-3 max-w-6xl w-full transition-all duration-200 ${
           collapsed ? 'md:ml-16' : 'md:ml-56'
         }`}
       >
         {children}
       </main>
 
-      {/* Mobile bottom nav */}
       <div className="md:hidden">
         <BottomNav />
       </div>
