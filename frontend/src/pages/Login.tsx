@@ -13,7 +13,7 @@ export default function Login({ onLogin }: Props) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'user' && password === 'user') {
+    if (username.toLowerCase() === 'user' && password === 'user') {
       onLogin();
     } else {
       setError(true);
@@ -53,7 +53,7 @@ export default function Login({ onLogin }: Props) {
 
           <button
             type="submit"
-            className="w-full bg-accent-500 hover:bg-accent-600 text-black font-semibold rounded-lg py-3 transition-colors"
+            className="w-full bg-accent-500 hover:bg-accent-600 text-white font-semibold rounded-lg py-3 transition-colors"
           >
             {t('sign_in')}
           </button>

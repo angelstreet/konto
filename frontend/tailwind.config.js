@@ -9,18 +9,6 @@ export default {
         surface: '#1a1a1a',
         'surface-hover': '#242424',
         border: '#2a2a2a',
-        accent: {
-          50: 'rgb(var(--accent-50) / <alpha-value>)',
-          100: 'rgb(var(--accent-100) / <alpha-value>)',
-          200: 'rgb(var(--accent-200) / <alpha-value>)',
-          300: 'rgb(var(--accent-300) / <alpha-value>)',
-          400: 'rgb(var(--accent-400) / <alpha-value>)',
-          500: 'rgb(var(--accent-500) / <alpha-value>)',
-          600: 'rgb(var(--accent-600) / <alpha-value>)',
-          700: 'rgb(var(--accent-700) / <alpha-value>)',
-          800: 'rgb(var(--accent-800) / <alpha-value>)',
-          900: 'rgb(var(--accent-900) / <alpha-value>)',
-        },
         muted: '#888888',
       },
       fontFamily: {
@@ -28,5 +16,26 @@ export default {
       },
     },
   },
-  plugins: [],
+  plugins: [
+    function ({ addUtilities, matchUtilities, theme }) {
+      // Generate accent color utilities from CSS variables
+      const shades = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900];
+      const utilities = {};
+      shades.forEach(shade => {
+        utilities[`.text-accent-${shade}`] = { color: `rgb(var(--accent-${shade}))` };
+        utilities[`.bg-accent-${shade}`] = { 'background-color': `rgb(var(--accent-${shade}))` };
+        utilities[`.border-accent-${shade}`] = { 'border-color': `rgb(var(--accent-${shade}))` };
+        // With opacity variants
+        utilities[`.bg-accent-${shade}\\/10`] = { 'background-color': `rgb(var(--accent-${shade}) / 0.1)` };
+        utilities[`.bg-accent-${shade}\\/20`] = { 'background-color': `rgb(var(--accent-${shade}) / 0.2)` };
+        utilities[`.text-accent-${shade}\\/50`] = { color: `rgb(var(--accent-${shade}) / 0.5)` };
+        utilities[`.text-accent-${shade}\\/70`] = { color: `rgb(var(--accent-${shade}) / 0.7)` };
+        // Hover/focus variants
+        utilities[`.hover\\:bg-accent-${shade}:hover`] = { 'background-color': `rgb(var(--accent-${shade}))` };
+        utilities[`.hover\\:text-accent-${shade}:hover`] = { color: `rgb(var(--accent-${shade}))` };
+        utilities[`.focus\\:border-accent-${shade}:focus`] = { 'border-color': `rgb(var(--accent-${shade}))` };
+      });
+      addUtilities(utilities);
+    },
+  ],
 };
