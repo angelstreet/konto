@@ -9,7 +9,10 @@ interface Props {
 
 export default function Layout({ children, onLogout }: Props) {
   const [collapsed, setCollapsed] = useState(
-    () => localStorage.getItem('kompta_sidebar_collapsed') === 'true'
+    () => {
+      const stored = localStorage.getItem('kompta_sidebar_collapsed');
+      return stored === null ? true : stored === 'true';
+    }
   );
 
   useEffect(() => {

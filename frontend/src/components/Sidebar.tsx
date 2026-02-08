@@ -101,7 +101,8 @@ export default function Sidebar({ onLogout }: Props) {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(() => {
-    return localStorage.getItem('kompta_sidebar_collapsed') === 'true';
+    const stored = localStorage.getItem('kompta_sidebar_collapsed');
+    return stored === null ? true : stored === 'true';
   });
 
   useEffect(() => {
