@@ -16,10 +16,31 @@
 
 ### 3. Blockchain Wallets
 **Status:** ✅ Live
-- Bitcoin via Blockstream.info API (free, no key)
-- Ethereum via Etherscan API (free tier, 5 req/s)
-- Solana via Solana RPC (free)
-- Balance fetched automatically, sync button refreshes
+
+Supports 9 networks. Same address (e.g. MetaMask 0x...) works across all EVM chains.
+
+| Network | Currency | API | Key needed |
+|---------|----------|-----|------------|
+| Bitcoin | BTC | Blockstream.info | No |
+| Bitcoin (xpub) | BTC | blockchain.info + bitcoinjs-lib derivation | No |
+| Ethereum | ETH | llamarpc.com (public RPC) | No |
+| Base | ETH | mainnet.base.org | No |
+| Polygon | POL | polygon-rpc.com | No |
+| BNB Chain | BNB | bsc-dataseed.binance.org | No |
+| Avalanche | AVAX | api.avax.network | No |
+| Arbitrum | ETH | arb1.arbitrum.io | No |
+| Optimism | ETH | mainnet.optimism.io | No |
+| Solana | SOL | api.mainnet-beta.solana.com | No |
+
+**Input formats:**
+- BTC: `bc1q...` (single address) or `xpub...` (HD wallet — derives all addresses, scans for balance)
+- EVM chains: `0x...` (same address across all EVM chains, select network in dropdown)
+- SOL: Solana public key
+
+**How it works:**
+- EVM chains all use the same `eth_getBalance` JSON-RPC call, just different endpoints
+- Bitcoin xpub: derives native segwit (bc1) addresses using BIP84 path, queries each via Blockstream
+- Balance fetched automatically on add, sync button refreshes
 
 ### 4. Crypto Prices
 **Status:** ✅ Live
@@ -84,7 +105,9 @@
 |----------|--------|--------|-----------|
 | French banks | Powens | ✅ Live | Yes |
 | Manual (Revolut, Yuh, eToro) | Manual entry | ✅ Live | No (manual) |
-| BTC/ETH/SOL wallets | Blockchain APIs | ✅ Live | Yes |
+| BTC wallet | Blockstream / bitcoinjs-lib | ✅ Live | Yes |
+| ETH/Base/Polygon/BNB/AVAX/Arb/OP | Public RPCs | ✅ Live | Yes |
+| SOL wallet | Solana RPC | ✅ Live | Yes |
 | Coinbase | OAuth2 | 🔧 Ready | Yes (after setup) |
 | Revolut | - | ❌ No API | Manual only |
 | eToro | - | ❌ No API | Manual only |
