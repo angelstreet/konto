@@ -19,7 +19,7 @@ app.use('/api/*', async (c, next) => {
 
   // Public endpoints that don't need auth
   const path = c.req.path;
-  if (path === '/api/health' || path === '/api/bank-callback' || path === '/api/coinbase-callback') return next();
+  if (path === '/api/health' || path === '/api/bank-callback' || path === '/api/coinbase-callback' || path === '/api/preferences') return next();
 
   const authHeader = c.req.header('Authorization');
 
@@ -1906,6 +1906,59 @@ app.get('/api/bilan/:year', async (c) => {
       match_rate: invTotal > 0 ? Math.round((invMatched / invTotal) * 100) : null,
     },
   });
+});
+
+// ========== USER PREFERENCES ==========
+
+async function ensurePreferences(userId: number) {
+  await db.execute({ sql: 'INSERT OR IGNORE INTO user_preferences (user_id) VALUES (?)', args: [userId] });
+  const r = await db.execute({ sql: 'SELECT * FROM user_preferences WHERE user_id = ?', args: [userId] });
+  return r.rows[0];
+}
+
+app.get('/api/preferences', async (c) => {
+  const userId = 1;
+  const prefs = await ensurePreferences(userId);
+  return c.json(prefs);
+});
+
+app.patch('/api/preferences', async (c) => {
+  const userId = 1;
+  await ensurePreferences(userId);
+  const body = await c.req.json();
+  const allowed = ['onboarded', 'display_currency', 'crypto_display', 'kozy_enabled'];
+  const sets: string[] = [];
+  const args: any[] = [];
+  for (const key of allowed) {
+    if (body[key] !== undefined) {
+      sets.push(`${key} = ?`);
+      args.push(body[key]);
+    }
+  }
+  if (sets.length === 0) return c.json({ error: 'No valid fields' }, 400);
+  sets.push("updated_at = datetime('now')");
+  args.push(userId);
+  await db.execute({ sql: `UPDATE user_preferences SET ${sets.join(', ')} WHERE user_id = ?`, args });
+  const prefs = await db.execute({ sql: 'SELECT * FROM user_preferences WHERE user_id = ?', args: [userId] });
+  return c.json(prefs.rows[0]);
+});
+
+// ========== KOZY INTEGRATION ==========
+
+app.get('/api/kozy/properties', async (c) => {
+  // Proxy to Kozy external API — in production this would use Clerk JWT
+  // For now, fetch from Kozy backend directly
+  const KOZY_API = process.env.KOZY_API_URL || 'http://127.0.0.1:5174';
+  try {
+    const res = await fetch(`${KOZY_API}/api/external/properties`, {
+      headers: { 'Authorization': c.req.header('Authorization') || '' },
+    });
+    if (!res.ok) return c.json({ properties: [] });
+    const data = await res.json();
+    return c.json(data);
+  } catch {
+    return c.json({ properties: [] });
+  }
 });
 
 // ========== START SERVER ==========

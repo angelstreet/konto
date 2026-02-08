@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 
 import ConfirmDialog from '../components/ConfirmDialog';
+import { usePreferences } from '../PreferencesContext';
 
 const API = '/kompta/api';
 const apiFetch = (url: string, opts?: RequestInit) =>
@@ -63,6 +64,8 @@ export default function Assets() {
   const [addressQuery, setAddressQuery] = useState('');
   const [addressResults, setAddressResults] = useState<{ label: string; citycode: string; lat: number; lon: number }[]>([]);
   const [estimating, setEstimating] = useState(false);
+  const { prefs } = usePreferences();
+  const [kozyProperties, setKozyProperties] = useState<any[]>([]);
 
   const load = useCallback(() => {
     const params = filter ? `?type=${filter}` : '';
@@ -71,6 +74,17 @@ export default function Assets() {
   }, [filter]);
 
   useEffect(() => { load(); }, [load]);
+
+  // Fetch Kozy properties if enabled
+  useEffect(() => {
+    if (prefs?.kozy_enabled) {
+      apiFetch(`${API}/kozy/properties`)
+        .then(data => setKozyProperties(Array.isArray(data?.properties) ? data.properties : []))
+        .catch(() => setKozyProperties([]));
+    } else {
+      setKozyProperties([]);
+    }
+  }, [prefs?.kozy_enabled]);
 
   const loanAccounts = accounts.filter(a => a.type === 'loan');
 
@@ -638,6 +652,33 @@ export default function Assets() {
           })}
         </div>
       )}
+      {/* Kozy Properties Section */}
+      {prefs?.kozy_enabled && kozyProperties.length > 0 && (
+        <div className="mt-6">
+          <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3 flex items-center gap-2">
+            <Home size={14} /> {t('kozy_properties')}
+          </h2>
+          <div className="space-y-2">
+            {kozyProperties.map((p: any, i: number) => (
+              <div key={p.id || i} className="bg-surface rounded-xl border border-border px-4 py-3 flex items-center justify-between">
+                <div>
+                  <span className="text-sm font-medium">{p.name}</span>
+                  {p.address && <span className="text-xs text-muted ml-2">{p.address}</span>}
+                </div>
+                <div className="flex items-center gap-4 text-xs text-muted">
+                  {p.revenue != null && (
+                    <span className="text-green-400">{t('kozy_revenue')}: {hideAmounts ? '••••' : fmt(p.revenue)}</span>
+                  )}
+                  {p.occupancy != null && (
+                    <span>{t('kozy_occupancy')}: {Math.round(p.occupancy * 100)}%</span>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <ConfirmDialog
         open={!!confirmAction}
         title={t('delete')}
