@@ -492,6 +492,101 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
   }
 });
 
+// ========== EXPORT / IMPORT (Backup) ==========
+
+// Export all user data as JSON
+app.get('/api/export', (c) => {
+  const userId = 1; // TODO: multi-user
+  const companies = db.prepare('SELECT * FROM companies WHERE user_id = ?').all(userId);
+  const bankConnections = db.prepare('SELECT id, user_id, powens_connection_id, status, created_at FROM bank_connections WHERE user_id = ?').all(userId);
+  const bankAccounts = db.prepare('SELECT * FROM bank_accounts').all();
+  const transactions = db.prepare('SELECT * FROM transactions').all();
+  const assets = db.prepare('SELECT * FROM assets WHERE user_id = ?').all(userId) as any[];
+  for (const a of assets) {
+    a.costs = db.prepare('SELECT * FROM asset_costs WHERE asset_id = ?').all(a.id);
+    a.revenues = db.prepare('SELECT * FROM asset_revenues WHERE asset_id = ?').all(a.id);
+  }
+
+  const exportData = {
+    version: 1,
+    exported_at: new Date().toISOString(),
+    user_id: userId,
+    companies,
+    bank_connections: bankConnections,
+    bank_accounts: bankAccounts,
+    transactions,
+    assets,
+  };
+
+  return c.json(exportData);
+});
+
+// Import user data from JSON
+app.post('/api/import', async (c) => {
+  const data = await c.req.json() as any;
+  if (!data.version || !data.companies) {
+    return c.json({ error: 'Invalid export format' }, 400);
+  }
+
+  const userId = 1;
+  let imported = { companies: 0, bank_accounts: 0, transactions: 0, assets: 0 };
+
+  // Import companies
+  if (data.companies?.length) {
+    const stmt = db.prepare(
+      `INSERT OR IGNORE INTO companies (user_id, siren, name, address, naf_code, capital, legal_form, siret, tva_number, rcs, date_creation, city, postal_code)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const co of data.companies) {
+      stmt.run(userId, co.siren, co.name, co.address, co.naf_code, co.capital, co.legal_form, co.siret, co.tva_number, co.rcs, co.date_creation, co.city, co.postal_code);
+      imported.companies++;
+    }
+  }
+
+  // Import bank accounts
+  if (data.bank_accounts?.length) {
+    const stmt = db.prepare(
+      `INSERT OR IGNORE INTO bank_accounts (company_id, provider, provider_account_id, name, custom_name, bank_name, account_number, iban, balance, hidden, last_sync, type, usage)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    for (const ba of data.bank_accounts) {
+      stmt.run(ba.company_id, ba.provider, ba.provider_account_id, ba.name, ba.custom_name, ba.bank_name, ba.account_number, ba.iban, ba.balance, ba.hidden, ba.last_sync, ba.type, ba.usage);
+      imported.bank_accounts++;
+    }
+  }
+
+  // Import transactions
+  if (data.transactions?.length) {
+    const stmt = db.prepare(
+      'INSERT OR IGNORE INTO transactions (bank_account_id, date, amount, label, category, is_pro) VALUES (?, ?, ?, ?, ?, ?)'
+    );
+    for (const tx of data.transactions) {
+      stmt.run(tx.bank_account_id, tx.date, tx.amount, tx.label, tx.category, tx.is_pro ?? 1);
+      imported.transactions++;
+    }
+  }
+
+  // Import assets with costs/revenues
+  if (data.assets?.length) {
+    const assetStmt = db.prepare(
+      `INSERT INTO assets (user_id, type, name, purchase_price, purchase_date, current_value, current_value_date, photo_url, linked_loan_account_id, notes)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    );
+    const costStmt = db.prepare('INSERT INTO asset_costs (asset_id, label, amount, frequency, category) VALUES (?, ?, ?, ?, ?)');
+    const revStmt = db.prepare('INSERT INTO asset_revenues (asset_id, label, amount, frequency) VALUES (?, ?, ?, ?)');
+
+    for (const a of data.assets) {
+      const r = assetStmt.run(userId, a.type, a.name, a.purchase_price, a.purchase_date, a.current_value, a.current_value_date, a.photo_url, a.linked_loan_account_id, a.notes);
+      const newId = r.lastInsertRowid;
+      if (a.costs) for (const co of a.costs) costStmt.run(newId, co.label, co.amount, co.frequency, co.category);
+      if (a.revenues) for (const rv of a.revenues) revStmt.run(newId, rv.label, rv.amount, rv.frequency);
+      imported.assets++;
+    }
+  }
+
+  return c.json({ ok: true, imported });
+});
+
 // ========== ASSETS (Patrimoine) ==========
 
 // List assets

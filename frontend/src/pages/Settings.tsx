@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Globe, Palette, Bell, Building2, LogOut, Shield, Check } from 'lucide-react';
+import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload } from 'lucide-react';
 
 const THEMES = [
   { id: 'gold', label: 'Gold', color: '#d4a812' },
@@ -94,6 +94,54 @@ export default function Settings() {
             </div>
           )}
         </div>
+
+        {/* Export data */}
+        <button
+          onClick={async () => {
+            const res = await fetch('/kompta/api/export');
+            const data = await res.json();
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `kompta-backup-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+          }}
+          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+        >
+          <Download size={18} className="text-muted" />
+          <span className="text-sm">{t('export_data')}</span>
+        </button>
+
+        {/* Import data */}
+        <label className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors cursor-pointer">
+          <Upload size={18} className="text-muted" />
+          <span className="text-sm">{t('import_data')}</span>
+          <input
+            type="file"
+            accept=".json"
+            className="hidden"
+            onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              const text = await file.text();
+              const data = JSON.parse(text);
+              const res = await fetch('/kompta/api/import', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data),
+              });
+              const result = await res.json();
+              if (result.ok) {
+                alert(`Importé: ${result.imported.companies} entreprises, ${result.imported.bank_accounts} comptes, ${result.imported.transactions} transactions, ${result.imported.assets} biens`);
+              } else {
+                alert('Erreur: ' + (result.error || 'Import échoué'));
+              }
+              e.target.value = '';
+            }}
+          />
+        </label>
 
         <button
           className="w-full flex items-center gap-3 px-4 py-3.5 text-left text-muted/40 cursor-not-allowed"

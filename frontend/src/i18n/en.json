@@ -119,10 +119,11 @@
   "net_cashflow": "Net cashflow",
   "confirm_delete_asset": "Delete this asset and all its costs?",
   "all": "All",
-  "confirm": "Confirm",
   "date": "Date",
   "amount": "Amount",
   "category": "Category",
   "label": "Label",
-  "account": "Account"
+  "account": "Account",
+  "export_data": "Export my data",
+  "import_data": "Import data"
 }

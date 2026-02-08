@@ -119,10 +119,11 @@
   "net_cashflow": "Cashflow net",
   "confirm_delete_asset": "Supprimer ce bien et toutes ses charges ?",
   "all": "Tout",
-  "confirm": "Confirmer",
   "date": "Date",
   "amount": "Montant",
   "category": "Catégorie",
   "label": "Libellé",
-  "account": "Compte"
+  "account": "Compte",
+  "export_data": "Exporter mes données",
+  "import_data": "Importer des données"
 }
