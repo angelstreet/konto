@@ -3,7 +3,7 @@ import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { verifyToken } from '@clerk/backend';
-import db, { initDatabase } from './db.js';
+import db, { initDatabase, migrateDatabase, ensureUser } from './db.js';
 
 const app = new Hono();
 
@@ -77,8 +77,13 @@ function classifyAccountUsage(powensUsage: string | undefined | null, companyId:
   return companyId ? 'professional' : 'personal';
 }
 
-// --- Helper: ensure default user ---
-async function ensureDefaultUser(): Promise<number> {
+// --- Helper: get authenticated user ID ---
+async function getUserId(c: any): Promise<number> {
+  const clerkId = c.clerkUserId;
+  if (clerkId) {
+    return ensureUser(clerkId);
+  }
+  // Legacy/API-token mode: use default user (id=1)
   const result = await db.execute({ sql: 'SELECT id FROM users WHERE email = ?', args: ['jo@kompta.fr'] });
   if (result.rows.length > 0) return result.rows[0].id as number;
   const ins = await db.execute({ sql: 'INSERT INTO users (email, name, role) VALUES (?, ?, ?)', args: ['jo@kompta.fr', 'Jo', 'admin'] });
@@ -96,13 +101,13 @@ app.get('/api/users', async (c) => {
 
 // --- Companies ---
 app.get('/api/companies', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const result = await db.execute({ sql: 'SELECT * FROM companies WHERE user_id = ?', args: [userId] });
   return c.json(result.rows);
 });
 
 app.post('/api/companies', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const body = await c.req.json();
   const result = await db.execute({
     sql: 'INSERT INTO companies (user_id, name, siren, legal_form, address, naf_code, capital) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -205,7 +210,7 @@ app.get('/api/bank-callback', async (c) => {
     if (!tokenRes.ok) throw new Error(tokenData.message || 'Token exchange failed');
 
     const accessToken = tokenData.access_token || tokenData.token;
-    const userId = await ensureDefaultUser();
+    const userId = await getUserId(c);
 
     await db.execute({
       sql: 'INSERT INTO bank_connections (user_id, powens_connection_id, powens_token, status) VALUES (?, ?, ?, ?)',
@@ -224,8 +229,8 @@ app.get('/api/bank-callback', async (c) => {
         const existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE provider_account_id = ?', args: [String(acc.id)] });
         if (existing.rows.length === 0) {
           await db.execute({
-            sql: 'INSERT INTO bank_accounts (company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, type, usage, last_sync) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            args: [null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, null), new Date().toISOString()]
+            sql: 'INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, type, usage, last_sync) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [userId, null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, null), new Date().toISOString()]
           });
         }
       }
@@ -249,14 +254,15 @@ app.get('/api/bank-callback', async (c) => {
 
 // --- Bank connections ---
 app.get('/api/bank/connections', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const result = await db.execute({ sql: 'SELECT * FROM bank_connections WHERE user_id = ?', args: [userId] });
   return c.json(result.rows);
 });
 
 // --- Sync all accounts ---
 app.post('/api/bank/sync', async (c) => {
-  const connections = await db.execute({ sql: "SELECT * FROM bank_connections WHERE status = ?", args: ['active'] });
+  const userId = await getUserId(c);
+  const connections = await db.execute({ sql: "SELECT * FROM bank_connections WHERE status = ? AND user_id = ?", args: ['active', userId] });
   let totalSynced = 0;
 
   for (const conn of connections.rows as any[]) {
@@ -277,8 +283,8 @@ app.post('/api/bank/sync', async (c) => {
           });
         } else {
           await db.execute({
-            sql: 'INSERT INTO bank_accounts (company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, last_sync, type, usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            args: [null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, new Date().toISOString(), classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, null)]
+            sql: 'INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, last_sync, type, usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [userId, null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, new Date().toISOString(), classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, null)]
           });
         }
         totalSynced++;
@@ -292,11 +298,11 @@ app.post('/api/bank/sync', async (c) => {
 
 // --- Dashboard ---
 app.get('/api/dashboard', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const usage = c.req.query('usage');
   const companyId = c.req.query('company_id');
-  let accountWhere = 'hidden = 0';
-  const accountParams: any[] = [];
+  let accountWhere = 'hidden = 0 AND user_id = ?';
+  const accountParams: any[] = [userId];
   if (usage === 'personal') { accountWhere += ' AND usage = ?'; accountParams.push('personal'); }
   else if (usage === 'professional') { accountWhere += ' AND usage = ?'; accountParams.push('professional'); }
   else if (companyId) { accountWhere += ' AND company_id = ?'; accountParams.push(companyId); }
@@ -350,10 +356,11 @@ app.get('/api/dashboard', async (c) => {
 
 // --- Bank accounts ---
 app.get('/api/bank/accounts', async (c) => {
+  const userId = await getUserId(c);
   const usage = c.req.query('usage');
   const companyId = c.req.query('company_id');
-  let where = '1=1';
-  const params: any[] = [];
+  let where = 'user_id = ?';
+  const params: any[] = [userId];
   if (usage === 'personal') { where += ' AND usage = ?'; params.push('personal'); }
   else if (usage === 'professional') { where += ' AND usage = ?'; params.push('professional'); }
   else if (companyId) { where += ' AND company_id = ?'; params.push(companyId); }
@@ -362,6 +369,7 @@ app.get('/api/bank/accounts', async (c) => {
 });
 
 app.patch('/api/bank/accounts/:id', async (c) => {
+  const userId = await getUserId(c);
   const id = c.req.param('id');
   const body = await c.req.json();
   const updates: string[] = [];
@@ -377,21 +385,23 @@ app.patch('/api/bank/accounts/:id', async (c) => {
   }
 
   if (updates.length === 0) return c.json({ error: 'Nothing to update' }, 400);
-  params.push(id);
-  await db.execute({ sql: `UPDATE bank_accounts SET ${updates.join(', ')} WHERE id = ?`, args: params });
-  const updated = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ?', args: [id] });
+  params.push(id, userId);
+  await db.execute({ sql: `UPDATE bank_accounts SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`, args: params });
+  const updated = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ? AND user_id = ?', args: [id, userId] });
   return c.json(updated.rows[0]);
 });
 
 app.delete('/api/bank/accounts/:id', async (c) => {
+  const userId = await getUserId(c);
   const id = c.req.param('id');
-  await db.execute({ sql: 'DELETE FROM transactions WHERE bank_account_id = ?', args: [id] });
-  await db.execute({ sql: 'DELETE FROM bank_accounts WHERE id = ?', args: [id] });
+  await db.execute({ sql: 'DELETE FROM transactions WHERE bank_account_id = ? AND bank_account_id IN (SELECT id FROM bank_accounts WHERE user_id = ?)', args: [id, userId] });
+  await db.execute({ sql: 'DELETE FROM bank_accounts WHERE id = ? AND user_id = ?', args: [id, userId] });
   return c.json({ ok: true });
 });
 
 // --- Transactions ---
 app.get('/api/transactions', async (c) => {
+  const userId = await getUserId(c);
   const accountId = c.req.query('account_id');
   const limit = parseInt(c.req.query('limit') || '100', 10);
   const offset = parseInt(c.req.query('offset') || '0', 10);
@@ -399,8 +409,8 @@ app.get('/api/transactions', async (c) => {
   const usage = c.req.query('usage');
   const companyId = c.req.query('company_id');
 
-  let where = '1=1';
-  const params: any[] = [];
+  let where = 'ba.user_id = ?';
+  const params: any[] = [userId];
 
   if (accountId) { where += ' AND t.bank_account_id = ?'; params.push(accountId); }
   if (search) { where += ' AND t.label LIKE ?'; params.push(`%${search}%`); }
@@ -533,10 +543,10 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
 // ========== EXPORT / IMPORT ==========
 
 app.get('/api/export', async (c) => {
-  const userId = 1;
+  const userId = await getUserId(c);
   const companies = await db.execute({ sql: 'SELECT * FROM companies WHERE user_id = ?', args: [userId] });
   const bankConnections = await db.execute({ sql: 'SELECT id, user_id, powens_connection_id, status, created_at FROM bank_connections WHERE user_id = ?', args: [userId] });
-  const bankAccounts = await db.execute('SELECT * FROM bank_accounts');
+  const bankAccounts = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE user_id = ?', args: [userId] });
   const transactions = await db.execute('SELECT * FROM transactions');
   const assetsResult = await db.execute({ sql: 'SELECT * FROM assets WHERE user_id = ?', args: [userId] });
   const assets = assetsResult.rows as any[];
@@ -558,7 +568,7 @@ app.post('/api/import', async (c) => {
   const data = await c.req.json() as any;
   if (!data.version || !data.companies) return c.json({ error: 'Invalid export format' }, 400);
 
-  const userId = 1;
+  const userId = await getUserId(c);
   let imported = { companies: 0, bank_accounts: 0, transactions: 0, assets: 0 };
 
   if (data.companies?.length) {
@@ -574,8 +584,8 @@ app.post('/api/import', async (c) => {
   if (data.bank_accounts?.length) {
     for (const ba of data.bank_accounts) {
       await db.execute({
-        sql: `INSERT OR IGNORE INTO bank_accounts (company_id, provider, provider_account_id, name, custom_name, bank_name, account_number, iban, balance, hidden, last_sync, type, usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [ba.company_id, ba.provider, ba.provider_account_id, ba.name, ba.custom_name, ba.bank_name, ba.account_number, ba.iban, ba.balance, ba.hidden, ba.last_sync, ba.type, ba.usage]
+        sql: `INSERT OR IGNORE INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, custom_name, bank_name, account_number, iban, balance, hidden, last_sync, type, usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [userId, ba.company_id, ba.provider, ba.provider_account_id, ba.name, ba.custom_name, ba.bank_name, ba.account_number, ba.iban, ba.balance, ba.hidden, ba.last_sync, ba.type, ba.usage]
       });
       imported.bank_accounts++;
     }
@@ -714,12 +724,13 @@ app.delete('/api/assets/:id', async (c) => {
 // ========== MANUAL ACCOUNTS ==========
 
 app.post('/api/accounts/manual', async (c) => {
+  const userId = await getUserId(c);
   const body = await c.req.json() as any;
   if (!body.name) return c.json({ error: 'Name is required' }, 400);
 
   const result = await db.execute({
-    sql: `INSERT INTO bank_accounts (company_id, provider, name, custom_name, bank_name, balance, type, usage, currency, last_sync) VALUES (?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [body.company_id || null, body.name, body.custom_name || null, body.bank_name || body.provider_name || null, body.balance || 0, body.type || 'checking', body.usage || 'personal', body.currency || 'EUR', new Date().toISOString()]
+    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, bank_name, balance, type, usage, currency, last_sync) VALUES (?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [userId, body.company_id || null, body.name, body.custom_name || null, body.bank_name || body.provider_name || null, body.balance || 0, body.type || 'checking', body.usage || 'personal', body.currency || 'EUR', new Date().toISOString()]
   });
   const account = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ?', args: [Number(result.lastInsertRowid)] });
   return c.json(account.rows[0]);
@@ -761,6 +772,7 @@ async function fetchBlockchainBalance(network: string, address: string): Promise
 }
 
 app.post('/api/accounts/blockchain', async (c) => {
+  const userId = await getUserId(c);
   const body = await c.req.json() as any;
   if (!body.address || !body.network) return c.json({ error: 'Address and network required' }, 400);
 
@@ -776,8 +788,8 @@ app.post('/api/accounts/blockchain', async (c) => {
   }
 
   const result = await db.execute({
-    sql: `INSERT INTO bank_accounts (company_id, provider, name, custom_name, balance, type, usage, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, 'blockchain', ?, ?, ?, 'investment', 'personal', ?, ?, ?, ?)`,
-    args: [body.company_id || null, body.name || `${currency} Wallet`, body.custom_name || null, balance, body.address, network, currency, new Date().toISOString()]
+    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, balance, type, usage, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, ?, 'blockchain', ?, ?, ?, 'investment', 'personal', ?, ?, ?, ?)`,
+    args: [userId, body.company_id || null, body.name || `${currency} Wallet`, body.custom_name || null, balance, body.address, network, currency, new Date().toISOString()]
   });
   const account = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ?', args: [Number(result.lastInsertRowid)] });
   return c.json(account.rows[0]);
@@ -937,7 +949,7 @@ app.get('/api/coinbase-callback', async (c) => {
 
     const accessToken = tokenData.access_token;
     const refreshToken = tokenData.refresh_token;
-    const userId = await ensureDefaultUser();
+    const userId = await getUserId(c);
 
     await db.execute({
       sql: `INSERT INTO coinbase_connections (user_id, access_token, refresh_token, expires_at, status) VALUES (?, ?, ?, ?, 'active')`,
@@ -956,8 +968,8 @@ app.get('/api/coinbase-callback', async (c) => {
         const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
         if (existing.rows.length === 0) {
           await db.execute({
-            sql: `INSERT INTO bank_accounts (company_id, provider, provider_account_id, name, bank_name, balance, type, usage, currency, last_sync) VALUES (?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', ?, ?)`,
-            args: [null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()]
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', ?, ?)`,
+            args: [userId, null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()]
           });
         }
       }
@@ -979,7 +991,8 @@ app.get('/api/coinbase-callback', async (c) => {
 });
 
 app.post('/api/coinbase/sync', async (c) => {
-  const connections = await db.execute({ sql: "SELECT * FROM coinbase_connections WHERE status = 'active'", args: [] });
+  const userId = await getUserId(c);
+  const connections = await db.execute({ sql: "SELECT * FROM coinbase_connections WHERE status = 'active' AND user_id = ?", args: [userId] });
   let totalSynced = 0;
 
   for (const conn of connections.rows as any[]) {
@@ -1017,8 +1030,8 @@ app.post('/api/coinbase/sync', async (c) => {
           await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), existing.rows[0].id as number] });
         } else if (balance !== 0) {
           await db.execute({
-            sql: `INSERT INTO bank_accounts (company_id, provider, provider_account_id, name, bank_name, balance, type, usage, currency, last_sync) VALUES (?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', ?, ?)`,
-            args: [null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()]
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', ?, ?)`,
+            args: [userId, null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()]
           });
         }
         totalSynced++;
@@ -1034,10 +1047,10 @@ app.post('/api/coinbase/sync', async (c) => {
 // ========== DASHBOARD HISTORY ==========
 
 app.post('/api/dashboard/snapshot', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const today = new Date().toISOString().split('T')[0];
 
-  const accountsResult = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE hidden = 0', args: [] });
+  const accountsResult = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE hidden = 0 AND user_id = ?', args: [userId] });
   const assetsResult = await db.execute({ sql: 'SELECT * FROM assets WHERE user_id = ?', args: [userId] });
 
   const categories: Record<string, number> = { checking: 0, savings: 0, investment: 0, loan: 0, real_estate: 0, vehicle: 0, valuable: 0, other: 0 };
@@ -1057,7 +1070,7 @@ app.post('/api/dashboard/snapshot', async (c) => {
 });
 
 app.get('/api/dashboard/history', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const range = c.req.query('range') || '6m';
   const category = c.req.query('category') || 'all';
 
@@ -1119,9 +1132,9 @@ app.get('/api/budget/cashflow', async (c) => {
 
 app.get('/api/report/patrimoine', async (c) => {
   const categoriesParam = c.req.query('categories') || 'all';
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
 
-  const accountsResult = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE hidden = 0', args: [] });
+  const accountsResult = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE hidden = 0 AND user_id = ?', args: [userId] });
   const assetsResult = await db.execute({
     sql: `SELECT a.*, ba.balance as loan_balance FROM assets a LEFT JOIN bank_accounts ba ON ba.id = a.linked_loan_account_id WHERE a.user_id = ?`,
     args: [userId]
@@ -1179,13 +1192,13 @@ app.get('/api/rates/current', async (c) => {
 // ========== INCOME ENTRIES ==========
 
 app.get('/api/income', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const result = await db.execute({ sql: 'SELECT * FROM income_entries WHERE user_id = ? ORDER BY year DESC, employer', args: [userId] });
   return c.json({ entries: result.rows });
 });
 
 app.post('/api/income', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const { year, employer, job_title, country, gross_annual } = await c.req.json();
   if (!year || !employer || !gross_annual) return c.json({ error: 'Missing required fields' }, 400);
   const result = await db.execute({
@@ -1438,7 +1451,7 @@ async function computeAnalytics(period: string, userId: number = 1) {
 
 app.get('/api/analytics', async (c) => {
   const period = c.req.query('period') || new Date().toISOString().slice(0, 7);
-  const userId = 1;
+  const userId = await getUserId(c);
 
   // Try cache first
   const cached = await db.execute({
@@ -1457,9 +1470,10 @@ app.get('/api/analytics', async (c) => {
 });
 
 app.post('/api/analytics/recompute', async (c) => {
+  const userId = await getUserId(c);
   const body = await c.req.json().catch(() => ({}));
   const period = body.period || new Date().toISOString().slice(0, 7);
-  const result = await computeAnalytics(period, 1);
+  const result = await computeAnalytics(period, userId);
   return c.json({ ...result, cached: false });
 });
 
@@ -1467,7 +1481,7 @@ app.post('/api/analytics/recompute', async (c) => {
 
 // Get drive connection status
 app.get('/api/drive/status', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const result = await db.execute({
     sql: 'SELECT id, folder_id, folder_path, status, created_at FROM drive_connections WHERE user_id = ? ORDER BY id DESC LIMIT 1',
     args: [userId]
@@ -1479,7 +1493,7 @@ app.get('/api/drive/status', async (c) => {
 
 // Save drive connection (manual token input for now — OAuth flow later)
 app.post('/api/drive/connect', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const body = await c.req.json();
   const { access_token, refresh_token, folder_id, folder_path } = body;
 
@@ -1495,14 +1509,14 @@ app.post('/api/drive/connect', async (c) => {
 });
 
 app.delete('/api/drive/disconnect', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   await db.execute({ sql: 'DELETE FROM drive_connections WHERE user_id = ?', args: [userId] });
   return c.json({ ok: true });
 });
 
 // Scan invoices from Drive folder (simulated — real OCR needs pdf-parse/tesseract)
 app.post('/api/invoices/scan', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const body = await c.req.json().catch(() => ({}));
   const companyId = body.company_id || null;
 
@@ -1679,7 +1693,7 @@ function extractInvoiceMetadata(filename: string, _buffer: Buffer) {
 
 // Get all cached invoices
 app.get('/api/invoices', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const companyId = c.req.query('company_id');
   const matched = c.req.query('matched'); // 'true', 'false', or omit for all
 
@@ -1733,7 +1747,7 @@ app.post('/api/invoices/:id/unmatch', async (c) => {
 
 // Invoice stats
 app.get('/api/invoices/stats', async (c) => {
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
   const companyId = c.req.query('company_id');
 
   let whereClause = 'WHERE user_id = ?';
@@ -1763,7 +1777,7 @@ app.get('/api/invoices/stats', async (c) => {
 app.get('/api/bilan/:year', async (c) => {
   const year = parseInt(c.req.param('year'));
   const companyId = c.req.query('company_id');
-  const userId = await ensureDefaultUser();
+  const userId = await getUserId(c);
 
   const startDate = `${year}-01-01`;
   const endDate = `${year + 1}-01-01`;
@@ -1865,9 +1879,9 @@ app.get('/api/bilan/:year', async (c) => {
   const accountsRes = await db.execute({
     sql: `SELECT ba.name, ba.type, ba.balance, ba.currency
           FROM bank_accounts ba
-          ${companyId ? 'WHERE ba.company_id = ?' : ''}
+          WHERE ba.user_id = ? ${companyId ? 'AND ba.company_id = ?' : ''}
           ORDER BY ba.type, ba.name`,
-    args: companyId ? [Number(companyId)] : []
+    args: companyId ? [userId, Number(companyId)] : [userId]
   });
 
   const actif = accountsRes.rows
@@ -1917,13 +1931,13 @@ async function ensurePreferences(userId: number) {
 }
 
 app.get('/api/preferences', async (c) => {
-  const userId = 1;
+  const userId = await getUserId(c);
   const prefs = await ensurePreferences(userId);
   return c.json(prefs);
 });
 
 app.patch('/api/preferences', async (c) => {
-  const userId = 1;
+  const userId = await getUserId(c);
   await ensurePreferences(userId);
   const body = await c.req.json();
   const allowed = ['onboarded', 'display_currency', 'crypto_display', 'kozy_enabled'];
@@ -1967,6 +1981,7 @@ export { app };
 
 async function main() {
   await initDatabase();
+  await migrateDatabase();
   serve({ fetch: app.fetch, port: 3004 }, (info) => {
     console.log(`🦎 Kompta API running on http://localhost:${info.port}`);
   });

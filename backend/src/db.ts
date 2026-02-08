@@ -30,6 +30,7 @@ export async function initDatabase() {
 
     CREATE TABLE IF NOT EXISTS bank_accounts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER REFERENCES users(id),
       company_id INTEGER REFERENCES companies(id),
       provider TEXT,
       provider_account_id TEXT,
@@ -226,12 +227,20 @@ export async function initDatabase() {
   `);
 }
 
-// Migration: add clerk_id column if missing (for existing databases)
+// Migration: add new columns if missing (for existing databases)
 export async function migrateDatabase() {
   try {
     await db.execute("SELECT clerk_id FROM users LIMIT 1");
   } catch {
-    await db.execute("ALTER TABLE users ADD COLUMN clerk_id TEXT UNIQUE");
+    await db.execute("ALTER TABLE users ADD COLUMN clerk_id TEXT");
+    await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_clerk_id ON users(clerk_id) WHERE clerk_id IS NOT NULL");
+  }
+  try {
+    await db.execute("SELECT user_id FROM bank_accounts LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE bank_accounts ADD COLUMN user_id INTEGER REFERENCES users(id)");
+    // Migrate existing accounts: assign to user 1
+    await db.execute("UPDATE bank_accounts SET user_id = 1 WHERE user_id IS NULL");
   }
 }
 
