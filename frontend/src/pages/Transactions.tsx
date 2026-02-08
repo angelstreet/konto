@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, Eye, EyeOff } from 'lucide-react';
+import { useFilter } from '../FilterContext';
+import ScopeSelect from '../components/ScopeSelect';
 const apiFetch = (url: string) => fetch(url).then(r => r.json());
 
 interface Transaction {
@@ -24,6 +26,8 @@ const PAGE_SIZE = 25;
 
 export default function Transactions() {
   const { t } = useTranslation();
+  const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
+  const { scope, appendScope } = useFilter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [total, setTotal] = useState(0);
@@ -43,6 +47,9 @@ export default function Transactions() {
       });
       if (accountFilter) params.set('account_id', accountFilter);
       if (search) params.set('search', search);
+      if (scope === 'personal') params.set('usage', 'personal');
+      else if (scope === 'pro') params.set('usage', 'professional');
+      else if (typeof scope === 'number') params.set('company_id', String(scope));
 
       const res = await apiFetch(`/kompta/api/transactions?${params}`);
       setTransactions(res.transactions);
@@ -51,11 +58,11 @@ export default function Transactions() {
       // ignore
     }
     setLoading(false);
-  }, [page, accountFilter, search]);
+  }, [page, accountFilter, search, scope]);
 
   useEffect(() => {
-    apiFetch('/kompta/api/bank/accounts').then((accs: Account[]) => setAccounts(accs)).catch(() => {});
-  }, []);
+    apiFetch(appendScope('/kompta/api/bank/accounts')).then((accs: Account[]) => setAccounts(accs)).catch(() => {});
+  }, [scope, appendScope]);
 
   useEffect(() => {
     fetchTransactions();
@@ -76,14 +83,27 @@ export default function Transactions() {
   };
 
   const formatAmount = (n: number) => {
+    if (hideAmounts) return '••••';
     return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
   };
 
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold">{t('nav_transactions')}</h1>
-        <span className="text-sm text-muted">{total} {t('nav_transactions').toLowerCase()}</span>
+        <div className="flex items-center gap-3">
+          <h1 className="text-xl font-semibold">{t('nav_transactions')}</h1>
+          <button
+            onClick={() => setHideAmounts(h => !h)}
+            className="text-muted hover:text-white transition-colors p-1"
+            title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
+          >
+            {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted">{total} {t('nav_transactions').toLowerCase()}</span>
+          <ScopeSelect />
+        </div>
       </div>
 
       {/* Filters */}

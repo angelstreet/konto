@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X,
+  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, Eye, EyeOff,
 } from 'lucide-react';
 
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -25,6 +25,11 @@ interface Asset {
   current_value: number | null; current_value_date: string | null;
   linked_loan_account_id: number | null; loan_name: string | null; loan_balance: number | null;
   notes: string | null;
+  address: string | null; citycode: string | null;
+  latitude: number | null; longitude: number | null;
+  surface: number | null; property_type: string | null;
+  estimated_value: number | null; estimated_price_m2: number | null; estimation_date: string | null;
+  property_usage: string | null; monthly_rent: number | null; tenant_name: string | null; kozy_property_id: string | null;
   costs: Cost[]; revenues: Revenue[];
   monthly_costs: number; monthly_revenues: number;
   pnl: number | null; pnl_percent: number | null;
@@ -37,6 +42,8 @@ const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
 export default function Assets() {
   const { t } = useTranslation();
+  const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
+  const f = (n: number) => hideAmounts ? '••••' : fmt(n);
   const [assets, setAssets] = useState<Asset[]>([]);
   const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [filter, setFilter] = useState('');
@@ -47,8 +54,15 @@ export default function Assets() {
   const [form, setForm] = useState({
     type: 'real_estate', name: '', purchase_price: '', purchase_date: '',
     current_value: '', linked_loan_account_id: '', notes: '',
+    address: '', citycode: '', latitude: 0, longitude: 0,
+    surface: '', property_type: 'Appartement',
+    estimated_value: null as number | null, estimated_price_m2: null as number | null,
+    property_usage: 'principal', monthly_rent: '', tenant_name: '',
     costs: [] as Cost[], revenues: [] as Revenue[],
   });
+  const [addressQuery, setAddressQuery] = useState('');
+  const [addressResults, setAddressResults] = useState<{ label: string; citycode: string; lat: number; lon: number }[]>([]);
+  const [estimating, setEstimating] = useState(false);
 
   const load = useCallback(() => {
     const params = filter ? `?type=${filter}` : '';
@@ -60,11 +74,59 @@ export default function Assets() {
 
   const loanAccounts = accounts.filter(a => a.type === 'loan');
 
-  const resetForm = () => setForm({
-    type: 'real_estate', name: '', purchase_price: '', purchase_date: '',
-    current_value: '', linked_loan_account_id: '', notes: '',
-    costs: [], revenues: [],
-  });
+  const resetForm = () => {
+    setForm({
+      type: 'real_estate', name: '', purchase_price: '', purchase_date: '',
+      current_value: '', linked_loan_account_id: '', notes: '',
+      address: '', citycode: '', latitude: 0, longitude: 0,
+      surface: '', property_type: 'Appartement',
+      estimated_value: null, estimated_price_m2: null,
+      property_usage: 'principal', monthly_rent: '', tenant_name: '',
+      costs: [], revenues: [],
+    });
+    setAddressQuery('');
+    setAddressResults([]);
+    setAddressSelected(false);
+  };
+
+  const [addressSelected, setAddressSelected] = useState(false);
+
+  // Address search with debounce
+  useEffect(() => {
+    if (addressQuery.length < 3 || addressSelected) { setAddressResults([]); return; }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await apiFetch(`${API}/estimation/geocode?q=${encodeURIComponent(addressQuery)}`);
+        setAddressResults(res);
+      } catch {}
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [addressQuery, addressSelected]);
+
+  const selectAddress = (addr: { label: string; citycode: string; lat: number; lon: number }) => {
+    setForm(f => ({ ...f, address: addr.label, citycode: addr.citycode, latitude: addr.lat, longitude: addr.lon }));
+    setAddressQuery(addr.label);
+    setAddressSelected(true);
+    setAddressResults([]);
+    // Auto-estimate if we have surface
+    if (form.surface) fetchEstimation(addr.citycode, addr.lat, addr.lon, parseFloat(form.surface), form.property_type);
+  };
+
+  const fetchEstimation = async (citycode: string, lat: number, lon: number, surface: number, propertyType: string) => {
+    if (!citycode || !surface) return;
+    setEstimating(true);
+    try {
+      const data = await apiFetch(`${API}/estimation/price?citycode=${citycode}&lat=${lat}&lon=${lon}&surface=${surface}&type=${encodeURIComponent(propertyType)}`);
+      if (data.estimation) {
+        setForm(f => ({
+          ...f,
+          estimated_value: data.estimation.estimatedValue,
+          estimated_price_m2: data.estimation.pricePerM2,
+        }));
+      }
+    } catch {}
+    setEstimating(false);
+  };
 
   const startCreate = (type = 'real_estate') => {
     resetForm();
@@ -81,9 +143,18 @@ export default function Assets() {
       current_value: a.current_value ? String(a.current_value) : '',
       linked_loan_account_id: a.linked_loan_account_id ? String(a.linked_loan_account_id) : '',
       notes: a.notes || '',
+      address: a.address || '', citycode: a.citycode || '',
+      latitude: a.latitude || 0, longitude: a.longitude || 0,
+      surface: a.surface ? String(a.surface) : '',
+      property_type: a.property_type || 'Appartement',
+      estimated_value: a.estimated_value, estimated_price_m2: a.estimated_price_m2,
+      property_usage: a.property_usage || 'principal',
+      monthly_rent: a.monthly_rent ? String(a.monthly_rent) : '',
+      tenant_name: a.tenant_name || '',
       costs: a.costs || [],
       revenues: a.revenues || [],
     });
+    setAddressQuery(a.address || '');
     setEditingId(a.id);
     setShowForm(true);
   };
@@ -97,6 +168,15 @@ export default function Assets() {
       current_value_date: form.current_value ? new Date().toISOString().split('T')[0] : null,
       linked_loan_account_id: form.linked_loan_account_id ? parseInt(form.linked_loan_account_id) : null,
       notes: form.notes || null,
+      address: form.address || null, citycode: form.citycode || null,
+      latitude: form.latitude || null, longitude: form.longitude || null,
+      surface: form.surface ? parseFloat(form.surface) : null,
+      property_type: form.property_type || null,
+      estimated_value: form.estimated_value || null,
+      estimated_price_m2: form.estimated_price_m2 || null,
+      property_usage: form.property_usage || 'principal',
+      monthly_rent: form.monthly_rent ? parseFloat(form.monthly_rent) : null,
+      tenant_name: form.tenant_name || null,
       costs: form.costs.filter(c => c.label && c.amount),
       revenues: form.revenues.filter(r => r.label && r.amount),
     };
@@ -150,13 +230,24 @@ export default function Assets() {
     <div>
       <div className="flex items-center justify-between mb-4">
         <div>
-          <h1 className="text-xl font-semibold">{t('nav_assets')}</h1>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-semibold">{t('nav_assets')}</h1>
+            {assets.length > 0 && (
+              <button
+                onClick={() => setHideAmounts(h => !h)}
+                className="text-muted hover:text-white transition-colors p-1"
+                title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
+              >
+                {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
+              </button>
+            )}
+          </div>
           {assets.length > 0 && (
             <p className="text-sm text-muted mt-1">
-              {t('total_value')}: <span className="text-accent-400 font-semibold">{fmt(totalValue)}</span>
+              {t('total_value')}: <span className="text-accent-400 font-semibold">{f(totalValue)}</span>
               {totalPnl !== 0 && (
                 <span className={`ml-2 ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  ({totalPnl >= 0 ? '+' : ''}{fmt(totalPnl)})
+                  ({totalPnl >= 0 ? '+' : ''}{f(totalPnl)})
                 </span>
               )}
             </p>
@@ -194,6 +285,113 @@ export default function Assets() {
             </select>
             <input placeholder={t('asset_name')} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
+            {/* Real estate specific: address + surface + estimation */}
+            {form.type === 'real_estate' && (
+              <>
+                <div className="col-span-full relative">
+                  <input placeholder="Adresse du bien..." value={addressQuery}
+                    onChange={e => { setAddressQuery(e.target.value); setAddressSelected(false); setForm(f => ({ ...f, address: e.target.value })); }}
+                    className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
+                  {addressResults.length > 0 && (
+                    <div className="absolute z-10 w-full mt-1 bg-surface border border-border rounded-lg shadow-lg max-h-40 overflow-y-auto">
+                      {addressResults.map((r, i) => (
+                        <button key={i} onClick={() => selectAddress(r)}
+                          className="w-full text-left px-3 py-2 text-sm hover:bg-white/5 transition-colors">
+                          {r.label}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-3">
+                  <input placeholder="Surface (m²)" type="number" value={form.surface}
+                    onChange={e => {
+                      const s = e.target.value;
+                      setForm(f => ({ ...f, surface: s }));
+                      if (s && form.citycode) fetchEstimation(form.citycode, form.latitude, form.longitude, parseFloat(s), form.property_type);
+                    }}
+                    className="flex-1 bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
+                  <select value={form.property_type}
+                    onChange={e => {
+                      const pt = e.target.value;
+                      setForm(f => ({ ...f, property_type: pt }));
+                      if (form.surface && form.citycode) fetchEstimation(form.citycode, form.latitude, form.longitude, parseFloat(form.surface), pt);
+                    }}
+                    className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm">
+                    <option value="Appartement">Appartement</option>
+                    <option value="Maison">Maison</option>
+                  </select>
+                </div>
+                {/* Estimation result */}
+                {(form.estimated_value || estimating) && (
+                  <div className="col-span-full bg-accent-500/10 border border-accent-500/20 rounded-lg p-3">
+                    {estimating ? (
+                      <p className="text-sm text-muted">Estimation en cours...</p>
+                    ) : (
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <p className="text-xs text-muted">Estimation DVF (prix du marché)</p>
+                          <p className="text-lg font-bold text-accent-400">{fmt(form.estimated_value!)}</p>
+                          <p className="text-xs text-muted">{form.estimated_price_m2?.toLocaleString('fr-FR')} €/m²</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-xs text-muted">Votre estimation</p>
+                          <p className="text-sm font-medium">{form.current_value ? fmt(parseFloat(form.current_value)) : '—'}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </>
+            )}
+            {/* Property usage */}
+            {form.type === 'real_estate' && (
+              <>
+                <div className="col-span-full">
+                  <label className="text-xs text-muted mb-1 block">Usage du bien</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    {[
+                      { id: 'principal', label: '🏠 Résidence', desc: 'J\'y habite' },
+                      { id: 'rented_long', label: '🔑 Location', desc: 'Longue durée' },
+                      { id: 'rented_short', label: '🏖️ Saisonnier', desc: 'Kozy / Airbnb' },
+                      { id: 'vacant', label: '📦 Vacant', desc: 'Inoccupé' },
+                    ].map(u => (
+                      <button key={u.id} type="button"
+                        onClick={() => setForm(f => ({ ...f, property_usage: u.id }))}
+                        className={`text-left px-3 py-2 rounded-lg border text-sm transition-all ${form.property_usage === u.id ? 'border-accent-500 bg-accent-500/10 text-white' : 'border-border bg-black/20 text-muted hover:text-white'}`}>
+                        <p className="font-medium text-xs">{u.label}</p>
+                        <p className="text-[10px] opacity-60">{u.desc}</p>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                {/* Rent details for long-term rental */}
+                {form.property_usage === 'rented_long' && (
+                  <div className="col-span-full grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="text-xs text-muted mb-1 block">Loyer mensuel (€)</label>
+                      <input type="number" placeholder="1200" value={form.monthly_rent}
+                        onChange={e => setForm(f => ({ ...f, monthly_rent: e.target.value }))}
+                        className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                      <label className="text-xs text-muted mb-1 block">Locataire</label>
+                      <input placeholder="Nom du locataire" value={form.tenant_name}
+                        onChange={e => setForm(f => ({ ...f, tenant_name: e.target.value }))}
+                        className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                  </div>
+                )}
+                {/* Short-term rental — Kozy link */}
+                {form.property_usage === 'rented_short' && (
+                  <div className="col-span-full bg-blue-500/10 border border-blue-500/20 rounded-lg p-3">
+                    <p className="text-xs text-blue-400 font-medium">🏖️ Location courte durée</p>
+                    <p className="text-xs text-muted mt-1">Connectez Kozy pour synchroniser automatiquement les revenus, le taux d'occupation et le prix moyen/nuit.</p>
+                    <p className="text-xs text-muted mt-1">→ Paramètres &gt; Connecter Kozy</p>
+                  </div>
+                )}
+              </>
+            )}
             <input placeholder={t('purchase_price')} type="number" value={form.purchase_price}
               onChange={e => setForm(f => ({ ...f, purchase_price: e.target.value }))}
               className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
@@ -209,7 +407,7 @@ export default function Assets() {
                 className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm">
                 <option value="">{t('link_loan')}</option>
                 {loanAccounts.map(a => (
-                  <option key={a.id} value={a.id}>{a.custom_name || a.name} ({fmt(a.balance)})</option>
+                  <option key={a.id} value={a.id}>{a.custom_name || a.name} ({f(a.balance)})</option>
                 ))}
               </select>
             )}
@@ -304,18 +502,29 @@ export default function Assets() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">{a.name}</p>
-                    <p className="text-xs text-muted">
-                      {a.purchase_date && `${t('purchased')} ${a.purchase_date}`}
-                      {a.loan_name && <span className="ml-2">🔗 {a.loan_name}</span>}
-                    </p>
+                    <div className="flex items-center gap-1.5 text-xs text-muted flex-wrap">
+                      {a.type === 'real_estate' && a.property_usage && (
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                          a.property_usage === 'principal' ? 'bg-blue-500/20 text-blue-400' :
+                          a.property_usage === 'rented_long' ? 'bg-green-500/20 text-green-400' :
+                          a.property_usage === 'rented_short' ? 'bg-amber-500/20 text-amber-400' :
+                          'bg-white/5 text-muted'
+                        }`}>
+                          {a.property_usage === 'principal' ? '🏠' : a.property_usage === 'rented_long' ? '🔑' : a.property_usage === 'rented_short' ? '🏖️' : '📦'}
+                          {a.property_usage === 'rented_long' && a.monthly_rent ? ` ${fmt(a.monthly_rent)}/mois` : ''}
+                        </span>
+                      )}
+                      {a.purchase_date && <span>{t('purchased')} {a.purchase_date}</span>}
+                      {a.loan_name && <span>🔗 {a.loan_name}</span>}
+                    </div>
                   </div>
                   <div className="text-right flex-shrink-0">
                     <p className="text-sm font-semibold text-accent-400">
-                      {fmt(a.current_value || a.purchase_price || 0)}
+                      {f(a.current_value || a.purchase_price || 0)}
                     </p>
                     {a.pnl != null && (
                       <p className={`text-xs font-medium ${a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {a.pnl >= 0 ? '+' : ''}{fmt(a.pnl)} ({fmtPct(a.pnl_percent!)})
+                        {a.pnl >= 0 ? '+' : ''}{f(a.pnl)} ({fmtPct(a.pnl_percent!)})
                       </p>
                     )}
                   </div>
@@ -333,40 +542,63 @@ export default function Assets() {
                       {a.purchase_price != null && (
                         <div>
                           <p className="text-[10px] text-muted uppercase">{t('purchase_price')}</p>
-                          <p>{fmt(a.purchase_price)}</p>
+                          <p>{f(a.purchase_price)}</p>
                         </div>
                       )}
                       {a.current_value != null && (
                         <div>
                           <p className="text-[10px] text-muted uppercase">{t('current_value')}</p>
-                          <p className="text-accent-400 font-semibold">{fmt(a.current_value)}</p>
+                          <p className="text-accent-400 font-semibold">{f(a.current_value)}</p>
                         </div>
                       )}
                       {a.loan_balance != null && (
                         <div>
                           <p className="text-[10px] text-muted uppercase">{t('linked_loan')}</p>
-                          <p className="text-red-400">{fmt(a.loan_balance)}</p>
+                          <p className="text-red-400">{f(a.loan_balance)}</p>
                         </div>
                       )}
                       {a.pnl != null && (
                         <div>
                           <p className="text-[10px] text-muted uppercase">P&L</p>
                           <p className={a.pnl >= 0 ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}>
-                            {a.pnl >= 0 ? '+' : ''}{fmt(a.pnl)}
+                            {a.pnl >= 0 ? '+' : ''}{f(a.pnl)}
                           </p>
                         </div>
                       )}
                     </div>
 
+                    {/* DVF Estimation vs User value */}
+                    {a.estimated_value != null && (
+                      <div className="mt-3 bg-accent-500/5 border border-accent-500/20 rounded-lg p-3">
+                        <div className="flex justify-between items-center">
+                          <div>
+                            <p className="text-[10px] text-muted uppercase">Estimation marché (DVF)</p>
+                            <p className="text-accent-400 font-semibold">{f(a.estimated_value)}</p>
+                            {a.estimated_price_m2 && <p className="text-[10px] text-muted">{a.estimated_price_m2.toLocaleString('fr-FR')} €/m²</p>}
+                          </div>
+                          <div className="text-right">
+                            <p className="text-[10px] text-muted uppercase">Votre estimation</p>
+                            <p className="font-semibold">{a.current_value ? f(a.current_value) : '—'}</p>
+                            {a.current_value && a.estimated_value && (
+                              <p className={`text-[10px] ${a.current_value > a.estimated_value ? 'text-green-400' : 'text-orange-400'}`}>
+                                {a.current_value > a.estimated_value ? '+' : ''}{((a.current_value - a.estimated_value) / a.estimated_value * 100).toFixed(1)}% vs marché
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                        {a.surface && <p className="text-[10px] text-muted mt-1">{a.surface} m² · {a.property_type} · {a.address}</p>}
+                      </div>
+                    )}
+
                     {/* Costs */}
                     {a.costs.length > 0 && (
                       <div className="mt-3">
-                        <p className="text-[10px] text-muted uppercase mb-1">{t('monthly_costs')} ({fmt(a.monthly_costs)}/mois)</p>
+                        <p className="text-[10px] text-muted uppercase mb-1">{t('monthly_costs')} ({f(a.monthly_costs)}/mois)</p>
                         <div className="space-y-1">
                           {a.costs.map((c, i) => (
                             <div key={i} className="flex justify-between text-xs">
                               <span className="text-muted">{c.label}</span>
-                              <span>{fmt(c.amount)}{c.frequency === 'yearly' ? '/an' : c.frequency === 'one_time' ? '' : '/mois'}</span>
+                              <span>{f(c.amount)}{c.frequency === 'yearly' ? '/an' : c.frequency === 'one_time' ? '' : '/mois'}</span>
                             </div>
                           ))}
                         </div>
@@ -376,12 +608,12 @@ export default function Assets() {
                     {/* Revenues */}
                     {a.revenues.length > 0 && (
                       <div className="mt-3">
-                        <p className="text-[10px] text-muted uppercase mb-1">{t('monthly_revenues')} ({fmt(a.monthly_revenues)}/mois)</p>
+                        <p className="text-[10px] text-muted uppercase mb-1">{t('monthly_revenues')} ({f(a.monthly_revenues)}/mois)</p>
                         <div className="space-y-1">
                           {a.revenues.map((r, i) => (
                             <div key={i} className="flex justify-between text-xs">
                               <span className="text-muted">{r.label}</span>
-                              <span className="text-green-400">{fmt(r.amount)}{r.frequency === 'yearly' ? '/an' : '/mois'}</span>
+                              <span className="text-green-400">{f(r.amount)}{r.frequency === 'yearly' ? '/an' : '/mois'}</span>
                             </div>
                           ))}
                         </div>
@@ -393,7 +625,7 @@ export default function Assets() {
                       <div className="mt-3 pt-2 border-t border-border/50 flex justify-between text-sm font-medium">
                         <span>{t('net_cashflow')}</span>
                         <span className={netCashflow >= 0 ? 'text-green-400' : 'text-red-400'}>
-                          {netCashflow >= 0 ? '+' : ''}{fmt(netCashflow)}/mois
+                          {netCashflow >= 0 ? '+' : ''}{f(netCashflow)}/mois
                         </span>
                       </div>
                     )}

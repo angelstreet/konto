@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload } from 'lucide-react';
+import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload, Type, EyeOff } from 'lucide-react';
 
 const THEMES = [
   { id: 'gold', label: 'Gold', color: '#d4a812' },
@@ -15,8 +15,15 @@ export default function Settings() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [showThemes, setShowThemes] = useState(false);
+  const [showQuoteSize, setShowQuoteSize] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(
     () => localStorage.getItem('kompta_theme') || 'gold'
+  );
+  const [quoteSize, setQuoteSize] = useState(
+    () => localStorage.getItem('kompta_quote_size') || 'base'
+  );
+  const [hideAmounts, setHideAmounts] = useState(
+    () => localStorage.getItem('kompta_hide_amounts') !== 'false'
   );
 
   const toggleLang = () => {
@@ -27,6 +34,17 @@ export default function Settings() {
     localStorage.setItem('kompta_theme', themeId);
     document.documentElement.setAttribute('data-theme', themeId);
     setCurrentTheme(themeId);
+  };
+
+  const QUOTE_SIZES = [
+    { id: 'sm', label: t('quote_size_sm') },
+    { id: 'base', label: t('quote_size_md') },
+    { id: 'lg', label: t('quote_size_lg') },
+  ];
+
+  const applyQuoteSize = (size: string) => {
+    localStorage.setItem('kompta_quote_size', size);
+    setQuoteSize(size);
   };
 
   return (
@@ -94,6 +112,53 @@ export default function Settings() {
             </div>
           )}
         </div>
+
+        {/* Quote size selector */}
+        <div>
+          <button
+            onClick={() => setShowQuoteSize(!showQuoteSize)}
+            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+          >
+            <Type size={18} className="text-muted" />
+            <span className="text-sm">{t('quote_font_size')}</span>
+            <span className="ml-auto text-xs text-muted uppercase">{QUOTE_SIZES.find(s => s.id === quoteSize)?.label}</span>
+          </button>
+          {showQuoteSize && (
+            <div className="px-4 pb-3 flex gap-3">
+              {QUOTE_SIZES.map((size) => (
+                <button
+                  key={size.id}
+                  onClick={() => applyQuoteSize(size.id)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    quoteSize === size.id
+                      ? 'bg-accent-500/20 text-accent-400'
+                      : 'bg-surface-hover text-muted hover:text-foreground'
+                  }`}
+                >
+                  {size.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Hide amounts toggle */}
+        <button
+          onClick={() => {
+            const next = !hideAmounts;
+            localStorage.setItem('kompta_hide_amounts', String(next));
+            setHideAmounts(next);
+          }}
+          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+        >
+          <EyeOff size={18} className="text-muted" />
+          <span className="text-sm">{t('hide_amounts')}</span>
+          <span className="ml-auto">
+            <span className={`inline-block w-9 h-5 rounded-full transition-colors relative ${hideAmounts ? 'bg-accent-500' : 'bg-white/10'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${hideAmounts ? 'left-[1.125rem]' : 'left-0.5'}`} />
+            </span>
+          </span>
+        </button>
 
         {/* Export data */}
         <button
