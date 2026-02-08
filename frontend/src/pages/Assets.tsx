@@ -1,15 +1,15 @@
 import { API } from '../config';
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, Eye, EyeOff,
 } from 'lucide-react';
 
 import ConfirmDialog from '../components/ConfirmDialog';
+import ScopeSelect from '../components/ScopeSelect';
 import { usePreferences } from '../PreferencesContext';
-import { useAuth } from '@clerk/clerk-react';
-
-const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+import { useFilter } from '../FilterContext';
+import { useApi, useAuthFetch, invalidateApi } from '../useApi';
 
 const TYPES = [
   { id: 'real_estate', icon: Home, labelKey: 'asset_real_estate' },
@@ -22,7 +22,7 @@ interface Cost { id?: number; label: string; amount: number; frequency: string; 
 interface Revenue { id?: number; label: string; amount: number; frequency: string; }
 interface Asset {
   id: number; type: string; name: string;
-  purchase_price: number | null; purchase_date: string | null;
+  purchase_price: number | null; notary_fees: number | null; purchase_date: string | null;
   current_value: number | null; current_value_date: string | null;
   linked_loan_account_id: number | null; loan_name: string | null; loan_balance: number | null;
   notes: string | null;
@@ -34,6 +34,7 @@ interface Asset {
   costs: Cost[]; revenues: Revenue[];
   monthly_costs: number; monthly_revenues: number;
   pnl: number | null; pnl_percent: number | null;
+  usage: string | null; company_id: number | null;
 }
 
 interface BankAccount { id: number; name: string; custom_name: string | null; type: string; balance: number; }
@@ -43,71 +44,72 @@ const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
 export default function Assets() {
   const { t } = useTranslation();
-  let getToken: (() => Promise<string | null>) | undefined;
-  if (clerkEnabled) { try { const auth = useAuth(); getToken = auth.getToken; } catch {} }
-  const getTokenRef = { current: getToken };
-  const apiFetch = async (url: string, opts?: RequestInit) => {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (clerkEnabled && getTokenRef.current) {
-      const token = await getTokenRef.current();
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-    }
-    return fetch(url, { headers, ...opts }).then(r => r.json());
-  };
+  const authFetch = useAuthFetch();
   const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
   const f = (n: number) => hideAmounts ? '••••' : fmt(n);
-  const [assets, setAssets] = useState<Asset[]>([]);
-  const [accounts, setAccounts] = useState<BankAccount[]>([]);
   const [filter, setFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [form, setForm] = useState({
-    type: 'real_estate', name: '', purchase_price: '', purchase_date: '',
+    type: 'real_estate', name: '', purchase_price: '', notary_fees: '', purchase_date: '',
     current_value: '', linked_loan_account_id: '', notes: '',
     address: '', citycode: '', latitude: 0, longitude: 0,
     surface: '', property_type: 'Appartement',
     estimated_value: null as number | null, estimated_price_m2: null as number | null,
     property_usage: 'principal', monthly_rent: '', tenant_name: '',
     costs: [] as Cost[], revenues: [] as Revenue[],
+    usage: 'personal' as string, company_id: '' as string,
   });
   const [addressQuery, setAddressQuery] = useState('');
   const [addressResults, setAddressResults] = useState<{ label: string; citycode: string; lat: number; lon: number }[]>([]);
   const [estimating, setEstimating] = useState(false);
   const { prefs } = usePreferences();
-  const [kozyProperties, setKozyProperties] = useState<any[]>([]);
+  const { scope, appendScope, companies } = useFilter();
 
-  const load = useCallback(() => {
-    const params = filter ? `?type=${filter}` : '';
-    apiFetch(`${API}/assets${params}`).then(setAssets).catch(() => {});
-    apiFetch(`${API}/bank/accounts`).then((a: BankAccount[]) => setAccounts(a)).catch(() => {});
-  }, [filter]);
+  // Build assets URL with filter + scope params
+  const assetsUrl = useMemo(() => {
+    let url = `${API}/assets`;
+    if (filter) url += `?type=${filter}`;
+    if (scope === 'personal') url += (url.includes('?') ? '&' : '?') + 'usage=personal';
+    else if (scope === 'pro') url += (url.includes('?') ? '&' : '?') + 'usage=professional';
+    else if (typeof scope === 'number') url += (url.includes('?') ? '&' : '?') + `company_id=${scope}`;
+    return url;
+  }, [filter, scope]);
 
-  useEffect(() => { load(); }, [load]);
+  const accountsUrl = useMemo(() => appendScope(`${API}/bank/accounts`), [scope, appendScope]);
+  const kozyUrl = prefs?.kozy_enabled ? `${API}/kozy/properties` : '';
 
-  // Fetch Kozy properties if enabled
-  useEffect(() => {
-    if (prefs?.kozy_enabled) {
-      apiFetch(`${API}/kozy/properties`)
-        .then(data => setKozyProperties(Array.isArray(data?.properties) ? data.properties : []))
-        .catch(() => setKozyProperties([]));
-    } else {
-      setKozyProperties([]);
-    }
-  }, [prefs?.kozy_enabled]);
+  const dashboardUrl = useMemo(() => appendScope(`${API}/dashboard`), [scope, appendScope]);
+
+  const { data: assets, refetch: refetchAssets } = useApi<Asset[]>(assetsUrl);
+  const { data: accountsRaw } = useApi<BankAccount[]>(accountsUrl);
+  const { data: kozyData } = useApi<{ properties: any[] }>(kozyUrl);
+  const { data: dashboardData } = useApi<{ totals: { brut: number; net: number } }>(dashboardUrl);
+
+  const assetList = assets || [];
+  const accounts = accountsRaw || [];
+  const kozyProperties = kozyUrl && kozyData?.properties ? kozyData.properties : [];
+
+  const reload = () => {
+    invalidateApi(assetsUrl);
+    invalidateApi(accountsUrl);
+    refetchAssets();
+  };
 
   const loanAccounts = accounts.filter(a => a.type === 'loan');
 
   const resetForm = () => {
     setForm({
-      type: 'real_estate', name: '', purchase_price: '', purchase_date: '',
+      type: 'real_estate', name: '', purchase_price: '', notary_fees: '', purchase_date: '',
       current_value: '', linked_loan_account_id: '', notes: '',
       address: '', citycode: '', latitude: 0, longitude: 0,
       surface: '', property_type: 'Appartement',
       estimated_value: null, estimated_price_m2: null,
       property_usage: 'principal', monthly_rent: '', tenant_name: '',
       costs: [], revenues: [],
+      usage: 'personal', company_id: '',
     });
     setAddressQuery('');
     setAddressResults([]);
@@ -121,7 +123,7 @@ export default function Assets() {
     if (addressQuery.length < 3 || addressSelected) { setAddressResults([]); return; }
     const timer = setTimeout(async () => {
       try {
-        const res = await apiFetch(`${API}/estimation/geocode?q=${encodeURIComponent(addressQuery)}`);
+        const res = await authFetch(`${API}/estimation/geocode?q=${encodeURIComponent(addressQuery)}`).then(r => r.json());
         setAddressResults(res);
       } catch {}
     }, 300);
@@ -141,7 +143,7 @@ export default function Assets() {
     if (!citycode || !surface) return;
     setEstimating(true);
     try {
-      const data = await apiFetch(`${API}/estimation/price?citycode=${citycode}&lat=${lat}&lon=${lon}&surface=${surface}&type=${encodeURIComponent(propertyType)}`);
+      const data = await authFetch(`${API}/estimation/price?citycode=${citycode}&lat=${lat}&lon=${lon}&surface=${surface}&type=${encodeURIComponent(propertyType)}`).then(r => r.json());
       if (data.estimation) {
         setForm(f => ({
           ...f,
@@ -164,6 +166,7 @@ export default function Assets() {
     setForm({
       type: a.type, name: a.name,
       purchase_price: a.purchase_price ? String(a.purchase_price) : '',
+      notary_fees: a.notary_fees ? String(a.notary_fees) : '',
       purchase_date: a.purchase_date || '',
       current_value: a.current_value ? String(a.current_value) : '',
       linked_loan_account_id: a.linked_loan_account_id ? String(a.linked_loan_account_id) : '',
@@ -178,6 +181,8 @@ export default function Assets() {
       tenant_name: a.tenant_name || '',
       costs: a.costs || [],
       revenues: a.revenues || [],
+      usage: a.usage || 'personal',
+      company_id: a.company_id ? String(a.company_id) : '',
     });
     setAddressQuery(a.address || '');
     setEditingId(a.id);
@@ -188,6 +193,7 @@ export default function Assets() {
     const body = {
       type: form.type, name: form.name,
       purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null,
+      notary_fees: form.notary_fees ? parseFloat(form.notary_fees) : null,
       purchase_date: form.purchase_date || null,
       current_value: form.current_value ? parseFloat(form.current_value) : null,
       current_value_date: form.current_value ? new Date().toISOString().split('T')[0] : null,
@@ -204,16 +210,18 @@ export default function Assets() {
       tenant_name: form.tenant_name || null,
       costs: form.costs.filter(c => c.label && c.amount),
       revenues: form.revenues.filter(r => r.label && r.amount),
+      usage: form.usage || 'personal',
+      company_id: form.company_id ? parseInt(form.company_id) : null,
     };
 
     if (editingId) {
-      await apiFetch(`${API}/assets/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) });
+      await authFetch(`${API}/assets/${editingId}`, { method: 'PATCH', body: JSON.stringify(body) });
     } else {
-      await apiFetch(`${API}/assets`, { method: 'POST', body: JSON.stringify(body) });
+      await authFetch(`${API}/assets`, { method: 'POST', body: JSON.stringify(body) });
     }
     setShowForm(false);
     resetForm();
-    load();
+    reload();
   };
 
   const deleteAsset = (id: number) => {
@@ -221,8 +229,8 @@ export default function Assets() {
       message: t('confirm_delete_asset'),
       onConfirm: async () => {
         setConfirmAction(null);
-        await apiFetch(`${API}/assets/${id}`, { method: 'DELETE' });
-        load();
+        await authFetch(`${API}/assets/${id}`, { method: 'DELETE' });
+        reload();
       },
     });
   };
@@ -248,40 +256,46 @@ export default function Assets() {
   };
 
   // Totals
-  const totalValue = assets.reduce((s, a) => s + (a.current_value || a.purchase_price || 0), 0);
-  const totalPnl = assets.reduce((s, a) => s + (a.pnl || 0), 0);
+  const totalValue = assetList.reduce((s, a) => s + (a.current_value || a.purchase_price || 0), 0);
+  const totalPnl = assetList.reduce((s, a) => s + (a.pnl || 0), 0);
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <div>
-          <div className="flex items-center gap-3">
-            <h1 className="text-xl font-semibold">{t('nav_assets')}</h1>
-            {assets.length > 0 ? (
-              <button
-                onClick={() => setHideAmounts(h => !h)}
-                className="text-muted hover:text-white transition-colors p-1"
-                title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
-              >
-                {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
-              </button>
-            ) : null}
-          </div>
-          {assets.length > 0 ? (
-            <p className="text-sm text-muted mt-1">
-              {t('total_value')}: <span className="text-accent-400 font-semibold">{f(totalValue)}</span>
-              {totalPnl !== 0 && (
-                <span className={`ml-2 ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  ({totalPnl >= 0 ? '+' : ''}{f(totalPnl)})
-                </span>
-              )}
-            </p>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+        <div className="flex items-center gap-2 min-w-0">
+          <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_assets')}</h1>
+          {assetList.length > 0 ? (
+            <button
+              onClick={() => setHideAmounts(h => !h)}
+              className="text-muted hover:text-white transition-colors p-1"
+              title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
+            >
+              {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
           ) : null}
         </div>
-        <button onClick={() => startCreate()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black">
-          <Plus size={16} /> {t('add_asset')}
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <ScopeSelect />
+          <button onClick={() => startCreate()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black">
+            <Plus size={16} /> {t('add_asset')}
+          </button>
+        </div>
       </div>
+      {assetList.length > 0 ? (
+        <p className="text-sm text-muted mb-4">
+          {t('total_value')}: <span className="text-accent-400 font-semibold">{f(totalValue)}</span>
+          {totalPnl !== 0 && (
+            <span className={`ml-2 ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+              ({totalPnl >= 0 ? '+' : ''}{f(totalPnl)})
+            </span>
+          )}
+          {dashboardData?.totals?.brut && dashboardData.totals.brut > 0 && (
+            <span className="ml-2 text-muted">
+              — {Math.round((totalValue / dashboardData.totals.brut) * 100)}% du patrimoine
+            </span>
+          )}
+        </p>
+      ) : null}
 
       {/* Filter pills */}
       <div className="flex gap-2 mb-4 flex-wrap">
@@ -310,6 +324,23 @@ export default function Assets() {
             </select>
             <input placeholder={t('asset_name')} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
+            <select
+              value={form.usage === 'professional' && form.company_id ? form.company_id : form.usage}
+              onChange={e => {
+                const v = e.target.value;
+                if (v === 'personal') setForm(f => ({ ...f, usage: 'personal', company_id: '' }));
+                else {
+                  const companyId = v;
+                  setForm(f => ({ ...f, usage: 'professional', company_id: companyId }));
+                }
+              }}
+              className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm"
+            >
+              <option value="personal">{t('scope_personal')}</option>
+              {companies.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
             {/* Real estate specific: address + surface + estimation */}
             {form.type === 'real_estate' && (
               <>
@@ -420,6 +451,11 @@ export default function Assets() {
             <input placeholder={t('purchase_price')} type="number" value={form.purchase_price}
               onChange={e => setForm(f => ({ ...f, purchase_price: e.target.value }))}
               className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
+            {form.type === 'real_estate' && (
+              <input placeholder={t('notary_fees')} type="number" value={form.notary_fees}
+                onChange={e => setForm(f => ({ ...f, notary_fees: e.target.value }))}
+                className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
+            )}
             <input placeholder={t('purchase_date')} type="date" value={form.purchase_date}
               onChange={e => setForm(f => ({ ...f, purchase_date: e.target.value }))}
               className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
@@ -506,14 +542,14 @@ export default function Assets() {
       )}
 
       {/* Asset list */}
-      {assets.length === 0 ? (
+      {assetList.length === 0 ? (
         <div className="bg-surface rounded-xl border border-border p-8 text-center">
           <Home className="mx-auto text-muted mb-3" size={32} />
           <p className="text-muted text-sm">{t('no_assets')}</p>
         </div>
       ) : (
         <div className="space-y-3">
-          {assets.map(a => {
+          {assetList.map(a => {
             const Icon = typeIcon(a.type);
             const expanded = expandedId === a.id;
             const netCashflow = a.monthly_revenues - a.monthly_costs;
@@ -528,6 +564,15 @@ export default function Assets() {
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-white truncate">{a.name}</p>
                     <div className="flex items-center gap-1.5 text-xs text-muted flex-wrap">
+                      {a.usage === 'professional' && a.company_id ? (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400">
+                          {companies.find(c => c.id === a.company_id)?.name || t('scope_pro')}
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-muted">
+                          {t('scope_personal')}
+                        </span>
+                      )}
                       {a.type === 'real_estate' && a.property_usage && (
                         <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                           a.property_usage === 'principal' ? 'bg-blue-500/20 text-blue-400' :
@@ -568,6 +613,12 @@ export default function Assets() {
                         <div>
                           <p className="text-[10px] text-muted uppercase">{t('purchase_price')}</p>
                           <p>{f(a.purchase_price)}</p>
+                        </div>
+                      )}
+                      {a.notary_fees != null && a.notary_fees > 0 && (
+                        <div>
+                          <p className="text-[10px] text-muted uppercase">{t('notary_fees')}</p>
+                          <p>{f(a.notary_fees)}</p>
                         </div>
                       )}
                       {a.current_value != null && (
