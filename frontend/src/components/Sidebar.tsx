@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -22,6 +22,7 @@ import {
   LogOut,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   LucideIcon,
   Lock,
 } from 'lucide-react';
@@ -105,9 +106,53 @@ export default function Sidebar({ onLogout }: Props) {
     return stored === null ? true : stored === 'true';
   });
 
+  // Track which group is currently active based on pathname
+  const getActiveGroup = useCallback(() => {
+    for (let gi = 0; gi < navGroups.length; gi++) {
+      for (const item of navGroups[gi].items) {
+        if (pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path))) {
+          return gi;
+        }
+      }
+    }
+    return 0;
+  }, [pathname]);
+
+  const [openGroups, setOpenGroups] = useState<Set<number>>(() => {
+    // Only open the group containing the active page + the first (dashboard) group
+    const active = new Set<number>([0]);
+    for (let gi = 0; gi < navGroups.length; gi++) {
+      for (const item of navGroups[gi].items) {
+        if (pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path))) {
+          active.add(gi);
+        }
+      }
+    }
+    return active;
+  });
+
+  // Auto-open group when navigating to a page in it
+  useEffect(() => {
+    const ag = getActiveGroup();
+    setOpenGroups(prev => {
+      if (prev.has(ag)) return prev;
+      const next = new Set(prev);
+      next.add(ag);
+      return next;
+    });
+  }, [pathname, getActiveGroup]);
+
+  const toggleGroup = (gi: number) => {
+    setOpenGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(gi)) next.delete(gi);
+      else next.add(gi);
+      return next;
+    });
+  };
+
   useEffect(() => {
     localStorage.setItem('kompta_sidebar_collapsed', String(collapsed));
-    // Dispatch event so Layout can adjust margin
     window.dispatchEvent(new CustomEvent('sidebar-toggle', { detail: { collapsed } }));
   }, [collapsed]);
 
@@ -132,48 +177,68 @@ export default function Sidebar({ onLogout }: Props) {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-4 scrollbar-thin">
-        {navGroups.map((group, gi) => (
-          <div key={gi}>
-            {/* Group label */}
-            {group.labelKey && !collapsed && (
-              <div className="px-2 mb-1.5 text-[10px] font-semibold uppercase tracking-wider text-muted/60">
-                {t(group.labelKey)}
-              </div>
-            )}
-            {group.labelKey && collapsed && (
-              <div className="border-t border-border/50 mx-2 mb-2" />
-            )}
-            <div className="space-y-0.5">
-              {group.items.map(({ path, icon: Icon, labelKey, disabled }) => {
-                const active = pathname === path || (path !== '/' && pathname.startsWith(path));
-                return (
-                  <button
-                    key={path}
-                    onClick={() => !disabled && navigate(path)}
-                    disabled={disabled}
-                    title={collapsed ? t(labelKey) : undefined}
-                    className={`w-full flex items-center gap-2.5 rounded-lg text-sm font-medium transition-colors ${
-                      collapsed ? 'justify-center px-0 py-2.5' : 'px-2.5 py-2'
-                    } ${
-                      disabled
-                        ? 'text-muted/30 cursor-not-allowed'
-                        : active
-                        ? 'bg-accent-500/10 text-accent-400'
-                        : 'text-muted hover:text-white hover:bg-surface-hover'
-                    }`}
-                  >
-                    <Icon size={18} strokeWidth={active ? 2.5 : 1.5} />
-                    {!collapsed && (
-                      <span className="flex-1 text-left truncate">{t(labelKey)}</span>
-                    )}
-                    {!collapsed && disabled && <Lock size={12} className="text-muted/30" />}
-                  </button>
-                );
-              })}
+      <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1 scrollbar-thin">
+        {navGroups.map((group, gi) => {
+          const isOpen = openGroups.has(gi);
+          const hasActiveItem = group.items.some(
+            item => pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path))
+          );
+
+          return (
+            <div key={gi}>
+              {/* Group header — clickable to toggle */}
+              {group.labelKey && !collapsed && (
+                <button
+                  onClick={() => toggleGroup(gi)}
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-[10px] font-semibold uppercase tracking-wider transition-colors ${
+                    hasActiveItem ? 'text-accent-400/70' : 'text-muted/50 hover:text-muted/80'
+                  }`}
+                >
+                  <span>{t(group.labelKey)}</span>
+                  <ChevronDown
+                    size={12}
+                    className={`transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
+                  />
+                </button>
+              )}
+              {group.labelKey && collapsed && (
+                <div className="border-t border-border/50 mx-2 my-1" />
+              )}
+
+              {/* Group items — show if no labelKey (dashboard), or if open, or if collapsed sidebar */}
+              {(!group.labelKey || isOpen || collapsed) && (
+                <div className="space-y-0.5">
+                  {group.items.map(({ path, icon: Icon, labelKey, disabled }) => {
+                    const active = pathname === path || (path !== '/' && pathname.startsWith(path));
+                    return (
+                      <button
+                        key={path}
+                        onClick={() => !disabled && navigate(path)}
+                        disabled={disabled}
+                        title={collapsed ? t(labelKey) : undefined}
+                        className={`w-full flex items-center gap-2.5 rounded-lg text-sm font-medium transition-colors ${
+                          collapsed ? 'justify-center px-0 py-2.5' : 'px-2.5 py-2'
+                        } ${
+                          disabled
+                            ? 'text-muted/30 cursor-not-allowed'
+                            : active
+                            ? 'bg-accent-500/10 text-accent-400'
+                            : 'text-muted hover:text-white hover:bg-surface-hover'
+                        }`}
+                      >
+                        <Icon size={18} strokeWidth={active ? 2.5 : 1.5} />
+                        {!collapsed && (
+                          <span className="flex-1 text-left truncate">{t(labelKey)}</span>
+                        )}
+                        {!collapsed && disabled && <Lock size={12} className="text-muted/30" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </nav>
 
       {/* Settings + Logout */}
