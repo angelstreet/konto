@@ -1,12 +1,10 @@
 {
-  "buildCommand": "cd backend && npm install && npx tsc",
-  "outputDirectory": "backend",
+  "framework": "vite",
+  "installCommand": "npm install",
+  "buildCommand": "cd frontend && npm run build",
+  "outputDirectory": "frontend/dist",
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api" }
-  ],
-  "functions": {
-    "api/index.ts": {
-      "runtime": "@vercel/node@3"
-    }
-  }
+    { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/((?!api).*)", "destination": "/index.html" }
+  ]
 }
