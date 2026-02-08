@@ -17,7 +17,9 @@ import Income from './pages/Income';
 import Analytics from './pages/Analytics';
 import Invoices from './pages/Invoices';
 import Bilan from './pages/Bilan';
+import Onboarding from './pages/Onboarding';
 import { FilterProvider } from './FilterContext';
+import { PreferencesProvider, usePreferences } from './PreferencesContext';
 
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -87,8 +89,30 @@ function ClerkApp() {
   }
 
   return (
+    <PreferencesProvider>
+      <ClerkAppInner onLogout={() => signOut()} />
+    </PreferencesProvider>
+  );
+}
+
+function ClerkAppInner({ onLogout }: { onLogout: () => void }) {
+  const { prefs, loading, refresh } = usePreferences();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-muted">Loading...</div>
+      </div>
+    );
+  }
+
+  if (prefs && !prefs.onboarded) {
+    return <Onboarding onComplete={refresh} />;
+  }
+
+  return (
     <FilterProvider>
-      <Layout onLogout={() => signOut()}>
+      <Layout onLogout={onLogout}>
         <AppRoutes />
       </Layout>
     </FilterProvider>
@@ -115,8 +139,30 @@ function LegacyApp() {
   }
 
   return (
+    <PreferencesProvider>
+      <LegacyAppInner onLogout={logout} />
+    </PreferencesProvider>
+  );
+}
+
+function LegacyAppInner({ onLogout }: { onLogout: () => void }) {
+  const { prefs, loading, refresh } = usePreferences();
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-muted">Loading...</div>
+      </div>
+    );
+  }
+
+  if (prefs && !prefs.onboarded) {
+    return <Onboarding onComplete={refresh} />;
+  }
+
+  return (
     <FilterProvider>
-      <Layout onLogout={logout}>
+      <Layout onLogout={onLogout}>
         <AppRoutes />
       </Layout>
     </FilterProvider>

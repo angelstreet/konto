@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload, Type, EyeOff } from 'lucide-react';
+import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload, Type, EyeOff, Coins, Bitcoin, Home } from 'lucide-react';
+import { usePreferences } from '../PreferencesContext';
 
 const THEMES = [
   { id: 'gold', label: 'Gold', color: '#d4a812' },
@@ -25,6 +26,20 @@ export default function Settings() {
   const [hideAmounts, setHideAmounts] = useState(
     () => localStorage.getItem('kompta_hide_amounts') !== 'false'
   );
+  const { prefs, update: updatePrefs } = usePreferences();
+  const [showCurrency, setShowCurrency] = useState(false);
+  const [showCryptoMode, setShowCryptoMode] = useState(false);
+
+  const CURRENCIES = [
+    { id: 'EUR', label: t('currency_eur') },
+    { id: 'USD', label: t('currency_usd') },
+    { id: 'CHF', label: t('currency_chf') },
+  ];
+
+  const CRYPTO_MODES = [
+    { id: 'native', label: t('crypto_native') },
+    { id: 'converted', label: t('crypto_converted') },
+  ];
 
   const toggleLang = () => {
     i18n.changeLanguage(i18n.language === 'fr' ? 'en' : 'fr');
@@ -141,6 +156,80 @@ export default function Settings() {
             </div>
           )}
         </div>
+
+        {/* Display currency selector */}
+        <div>
+          <button
+            onClick={() => setShowCurrency(!showCurrency)}
+            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+          >
+            <Coins size={18} className="text-muted" />
+            <span className="text-sm">{t('display_currency')}</span>
+            <span className="ml-auto text-xs text-muted">{prefs?.display_currency || 'EUR'}</span>
+          </button>
+          {showCurrency && (
+            <div className="px-4 pb-3 flex gap-3">
+              {CURRENCIES.map((cur) => (
+                <button
+                  key={cur.id}
+                  onClick={() => updatePrefs({ display_currency: cur.id } as any)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    (prefs?.display_currency || 'EUR') === cur.id
+                      ? 'bg-accent-500/20 text-accent-400'
+                      : 'bg-surface-hover text-muted hover:text-foreground'
+                  }`}
+                >
+                  {cur.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Crypto display mode */}
+        <div>
+          <button
+            onClick={() => setShowCryptoMode(!showCryptoMode)}
+            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+          >
+            <Bitcoin size={18} className="text-muted" />
+            <span className="text-sm">{t('crypto_display_mode')}</span>
+            <span className="ml-auto text-xs text-muted">
+              {prefs?.crypto_display === 'converted' ? t('crypto_converted') : t('crypto_native')}
+            </span>
+          </button>
+          {showCryptoMode && (
+            <div className="px-4 pb-3 flex gap-3">
+              {CRYPTO_MODES.map((mode) => (
+                <button
+                  key={mode.id}
+                  onClick={() => updatePrefs({ crypto_display: mode.id } as any)}
+                  className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+                    (prefs?.crypto_display || 'native') === mode.id
+                      ? 'bg-accent-500/20 text-accent-400'
+                      : 'bg-surface-hover text-muted hover:text-foreground'
+                  }`}
+                >
+                  {mode.label}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Kozy integration toggle */}
+        <button
+          onClick={() => updatePrefs({ kozy_enabled: prefs?.kozy_enabled ? 0 : 1 } as any)}
+          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+        >
+          <Home size={18} className="text-muted" />
+          <span className="text-sm">{t('kozy_integration')}</span>
+          <span className="ml-auto">
+            <span className={`inline-block w-9 h-5 rounded-full transition-colors relative ${prefs?.kozy_enabled ? 'bg-accent-500' : 'bg-white/10'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${prefs?.kozy_enabled ? 'left-[1.125rem]' : 'left-0.5'}`} />
+            </span>
+          </span>
+        </button>
 
         {/* Hide amounts toggle */}
         <button
