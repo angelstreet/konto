@@ -243,10 +243,20 @@ export default function Accounts() {
 
   const [metamaskError, setMetamaskError] = useState('');
 
+  const detectedWallet = (() => {
+    const eth = (window as any).ethereum;
+    if (!eth) return null;
+    if (eth.isMetaMask) return 'MetaMask';
+    if (eth.isBraveWallet) return 'Brave Wallet';
+    if (eth.isRabby) return 'Rabby';
+    if (eth.isCoinbaseWallet) return 'Coinbase Wallet';
+    return 'Wallet';
+  })();
+
   const connectMetaMask = async () => {
     const eth = (window as any).ethereum;
     if (!eth) {
-      setMetamaskError(t('metamask_not_detected') || 'MetaMask not detected. Install the browser extension or use the MetaMask mobile browser.');
+      setMetamaskError(t('metamask_not_detected') || 'No wallet detected. Open this page from MetaMask mobile browser, or install a wallet extension.');
       return;
     }
     setMetamaskError('');
@@ -403,8 +413,8 @@ export default function Accounts() {
                       <button onClick={connectMetaMask} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
                         <div className="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center text-lg">🦊</div>
                         <div>
-                          <p className="font-medium">MetaMask</p>
-                          <p className="text-xs text-muted">Auto-scan all EVM chains (ETH, Base, Polygon, BNB...)</p>
+                          <p className="font-medium">{detectedWallet || 'MetaMask / Wallet'}</p>
+                          <p className="text-xs text-muted">{detectedWallet ? `Connect ${detectedWallet} — auto-scan all EVM chains` : 'Auto-scan all EVM chains (ETH, Base, Polygon, BNB...)'}</p>
                         </div>
                       </button>
                       {metamaskError && (
