@@ -7,19 +7,20 @@ import Accounts from './pages/Accounts';
 import Transactions from './pages/Transactions';
 import Company from './pages/Company';
 import Settings from './pages/Settings';
+import ComingSoon from './pages/ComingSoon';
 
 export default function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(
-    () => sessionStorage.getItem('kompta_auth') === 'true'
+    () => localStorage.getItem('kompta_auth') === 'true'
   );
 
   const login = () => {
-    sessionStorage.setItem('kompta_auth', 'true');
+    localStorage.setItem('kompta_auth', 'true');
     setIsAuthenticated(true);
   };
 
   const logout = () => {
-    sessionStorage.removeItem('kompta_auth');
+    localStorage.removeItem('kompta_auth');
     setIsAuthenticated(false);
   };
 
@@ -33,8 +34,21 @@ export default function App() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/transactions" element={<Transactions />} />
-        <Route path="/company" element={<Company />} />
+        <Route path="/companies" element={<Company />} />
         <Route path="/settings" element={<Settings />} />
+        {/* Future pages — show coming soon */}
+        <Route path="/real-estate" element={<ComingSoon titleKey="nav_real_estate" />} />
+        <Route path="/investments" element={<ComingSoon titleKey="nav_investments" />} />
+        <Route path="/analysis" element={<ComingSoon titleKey="nav_analysis" />} />
+        <Route path="/cashflow" element={<ComingSoon titleKey="nav_cashflow" />} />
+        <Route path="/ledger" element={<ComingSoon titleKey="nav_ledger" />} />
+        <Route path="/reports" element={<ComingSoon titleKey="nav_reports" />} />
+        <Route path="/vat" element={<ComingSoon titleKey="nav_vat" />} />
+        <Route path="/fec-export" element={<ComingSoon titleKey="nav_fec_export" />} />
+        <Route path="/budget" element={<ComingSoon titleKey="nav_budget" />} />
+        <Route path="/import" element={<ComingSoon titleKey="nav_import" />} />
+        <Route path="/reconciliation" element={<ComingSoon titleKey="nav_reconciliation" />} />
+        <Route path="/simulators" element={<ComingSoon titleKey="nav_simulators" />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

@@ -1,11 +1,12 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Landmark, ArrowLeftRight, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Landmark, ArrowLeftRight, Building2, MoreHorizontal } from 'lucide-react';
 
 const items = [
-  { path: '/', icon: LayoutDashboard, labelKey: 'dashboard' },
-  { path: '/accounts', icon: Landmark, labelKey: 'accounts' },
-  { path: '/transactions', icon: ArrowLeftRight, labelKey: 'transactions' },
+  { path: '/', icon: LayoutDashboard, labelKey: 'nav_dashboard' },
+  { path: '/accounts', icon: Landmark, labelKey: 'nav_accounts' },
+  { path: '/transactions', icon: ArrowLeftRight, labelKey: 'nav_transactions' },
+  { path: '/companies', icon: Building2, labelKey: 'nav_companies' },
   { path: '/settings', icon: MoreHorizontal, labelKey: 'more' },
 ];
 
@@ -24,7 +25,7 @@ export default function BottomNav() {
               key={path}
               onClick={() => navigate(path)}
               className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
-                active ? 'text-gold-400' : 'text-muted hover:text-white'
+                active ? 'text-accent-400' : 'text-muted hover:text-white'
               }`}
             >
               <Icon size={20} strokeWidth={active ? 2.5 : 1.5} />
