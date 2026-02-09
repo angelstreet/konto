@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@clerk/clerk-react": "^5.60.0",
+    "@clerk/themes": "^2.4.51",
     "clsx": "^2.1.1",
     "i18next": "^23.12.0",
     "lucide-react": "^0.441.0",

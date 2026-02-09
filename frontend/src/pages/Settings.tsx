@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload, Type, EyeOff, Coins, Bitcoin, Home } from 'lucide-react';
 import { usePreferences } from '../PreferencesContext';
+import { useAuthFetch } from '../useApi';
 
 const THEMES = [
   { id: 'gold', label: 'Gold', color: '#d4a812' },
@@ -27,6 +28,7 @@ export default function Settings() {
   const [hideAmounts, setHideAmounts] = useState(
     () => localStorage.getItem('kompta_hide_amounts') !== 'false'
   );
+  const authFetch = useAuthFetch();
   const { prefs, update: updatePrefs } = usePreferences();
   const [showCurrency, setShowCurrency] = useState(false);
   const [showCryptoMode, setShowCryptoMode] = useState(false);
@@ -253,7 +255,7 @@ export default function Settings() {
         {/* Export data */}
         <button
           onClick={async () => {
-            const res = await fetch(API + '/export');
+            const res = await authFetch(API + '/export');
             const data = await res.json();
             const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
@@ -282,9 +284,8 @@ export default function Settings() {
               if (!file) return;
               const text = await file.text();
               const data = JSON.parse(text);
-              const res = await fetch(API + '/import', {
+              const res = await authFetch(API + '/import', {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data),
               });
               const result = await res.json();

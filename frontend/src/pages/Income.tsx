@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Plus, Trash2, Edit3, X, Check, Briefcase, TrendingUp, Calculator, CreditCard } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Check, Briefcase, TrendingUp, Calculator, CreditCard, ChevronDown } from 'lucide-react';
 import { useAuthFetch } from '../useApi';
 
 interface Company {
@@ -59,6 +59,7 @@ export default function Income() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' });
+  const [expandedEntryId, setExpandedEntryId] = useState<number | null>(null);
 
   // Tax estimation state
   const [taxInput, setTaxInput] = useState({ gross_annual: '', country: 'FR', canton: 'ZH', situation: 'single', children: 0 });
@@ -168,7 +169,7 @@ export default function Income() {
             onClick={() => { setShowForm(true); setEditId(null); setForm({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' }); }}
             className="flex items-center gap-1.5 px-3 py-2.5 bg-accent-500 text-white rounded-lg text-sm min-h-[44px] font-medium hover:bg-accent-600 transition-colors"
           >
-            <Plus size={16} /> {t('add_employer')}
+            <Plus size={16} /> <span className="hidden sm:inline">{t('add_employer')}</span>
           </button>
         </div>
 
@@ -179,22 +180,22 @@ export default function Income() {
               <div>
                 <label className="text-xs text-muted mb-1 block">{t('year')}</label>
                 <input type="number" value={form.year} onChange={e => setForm({ ...form, year: parseInt(e.target.value) })}
-                  className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-muted mb-1 block">{t('employer')}</label>
                 <input type="text" value={form.employer} onChange={e => setForm({ ...form, employer: e.target.value })}
-                  placeholder="Ex: Google" className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+                  placeholder="Ex: Google" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-muted mb-1 block">{t('job_title')}</label>
                 <input type="text" value={form.job_title} onChange={e => setForm({ ...form, job_title: e.target.value })}
-                  placeholder="Ex: Développeur" className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+                  placeholder="Ex: Développeur" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-muted mb-1 block">{t('country')}</label>
                 <select value={form.country} onChange={e => setForm({ ...form, country: e.target.value })}
-                  className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm">
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm">
                   {countries.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                 </select>
               </div>
@@ -203,22 +204,22 @@ export default function Income() {
               <div>
                 <label className="text-xs text-muted mb-1 block">{t('start_date')}</label>
                 <input type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })}
-                  className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-muted mb-1 block">{t('end_date')}</label>
                 <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })}
-                  placeholder="En cours" className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+                  placeholder="En cours" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-muted mb-1 block">{t('gross_annual')}</label>
                 <input type="number" value={form.gross_annual} onChange={e => setForm({ ...form, gross_annual: e.target.value })}
-                  placeholder="55000" className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+                  placeholder="55000" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-muted mb-1 block">{t('net_annual')}</label>
                 <input type="number" value={form.net_annual} onChange={e => setForm({ ...form, net_annual: e.target.value })}
-                  placeholder="42000" className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+                  placeholder="42000" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>
             {companies.length > 0 && (
@@ -226,7 +227,7 @@ export default function Income() {
                 <div>
                   <label className="text-xs text-muted mb-1 block">{t('company')}</label>
                   <select value={form.company_id} onChange={e => setForm({ ...form, company_id: e.target.value })}
-                    className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm">
+                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm">
                     <option value="">—</option>
                     {companies.map(co => <option key={co.id} value={co.id}>{co.name}</option>)}
                   </select>
@@ -247,38 +248,48 @@ export default function Income() {
         {/* Entries — table on desktop, cards on mobile */}
         {entries.length > 0 ? (
           <>
-            {/* Mobile cards */}
+            {/* Mobile cards — max 3 lines, tap to expand */}
             <div className="sm:hidden space-y-2">
               {entries.map(e => {
                 const fmtE = e.country === 'CH' ? fmtCHF : fmt;
+                const isExpanded = expandedEntryId === e.id;
                 const period = e.start_date
                   ? `${e.start_date.slice(5)}${e.end_date ? ' → ' + e.end_date.slice(5) : ' → …'}`
                   : '';
                 return (
-                  <div key={e.id} className="bg-surface-hover rounded-lg p-3 space-y-1">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="text-xs font-medium text-muted">{e.year}</span>
-                        {period && <span className="text-[10px] text-muted">{period}</span>}
-                      </div>
-                      <div className="flex gap-1 flex-shrink-0">
-                        <button onClick={() => startEdit(e)} className="p-2 text-muted hover:text-white min-w-[36px] min-h-[36px] flex items-center justify-center"><Edit3 size={14} /></button>
-                        <button onClick={() => handleDelete(e.id)} className="p-2 text-muted hover:text-red-400 min-w-[36px] min-h-[36px] flex items-center justify-center"><Trash2 size={14} /></button>
-                      </div>
-                    </div>
-                    <div className="flex items-center justify-between">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium text-white truncate">
+                  <div key={e.id} className="bg-surface-hover rounded-lg overflow-hidden">
+                    {/* Compact 3-line view — tap to expand */}
+                    <div
+                      className="p-3 cursor-pointer"
+                      onClick={() => setExpandedEntryId(isExpanded ? null : e.id)}
+                    >
+                      {/* Line 1: Employer — Company */}
+                      <div className="flex items-center justify-between">
+                        <p className="text-sm font-medium text-white truncate flex-1 min-w-0">
                           {e.employer}
                           {e.company_name && <span className="text-xs text-accent-400 ml-1">({e.company_name})</span>}
                         </p>
-                        {e.job_title && <p className="text-xs text-muted truncate">{e.job_title}</p>}
+                        <ChevronDown size={14} className={`text-muted flex-shrink-0 ml-2 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
                       </div>
-                      <div className="text-right flex-shrink-0 ml-3">
-                        <p className="text-sm font-mono font-medium text-green-400">{fmtE(e.gross_annual)}</p>
-                        {e.net_annual && <p className="text-xs font-mono text-emerald-300">{fmtE(e.net_annual)} net</p>}
+                      {/* Line 2: Gross salary */}
+                      <div className="flex items-center justify-between mt-0.5">
+                        <span className="text-sm font-mono font-medium text-green-400">{fmtE(e.gross_annual)}</span>
+                        {e.net_annual && <span className="text-xs font-mono text-emerald-300">{fmtE(e.net_annual)} net</span>}
+                      </div>
+                      {/* Line 3: Year — period — job title */}
+                      <div className="flex items-center gap-2 mt-0.5 text-xs text-muted">
+                        <span className="font-medium">{e.year}</span>
+                        {period && <span>{period}</span>}
+                        {e.job_title && <span className="truncate">· {e.job_title}</span>}
                       </div>
                     </div>
+                    {/* Expanded details */}
+                    {isExpanded && (
+                      <div className="px-3 pb-3 border-t border-border/50 pt-2 flex gap-2">
+                        <button onClick={() => startEdit(e)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-white bg-white/5 hover:bg-white/10 transition-colors"><Edit3 size={12} /> {t('edit')}</button>
+                        <button onClick={() => handleDelete(e.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-red-400 bg-white/5 hover:bg-red-500/10 transition-colors"><Trash2 size={12} /> {t('delete')}</button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -359,12 +370,12 @@ export default function Income() {
           <div>
             <label className="text-xs text-muted mb-1 block">{t('gross_annual')}</label>
             <input type="number" value={taxInput.gross_annual} onChange={e => setTaxInput({ ...taxInput, gross_annual: e.target.value })}
-              placeholder="55000" className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+              placeholder="55000" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="text-xs text-muted mb-1 block">{t('country')}</label>
             <select value={taxInput.country} onChange={e => setTaxInput({ ...taxInput, country: e.target.value })}
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm">
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm">
               <option value="FR">🇫🇷 France</option>
               <option value="CH">🇨🇭 Suisse</option>
             </select>
@@ -373,7 +384,7 @@ export default function Income() {
             <div>
               <label className="text-xs text-muted mb-1 block">{t('canton')}</label>
               <select value={taxInput.canton} onChange={e => setTaxInput({ ...taxInput, canton: e.target.value })}
-                className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm">
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm">
                 {cantons.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -381,7 +392,7 @@ export default function Income() {
           <div>
             <label className="text-xs text-muted mb-1 block">{t('situation')}</label>
             <select value={taxInput.situation} onChange={e => setTaxInput({ ...taxInput, situation: e.target.value })}
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm">
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm">
               <option value="single">{t('single')}</option>
               <option value="married">{t('married')}</option>
             </select>
@@ -389,7 +400,7 @@ export default function Income() {
           <div>
             <label className="text-xs text-muted mb-1 block">{t('children')}</label>
             <input type="number" min={0} max={10} value={taxInput.children} onChange={e => setTaxInput({ ...taxInput, children: parseInt(e.target.value) || 0 })}
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
         </div>
 
@@ -400,19 +411,19 @@ export default function Income() {
 
         {taxResult && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-2">
-            <div className="bg-bg rounded-lg p-4 text-center">
+            <div className="bg-background rounded-lg p-4 text-center">
               <p className="text-xs text-muted mb-1">{t('gross_annual')}</p>
               <p className="text-lg font-bold text-white">{fmtTax(taxResult.gross_annual)}</p>
             </div>
-            <div className="bg-bg rounded-lg p-4 text-center">
+            <div className="bg-background rounded-lg p-4 text-center">
               <p className="text-xs text-muted mb-1">{t('estimated_tax')}</p>
               <p className="text-lg font-bold text-red-400">{fmtTax(taxResult.tax)}</p>
             </div>
-            <div className="bg-bg rounded-lg p-4 text-center">
+            <div className="bg-background rounded-lg p-4 text-center">
               <p className="text-xs text-muted mb-1">{t('net_income')}</p>
               <p className="text-lg font-bold text-green-400">{fmtTax(taxResult.netIncome)}</p>
             </div>
-            <div className="bg-bg rounded-lg p-4 text-center">
+            <div className="bg-background rounded-lg p-4 text-center">
               <p className="text-xs text-muted mb-1">{t('effective_rate')}</p>
               <p className="text-lg font-bold text-yellow-400">{taxResult.effectiveRate}%</p>
             </div>
@@ -430,22 +441,22 @@ export default function Income() {
           <div>
             <label className="text-xs text-muted mb-1 block">{t('net_monthly_income')}</label>
             <input type="number" value={borrowInput.net_monthly} onChange={e => setBorrowInput({ ...borrowInput, net_monthly: e.target.value })}
-              placeholder="3500" className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+              placeholder="3500" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="text-xs text-muted mb-1 block">{t('existing_payments')}</label>
             <input type="number" value={borrowInput.existing_payments} onChange={e => setBorrowInput({ ...borrowInput, existing_payments: e.target.value })}
-              placeholder="0" className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+              placeholder="0" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="text-xs text-muted mb-1 block">{t('interest_rate')} (%)</label>
             <input type="number" step="0.05" value={borrowInput.rate} onChange={e => setBorrowInput({ ...borrowInput, rate: e.target.value })}
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
             <label className="text-xs text-muted mb-1 block">{t('duration_years')}</label>
             <input type="number" value={borrowInput.duration_years} onChange={e => setBorrowInput({ ...borrowInput, duration_years: e.target.value })}
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2 text-sm" />
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
         </div>
 
@@ -455,7 +466,7 @@ export default function Income() {
         </button>
 
         {borrowResult && (
-          <div className="bg-bg rounded-lg p-5 space-y-3 mt-2">
+          <div className="bg-background rounded-lg p-5 space-y-3 mt-2">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
               <div>
                 <p className="text-xs text-muted mb-1">{t('max_monthly_payment')}</p>

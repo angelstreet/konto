@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useApi, apiFetch } from '../useApi';
+import { useApi, useAuthFetch } from '../useApi';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { RefreshCw, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 
@@ -33,6 +33,7 @@ function monthLabel(period: string) {
 
 export default function Analytics() {
   const { t } = useTranslation();
+  const authFetch = useAuthFetch();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -53,9 +54,8 @@ export default function Analytics() {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      await apiFetch(`${API}/analytics/recompute`, {
+      await authFetch(`${API}/analytics/recompute`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ period }),
       });
       refetch();
@@ -78,10 +78,10 @@ export default function Analytics() {
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-white">{t('nav_analysis')}</h1>
         <div className="flex items-center gap-2">
-          <button onClick={prev} className="p-2 rounded-lg bg-surface hover:bg-surface-hover text-muted"><ChevronLeft size={16} /></button>
+          <button onClick={prev} className="p-2.5 rounded-lg bg-surface hover:bg-surface-hover text-muted min-w-[44px] min-h-[44px] flex items-center justify-center"><ChevronLeft size={16} /></button>
           <span className="text-white font-medium min-w-[140px] text-center">{moisFr[month - 1]} {year}</span>
-          <button onClick={next} className="p-2 rounded-lg bg-surface hover:bg-surface-hover text-muted"><ChevronRight size={16} /></button>
-          <button onClick={handleRefresh} disabled={refreshing} className="p-2 rounded-lg bg-accent-500/10 text-accent-400 hover:bg-accent-500/20 disabled:opacity-50 ml-2">
+          <button onClick={next} className="p-2.5 rounded-lg bg-surface hover:bg-surface-hover text-muted min-w-[44px] min-h-[44px] flex items-center justify-center"><ChevronRight size={16} /></button>
+          <button onClick={handleRefresh} disabled={refreshing} className="p-2.5 rounded-lg bg-accent-500/10 text-accent-400 hover:bg-accent-500/20 disabled:opacity-50 ml-2 min-w-[44px] min-h-[44px] flex items-center justify-center">
             <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
           </button>
         </div>

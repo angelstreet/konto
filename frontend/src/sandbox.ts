@@ -71,6 +71,15 @@ function routeSandboxRequest(path: string, method: string, body: any, data: any)
   // Health
   if (path === '/health') return { status: 'ok', mode: 'sandbox' };
 
+  // Preferences
+  if (path === '/preferences' && method === 'GET') {
+    return data.preferences || { onboarded: 1, display_currency: 'EUR', crypto_display: 'native', kozy_enabled: 0 };
+  }
+  if (path === '/preferences' && method === 'PATCH') {
+    data.preferences = { ...(data.preferences || { onboarded: 1, display_currency: 'EUR', crypto_display: 'native', kozy_enabled: 0 }), ...parsed };
+    return data.preferences;
+  }
+
   // Bank accounts
   if (path === '/bank/accounts' && method === 'GET') return data.accounts;
   if (path === '/bank/connections' && method === 'GET') return data.connections;
@@ -159,6 +168,38 @@ function routeSandboxRequest(path: string, method: string, body: any, data: any)
   // Connect URLs — redirect to alert in sandbox
   if (path === '/bank/connect-url') return { url: '#sandbox-no-real-connection' };
   if (path === '/coinbase/connect-url') return { url: '#sandbox-no-real-connection' };
+
+  // Budget/Cashflow
+  if (path.startsWith('/budget/cashflow')) {
+    const months: any[] = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(); d.setMonth(d.getMonth() - i);
+      months.push({ month: d.toISOString().slice(0, 7), income: 4250 + Math.random() * 500, expenses: 2800 + Math.random() * 800 });
+    }
+    return { months: months.reverse() };
+  }
+
+  // Analytics
+  if (path.startsWith('/analytics')) {
+    if (method === 'POST') return { ok: true };
+    return { categories: [{ category: 'Courses', total: -520 }, { category: 'Logement', total: -1150 }, { category: 'Transport', total: -180 }, { category: 'Loisirs', total: -95 }], total_income: 4250, total_expenses: -2800, period: 'month' };
+  }
+
+  // Invoices
+  if (path.startsWith('/invoices')) {
+    if (path.includes('/stats')) return { total: 0, matched: 0, unmatched: 0 };
+    if (path.includes('/scan')) return { scanned: 0 };
+    return [];
+  }
+
+  // Drive status
+  if (path.startsWith('/drive/status')) return { connected: false };
+
+  // Bilan
+  if (path.startsWith('/bilan')) return { assets: [], liabilities: [], equity: 0, total_assets: 0, total_liabilities: 0 };
+
+  // Report
+  if (path.startsWith('/report')) return {};
 
   // Export
   if (path === '/export') return { version: 1, exported_at: new Date().toISOString(), sandbox: true, ...data };
@@ -290,5 +331,7 @@ function generateMockData() {
     },
   ];
 
-  return { accounts, connections, companies, transactions, assets };
+  const preferences = { onboarded: 1, display_currency: 'EUR', crypto_display: 'native', kozy_enabled: 0 };
+
+  return { accounts, connections, companies, transactions, assets, preferences };
 }

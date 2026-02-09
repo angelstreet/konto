@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-
+import { useAuthFetch } from '../useApi';
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Alimentation': '#22c55e',
@@ -39,6 +39,7 @@ interface CashflowData {
 
 export default function Budget() {
   const { t } = useTranslation();
+  const authFetch = useAuthFetch();
   const [range, setRange] = useState('3m');
   const [data, setData] = useState<CashflowData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -48,7 +49,7 @@ export default function Budget() {
     const days = RANGES.find(r => r.key === range)?.days || 90;
     const from = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
     const to = new Date().toISOString().split('T')[0];
-    fetch(`${API}/budget/cashflow?from=${from}&to=${to}`)
+    authFetch(`${API}/budget/cashflow?from=${from}&to=${to}`)
       .then(r => r.json())
       .then(d => setData(d))
       .finally(() => setLoading(false));
@@ -70,7 +71,7 @@ export default function Budget() {
             <button
               key={r.key}
               onClick={() => setRange(r.key)}
-              className={`px-2.5 py-1 text-xs rounded-md font-medium transition-colors ${
+              className={`px-3 py-2 text-xs rounded-md font-medium transition-colors min-h-[44px] min-w-[44px] ${
                 range === r.key ? 'bg-accent-500/20 text-accent-400' : 'text-muted hover:text-white hover:bg-surface-hover'
               }`}
             >

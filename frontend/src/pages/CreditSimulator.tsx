@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
-
+import { useAuthFetch } from '../useApi';
 
 interface Rate { duration: number; best_rate: number; avg_rate: number; updated_at: string }
 
@@ -14,6 +14,7 @@ function formatCurrency0(v: number) {
 }
 
 export default function CreditSimulator() {
+  const authFetch = useAuthFetch();
   const [amount, setAmount] = useState(200000);
   const [duration, setDuration] = useState(20);
   const [rate, setRate] = useState(3.35);
@@ -22,7 +23,7 @@ export default function CreditSimulator() {
   const [showTable, setShowTable] = useState(false);
 
   useEffect(() => {
-    fetch(`${API}/rates/current`)
+    authFetch(`${API}/rates/current`)
       .then(r => r.json())
       .then(d => {
         setRates(d.rates || []);
@@ -166,7 +167,7 @@ export default function CreditSimulator() {
       {/* Amortization table toggle */}
       <button
         onClick={() => setShowTable(!showTable)}
-        className="text-sm text-accent-400 hover:text-accent-300 mb-3 transition-colors"
+        className="text-sm text-accent-400 hover:text-accent-300 mb-3 transition-colors py-3 min-h-[44px]"
       >
         {showTable ? '▼ Masquer' : '▶ Voir'} le tableau d'amortissement
       </button>

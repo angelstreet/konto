@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
 import { Landmark, PlusCircle } from 'lucide-react';
-
+import { useAuthFetch } from '../useApi';
 
 interface Props {
   onComplete: () => void;
@@ -9,10 +9,11 @@ interface Props {
 
 export default function Onboarding({ onComplete }: Props) {
   const { t } = useTranslation();
+  const authFetch = useAuthFetch();
 
   const connectBank = async () => {
     // Redirect to Powens bank connect
-    const res = await fetch(`${API}/bank/connect`);
+    const res = await authFetch(`${API}/bank/connect`);
     const data = await res.json();
     if (data.url) {
       window.location.href = data.url;
@@ -20,9 +21,8 @@ export default function Onboarding({ onComplete }: Props) {
   };
 
   const skipOnboarding = async () => {
-    await fetch(`${API}/preferences`, {
+    await authFetch(`${API}/preferences`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ onboarded: 1 }),
     });
     onComplete();

@@ -146,14 +146,14 @@ export default function Transactions() {
                   value={searchInput}
                   onChange={e => setSearchInput(e.target.value)}
                   placeholder={t('search_transactions')}
-                  className="w-full bg-bg border border-border rounded-lg pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent-500 transition-colors"
+                  className="w-full bg-background border border-border rounded-lg pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent-500 transition-colors"
                 />
               </div>
             </form>
             <select
               value={accountFilter}
               onChange={e => { setAccountFilter(e.target.value); setPage(0); }}
-              className="w-full bg-bg border border-border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-500"
+              className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-500"
             >
               <option value="">{t('all_accounts_filter')}</option>
               {accounts.map(acc => (

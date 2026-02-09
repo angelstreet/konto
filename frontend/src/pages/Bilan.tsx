@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileBarChart, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Receipt, Building2 } from 'lucide-react';
-
+import { useAuthFetch } from '../useApi';
 
 interface BilanData {
   year: number;
@@ -25,16 +25,18 @@ const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep
 
 export default function Bilan() {
   const { t: _t } = useTranslation();
+  const authFetch = useAuthFetch();
   const [year, setYear] = useState(new Date().getFullYear());
   const [data, setData] = useState<BilanData | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API}/bilan/${year}`)
+    authFetch(`${API}/bilan/${year}`)
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(d => setData(d))
+      .catch(() => {})
+      .finally(() => setLoading(false));
   }, [year]);
 
   const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
@@ -53,11 +55,11 @@ export default function Bilan() {
           <FileBarChart size={22} /> Bilan Annuel
         </h1>
         <div className="flex items-center gap-3">
-          <button onClick={() => setYear(y => y - 1)} className="p-1.5 rounded-lg hover:bg-surface-hover">
+          <button onClick={() => setYear(y => y - 1)} className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ChevronLeft size={18} />
           </button>
           <span className="text-lg font-bold tabular-nums">{year}</span>
-          <button onClick={() => setYear(y => y + 1)} className="p-1.5 rounded-lg hover:bg-surface-hover">
+          <button onClick={() => setYear(y => y + 1)} className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ChevronRight size={18} />
           </button>
         </div>

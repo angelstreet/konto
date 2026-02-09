@@ -127,7 +127,7 @@ export default function Report() {
       <div className="bg-surface rounded-xl border border-border p-4 mb-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-muted">Catégories à inclure</h3>
-          <button onClick={toggleAll} className="text-xs text-accent-400 hover:text-accent-300">
+          <button onClick={toggleAll} className="text-xs text-accent-400 hover:text-accent-300 py-2 min-h-[32px]">
             {selected.size === CATEGORIES.length ? 'Tout désélectionner' : 'Tout sélectionner'}
           </button>
         </div>
@@ -136,7 +136,7 @@ export default function Report() {
             <button
               key={cat.key}
               onClick={() => toggleCategory(cat.key)}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors min-h-[44px] ${
                 selected.has(cat.key)
                   ? 'border-accent-500/50 bg-accent-500/10 text-accent-400'
                   : 'border-border text-muted hover:border-border/80'
@@ -152,14 +152,14 @@ export default function Report() {
         <div className="mt-4 pt-4 border-t border-border">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-muted">Périmètre</h3>
-            <button onClick={toggleAllScopes} className="text-xs text-accent-400 hover:text-accent-300">
+            <button onClick={toggleAllScopes} className="text-xs text-accent-400 hover:text-accent-300 py-2 min-h-[32px]">
               {selectedScopes.size === 2 + companies.length ? 'Tout désélectionner' : 'Tout sélectionner'}
             </button>
           </div>
           <div className="grid grid-cols-2 gap-2">
             <button
               onClick={() => toggleScope('personal')}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors min-h-[44px] ${
                 selectedScopes.has('personal')
                   ? 'border-accent-500/50 bg-accent-500/10 text-accent-400'
                   : 'border-border text-muted hover:border-border/80'
@@ -171,7 +171,7 @@ export default function Report() {
             </button>
             <button
               onClick={() => toggleScope('pro')}
-              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+              className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors min-h-[44px] ${
                 selectedScopes.has('pro')
                   ? 'border-accent-500/50 bg-accent-500/10 text-accent-400'
                   : 'border-border text-muted hover:border-border/80'
@@ -185,7 +185,7 @@ export default function Report() {
               <button
                 key={c.id}
                 onClick={() => toggleScope(`company_${c.id}`)}
-                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors ${
+                className={`flex items-center gap-2 px-3 py-2.5 rounded-lg border text-sm transition-colors min-h-[44px] ${
                   selectedScopes.has(`company_${c.id}`)
                     ? 'border-accent-500/50 bg-accent-500/10 text-accent-400'
                     : 'border-border text-muted hover:border-border/80'

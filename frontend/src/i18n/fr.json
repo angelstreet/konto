@@ -251,5 +251,7 @@
   "summary_cash": "Liquidités",
   "summary_stocks": "Investissements",
   "patrimoine_evolution": "Évolution du patrimoine",
-  "patrimoine_distribution": "Répartition du patrimoine"
+  "patrimoine_distribution": "Répartition du patrimoine",
+  "filters": "Filtres",
+  "clear_filters": "Effacer les filtres"
 }

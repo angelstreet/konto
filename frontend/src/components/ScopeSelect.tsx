@@ -14,7 +14,7 @@ export default function ScopeSelect() {
         const v = e.target.value;
         setScope(v === 'all' ? 'all' : v === 'personal' ? 'personal' : v === 'pro' ? 'pro' : Number(v));
       }}
-      className="bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-accent-500 transition-colors max-w-[140px] truncate"
+      className="bg-surface border border-border rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-accent-500 transition-colors max-w-[140px] truncate min-h-[44px]"
     >
       <option value="all">{t('scope_all')}</option>
       <option value="personal">{t('scope_personal')}</option>

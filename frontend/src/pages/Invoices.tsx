@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FileText, Search, RefreshCw, CheckCircle, AlertTriangle, Link2, Unlink, Trash2 } from 'lucide-react';
-
+import { useAuthFetch } from '../useApi';
 
 interface Invoice {
   id: number;
@@ -31,6 +31,7 @@ interface Stats {
 
 export default function Invoices() {
   const { t: _t } = useTranslation();
+  const authFetch = useAuthFetch();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [scanning, setScanning] = useState(false);
@@ -41,9 +42,9 @@ export default function Invoices() {
   const load = useCallback(async () => {
     const matchParam = filter === 'all' ? '' : `?matched=${filter === 'matched'}`;
     const [invRes, statsRes, driveRes] = await Promise.all([
-      fetch(`${API}/invoices${matchParam}`),
-      fetch(`${API}/invoices/stats`),
-      fetch(`${API}/drive/status`),
+      authFetch(`${API}/invoices${matchParam}`),
+      authFetch(`${API}/invoices/stats`),
+      authFetch(`${API}/drive/status`),
     ]);
     setInvoices(await invRes.json());
     setStats(await statsRes.json());
@@ -56,7 +57,7 @@ export default function Invoices() {
     setScanning(true);
     setScanResult(null);
     try {
-      const res = await fetch(`${API}/invoices/scan`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+      const res = await authFetch(`${API}/invoices/scan`, { method: 'POST', body: '{}' });
       const data = await res.json();
       setScanResult(data);
       await load();
@@ -66,12 +67,12 @@ export default function Invoices() {
   };
 
   const deleteInvoice = async (id: number) => {
-    await fetch(`${API}/invoices/${id}`, { method: 'DELETE' });
+    await authFetch(`${API}/invoices/${id}`, { method: 'DELETE' });
     await load();
   };
 
   const unmatch = async (id: number) => {
-    await fetch(`${API}/invoices/${id}/unmatch`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    await authFetch(`${API}/invoices/${id}/unmatch`, { method: 'POST', body: '{}' });
     await load();
   };
 
@@ -86,7 +87,7 @@ export default function Invoices() {
         <button
           onClick={scan}
           disabled={scanning || !driveStatus?.connected}
-          className="flex items-center gap-2 px-4 py-2 bg-accent-500 text-white rounded-lg text-sm font-medium disabled:opacity-40"
+          className="flex items-center gap-2 px-4 py-2.5 bg-accent-500 text-white rounded-lg text-sm font-medium disabled:opacity-40 min-h-[44px]"
         >
           <RefreshCw size={16} className={scanning ? 'animate-spin' : ''} />
           {scanning ? 'Scan en cours...' : 'Scanner mes factures'}
@@ -132,7 +133,7 @@ export default function Invoices() {
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+            className={`px-3 py-2.5 rounded-lg text-xs font-medium transition-colors min-h-[44px] ${
               filter === f ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-foreground'
             }`}
           >

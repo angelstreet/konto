@@ -3,3 +3,7 @@ dist/
 *.db
 .env
 tests/e2e/screenshots/
+backend/.env.bak
+backend/.env.local
+backups/
+frontend/.env.local.backup

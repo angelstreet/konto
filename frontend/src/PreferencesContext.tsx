@@ -14,7 +14,8 @@ interface PreferencesContextType {
   loading: boolean;
   refresh: () => void;
   update: (partial: Partial<UserPreferences>) => Promise<void>;
-  formatCurrency: (amount: number, currency?: string) => string;
+  formatCurrency: (amount: number, fromCurrency?: string) => string;
+  convertToDisplay: (amount: number, fromCurrency?: string) => number;
 }
 
 const PreferencesContext = createContext<PreferencesContextType>({
@@ -23,14 +24,15 @@ const PreferencesContext = createContext<PreferencesContextType>({
   refresh: () => {},
   update: async () => {},
   formatCurrency: (n) => `€${n.toFixed(2)}`,
+  convertToDisplay: (n) => n,
 });
 
 export function usePreferences() {
   return useContext(PreferencesContext);
 }
 
-// Exchange rates cache (EUR-based)
-const RATES: Record<string, number> = { EUR: 1, USD: 1.08, CHF: 0.94 };
+// Exchange rates cache (EUR-based: 1 EUR = X units)
+const RATES: Record<string, number> = { EUR: 1, USD: 1.08, GBP: 0.86, CHF: 0.94, CAD: 1.47, JPY: 162, XOF: 655.96 };
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<UserPreferences | null>(null);
@@ -62,20 +64,23 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     setPrefs(data);
   };
 
-  const formatCurrency = useCallback((amount: number, fromCurrency?: string) => {
+  const convertToDisplay = useCallback((amount: number, fromCurrency?: string) => {
     const displayCur = prefs?.display_currency || 'EUR';
-    let converted = amount;
     const from = fromCurrency || 'EUR';
-    if (from !== displayCur) {
-      // Convert: from → EUR → displayCur
-      const inEur = from === 'EUR' ? amount : amount / (RATES[from] || 1);
-      converted = displayCur === 'EUR' ? inEur : inEur * (RATES[displayCur] || 1);
-    }
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: displayCur }).format(converted);
+    if (from === displayCur) return amount;
+    // Convert: from → EUR → displayCur
+    const inEur = from === 'EUR' ? amount : amount / (RATES[from] || 1);
+    return displayCur === 'EUR' ? inEur : inEur * (RATES[displayCur] || 1);
   }, [prefs?.display_currency]);
 
+  const formatCurrency = useCallback((amount: number, fromCurrency?: string) => {
+    const displayCur = prefs?.display_currency || 'EUR';
+    const converted = convertToDisplay(amount, fromCurrency);
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: displayCur }).format(converted);
+  }, [prefs?.display_currency, convertToDisplay]);
+
   return (
-    <PreferencesContext.Provider value={{ prefs, loading, refresh: fetchPrefs, update, formatCurrency }}>
+    <PreferencesContext.Provider value={{ prefs, loading, refresh: fetchPrefs, update, formatCurrency, convertToDisplay }}>
       {children}
     </PreferencesContext.Provider>
   );

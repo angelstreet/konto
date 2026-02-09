@@ -31,7 +31,8 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
   getTokenRef.current = getToken;
 
   const fetchData = useCallback(() => {
-    setLoading(true);
+    if (!url) return;
+    if (!cache.has(url)) setLoading(true);
     getAuthHeaders(getTokenRef.current)
       .then(headers => fetch(url, { headers }))
       .then(r => r.json())
@@ -70,6 +71,27 @@ export async function apiFetch(url: string, options: RequestInit = {}, getToken?
     ...options,
     headers: { ...headers, ...options.headers },
   });
+}
+
+/** Hook that returns an authenticated fetch function. Use in components. */
+export function useAuthFetch() {
+  let getToken: (() => Promise<string | null>) | undefined;
+  if (clerkEnabled) {
+    try {
+      const auth = useAuth();
+      getToken = auth.getToken;
+    } catch {}
+  }
+  const getTokenRef = useRef(getToken);
+  getTokenRef.current = getToken;
+
+  return useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
+    const headers = await getAuthHeaders(getTokenRef.current);
+    return fetch(url, {
+      ...options,
+      headers: { 'Content-Type': 'application/json', ...headers, ...(options.headers as Record<string, string> || {}) },
+    });
+  }, []);
 }
 
 export function invalidateApi(url: string) {
