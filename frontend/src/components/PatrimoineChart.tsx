@@ -10,7 +10,7 @@ function formatCurrency(v: number) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 }
 
-export default function PatrimoineChart() {
+export default function PatrimoineChart({ showNet = true }: { showNet?: boolean }) {
   const { t } = useTranslation();
   const [range, setRange] = useState<string>('6m');
   const [data, setData] = useState<{ date: string; value: number }[]>([]);
@@ -18,11 +18,11 @@ export default function PatrimoineChart() {
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API}/dashboard/history?range=${range}&category=all`)
+    fetch(`${API}/dashboard/history?range=${range}&category=all${showNet ? '' : '&mode=brut'}`)
       .then(r => r.json())
       .then(d => setData(d.history || []))
       .finally(() => setLoading(false));
-  }, [range]);
+  }, [range, showNet]);
 
   const latestValue = data.length > 0 ? data[data.length - 1].value : 0;
   const firstValue = data.length > 0 ? data[0].value : 0;

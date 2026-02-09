@@ -178,7 +178,7 @@ export default function Dashboard() {
           </div>
 
           {/* Patrimoine evolution chart — separate section, self-hides when empty */}
-          <PatrimoineChart />
+          <PatrimoineChart showNet={showNet} />
 
           {/* Patrimoine distribution — collapsible donut */}
           {donutData.length > 0 && (
@@ -196,7 +196,7 @@ export default function Dashboard() {
                 />
               </button>
               <div className={donutOpen ? 'block' : 'hidden'}>
-                <DistributionDonut data={donutData} total={posTotal} hideAmounts={hideAmounts} />
+                <DistributionDonut data={donutData} total={showNet ? netTotal : posTotal} hideAmounts={hideAmounts} showNet={showNet} loans={loans} />
               </div>
             </div>
           )}
