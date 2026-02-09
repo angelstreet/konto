@@ -56,7 +56,7 @@ export default function Dashboard() {
   const { formatCurrency, convertToDisplay } = usePreferences();
   const { data, loading } = useApi<DashboardData>(appendScope(`${API}/dashboard`));
   const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
-  const [donutOpen, setDonutOpen] = useState(false);
+  const [donutOpen, setDonutOpen] = useState(true);
   const [speaking, setSpeaking] = useState(false);
   const fc = (n: number) => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
 
