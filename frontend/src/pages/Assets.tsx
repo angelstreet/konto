@@ -822,7 +822,7 @@ export default function Assets() {
         </div>
       )}
       {/* Kozy Properties Section */}
-      {prefs?.kozy_enabled && kozyProperties.length > 0 && (
+      {!!prefs?.kozy_enabled && kozyProperties.length > 0 && (
         <div className="mt-6">
           <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3 flex items-center gap-2">
             <Home size={14} /> {t('kozy_properties')}
