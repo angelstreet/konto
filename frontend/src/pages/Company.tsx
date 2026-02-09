@@ -551,12 +551,14 @@ export default function CompanyPage() {
                 <div className="hidden md:flex items-start justify-between mb-3">
                   <div>
                     <h3 className="font-semibold text-lg">{cleanName(c.name)}</h3>
-                    <div className="flex items-center gap-3 mt-1 text-xs text-muted">
-                      {c.legal_form && <span className="px-2 py-0.5 rounded bg-white/5">{abbreviateLegalForm(c.legal_form)}</span>}
-                      {c.siren && <span className="font-mono">SIREN: {c.siren}</span>}
-                      {c.capital && <span>Capital: {allAmountsHidden ? <span className="amount-masked">{formatBalance(c.capital)}</span> : formatBalance(c.capital)}</span>}
-                    </div>
-                    {c.address && <p className="text-xs text-muted mt-1">{c.address}</p>}
+                    <p className="mt-1 text-xs text-muted truncate">
+                      {[
+                        c.legal_form && abbreviateLegalForm(c.legal_form),
+                        c.siren && `SIREN: ${c.siren}`,
+                        c.capital && `Capital: ${allAmountsHidden ? '••••' : formatBalance(c.capital)}`,
+                        c.address,
+                      ].filter(Boolean).join(' - ')}
+                    </p>
                   </div>
                   <CompanyOverflowMenu
                     onDetails={() => toggleViewDetails(c)}
