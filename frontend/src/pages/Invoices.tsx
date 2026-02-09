@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileText, Search, RefreshCw, CheckCircle, AlertTriangle, Link2, Unlink, Trash2, CloudOff } from 'lucide-react';
+import { Search, RefreshCw, CheckCircle, AlertTriangle, Link2, Unlink, Trash2, CloudOff } from 'lucide-react';
 import { useAuthFetch } from '../useApi';
 
 interface Invoice {
@@ -80,17 +80,15 @@ export default function Invoices() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-xl font-semibold flex items-center gap-2">
-          <FileText size={22} /> Justificatifs
-        </h1>
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <h1 className="text-xl font-semibold whitespace-nowrap">Justificatifs</h1>
         <button
           onClick={scan}
           disabled={scanning || !driveStatus?.connected}
-          className="flex items-center gap-2 px-4 py-2.5 bg-accent-500 text-white rounded-lg text-sm font-medium disabled:opacity-40 min-h-[44px]"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-500 text-white rounded-lg text-xs font-medium disabled:opacity-40 flex-shrink-0"
         >
-          <RefreshCw size={16} className={scanning ? 'animate-spin' : ''} />
-          {scanning ? 'Scan en cours...' : <><span className="hidden md:inline">Scanner mes factures</span><span className="md:hidden">Scanner</span></>}
+          <RefreshCw size={14} className={scanning ? 'animate-spin' : ''} />
+          {scanning ? 'Scan...' : 'Scanner'}
         </button>
       </div>
 
