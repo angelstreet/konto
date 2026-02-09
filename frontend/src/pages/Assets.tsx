@@ -268,7 +268,7 @@ export default function Assets() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-2 mb-3">
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <div className="flex items-center gap-2 min-w-0">
           {assetList.length > 0 && (
             <button

@@ -120,7 +120,7 @@ export default function Dashboard() {
   return (
     <div>
       {/* Title row: Title+Eye LEFT, actions RIGHT */}
-      <div className="flex items-center justify-between gap-2 mb-2">
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <div className="flex items-center gap-1 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_dashboard')}</h1>
           <button

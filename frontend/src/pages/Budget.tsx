@@ -67,7 +67,7 @@ export default function Budget() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2">
+      <div className="flex items-center justify-between mb-2 h-10">
         <h1 className="text-xl font-semibold">{t('nav_budget') || 'Budget'}</h1>
         <div className="flex items-center gap-2">
           <ScopeSelect />
