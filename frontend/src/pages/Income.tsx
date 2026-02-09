@@ -2,7 +2,8 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Plus, Trash2, Edit3, X, Check, TrendingUp, ChevronDown, ArrowLeft, Eye, EyeOff } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Check, TrendingUp, ChevronDown, ArrowLeft } from 'lucide-react';
+import EyeToggle from '../components/EyeToggle';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
@@ -119,13 +120,7 @@ export default function Income() {
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_income')}</h1>
         </div>
-        <button
-          onClick={toggleHideAmounts}
-          className="text-muted hover:text-white transition-colors p-2 flex-shrink-0"
-          title={hideAmounts ? 'Afficher les montants' : 'Masquer les montants'}
-        >
-          {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
-        </button>
+        <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
       </div>
 
       {/* ===== SECTION 1: Income Tracking ===== */}

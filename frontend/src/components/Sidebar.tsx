@@ -10,7 +10,6 @@ import {
   Building2,
   Home,
   ArrowLeftRight,
-  BarChart3,
   BookOpen,
   Receipt,
   Calculator,
@@ -95,7 +94,7 @@ const navGroups: NavGroup[] = [
         icon: Briefcase,
         children: [
           { kind: 'leaf', path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
-          { kind: 'leaf', path: '/analysis', icon: BarChart3, labelKey: 'nav_analysis' },
+          { kind: 'leaf', path: '/analysis', icon: Wallet, labelKey: 'nav_analysis' },
           { kind: 'leaf', path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
           { kind: 'leaf', path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
         ],

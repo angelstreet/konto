@@ -1,89 +1,83 @@
 import { API } from '../config';
-import { useState, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useApi, useAuthFetch } from '../useApi';
+import { useAuthFetch } from '../useApi';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { RefreshCw, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, ArrowLeft } from 'lucide-react';
+import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useFilter } from '../FilterContext';
-import ScopeSelect from '../components/ScopeSelect';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
+import { useFilter } from '../FilterContext';
+import ScopeSelect from '../components/ScopeSelect';
 
+const CATEGORY_COLORS: Record<string, string> = {
+  'Alimentation': '#22c55e',
+  'Transport': '#3b82f6',
+  'Logement': '#a855f7',
+  'Santé': '#ec4899',
+  'Loisirs': '#eab308',
+  'Factures': '#f97316',
+  'Virements': '#6366f1',
+  'Autre': '#6b7280',
+};
 
-const COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#22c55e', '#ec4899', '#6b7280'];
+const RANGES = [
+  { key: 'all', label: 'Tout', days: 0 },
+  { key: '1m', label: '1M', days: 30 },
+  { key: '3m', label: '3M', days: 90 },
+  { key: '1y', label: '1A', days: 365 },
+] as const;
 
-interface AnalyticsData {
+function formatCurrency(v: number) {
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+}
+
+function getColor(cat: string) {
+  return CATEGORY_COLORS[cat] || `hsl(${Math.abs(cat.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360}, 60%, 50%)`;
+}
+
+interface CashflowData {
   totalIncome: number;
-  totalExpenses: number;
-  savingsRate: number;
-  topCategories: { category: string; amount: number; percentage: number }[];
-  recurring: { label: string; avgAmount: number; months: number }[];
-  trends: { period: string; income: number; expenses: number }[];
-  mom: { income: number; expenses: number };
-  yoy: { income: number; expenses: number; incomeChange: number; expensesChange: number };
-  computed_at: string;
-  cached: boolean;
-}
-
-function fmt(n: number) {
-  return n.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
-function monthLabel(period: string) {
-  const [y, m] = period.split('-');
-  const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
-  return `${months[parseInt(m) - 1]} ${y.slice(2)}`;
+  totalExpense: number;
+  net: number;
+  byCategory: Record<string, { income: number; expense: number; count: number }>;
+  byMonth: { month: string; income: number; expense: number }[];
 }
 
 export default function Analytics() {
-  const { t } = useTranslation();
   const navigate = useNavigate();
+  const { t } = useTranslation();
   const authFetch = useAuthFetch();
-  const now = new Date();
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const period = `${year}-${String(month).padStart(2, '0')}`;
-
-  const { appendScope } = useFilter();
+  const { scope, appendScope } = useFilter();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const mask = (v: string) => hideAmounts ? '••••' : v;
-  const { data, loading, refetch } = useApi<AnalyticsData>(appendScope(`${API}/analytics?period=${period}`));
-  const [refreshing, setRefreshing] = useState(false);
+  const [range, setRange] = useState('3m');
+  const [data, setData] = useState<CashflowData | null>(null);
+  const [loading, setLoading] = useState(true);
 
-  const prev = () => {
-    if (month === 1) { setYear(y => y - 1); setMonth(12); }
-    else setMonth(m => m - 1);
-  };
-  const next = () => {
-    if (month === 12) { setYear(y => y + 1); setMonth(1); }
-    else setMonth(m => m + 1);
-  };
+  useEffect(() => {
+    setLoading(true);
+    const r = RANGES.find(r => r.key === range);
+    const days = (r?.days || 90) as number;
+    const from = days === 0
+      ? '2020-01-01'
+      : new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+    const to = new Date().toISOString().split('T')[0];
+    authFetch(appendScope(`${API}/budget/cashflow?from=${from}&to=${to}`))
+      .then(r => r.json())
+      .then(d => setData(d))
+      .finally(() => setLoading(false));
+  }, [range, scope, appendScope]);
 
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await authFetch(`${API}/analytics/recompute`, {
-        method: 'POST',
-        body: JSON.stringify({ period }),
-      });
-      refetch();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [period, refetch]);
-
-  const moisFr = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
-
-  if (loading && !data) return <div className="p-6 text-muted">Chargement...</div>;
-
-  const d = data!;
-
-  const savingsColor = d.savingsRate >= 20 ? 'text-green-400' : d.savingsRate >= 0 ? 'text-yellow-400' : 'text-red-400';
+  const expenseCategories = data
+    ? Object.entries(data.byCategory)
+        .filter(([_, v]) => v.expense > 0)
+        .map(([cat, v]) => ({ name: cat, value: v.expense }))
+        .sort((a, b) => b.value - a.value)
+    : [];
 
   return (
-    <div className="space-y-3 max-w-6xl overflow-x-hidden">
-      {/* Header */}
+    <div>
       <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <div className="flex items-center gap-2 min-w-0">
           <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
@@ -91,138 +85,170 @@ export default function Analytics() {
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_analysis')}</h1>
         </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
+        <div className="flex items-center gap-2">
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           <ScopeSelect />
-          <button onClick={handleRefresh} disabled={refreshing} className="hidden sm:block p-2 rounded-lg text-muted hover:text-accent-400 hover:bg-surface-hover disabled:opacity-50">
-            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-          </button>
-        </div>
-      </div>
-
-      {/* Month navigation */}
-      <div className="flex items-center justify-center gap-3">
-        <button onClick={prev} className="p-2 rounded-lg text-muted hover:text-white hover:bg-surface-hover"><ChevronLeft size={16} /></button>
-        <span className="text-sm text-white font-medium min-w-[120px] text-center">{moisFr[month - 1]} {year}</span>
-        <button onClick={next} className="p-2 rounded-lg text-muted hover:text-white hover:bg-surface-hover"><ChevronRight size={16} /></button>
-      </div>
-
-      {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card label="Revenus" value={`${fmt(d.totalIncome)} €`} icon={<TrendingUp size={18} />} color="text-green-400" sub={d.mom.income !== 0 ? `${d.mom.income > 0 ? '+' : ''}${d.mom.income}% vs mois préc.` : undefined} />
-        <Card label="Dépenses" value={`${fmt(d.totalExpenses)} €`} icon={<TrendingDown size={18} />} color="text-red-400" sub={d.mom.expenses !== 0 ? `${d.mom.expenses > 0 ? '+' : ''}${d.mom.expenses}% vs mois préc.` : undefined} />
-        <Card label="Épargne" value={`${fmt(d.totalIncome - d.totalExpenses)} €`} icon={<TrendingUp size={18} />} color="text-blue-400" />
-        <Card label="Taux d'épargne" value={`${d.savingsRate}%`} icon={<TrendingUp size={18} />} color={savingsColor} />
-      </div>
-
-      {/* YoY comparison */}
-      {(d.yoy.income > 0 || d.yoy.expenses > 0) && (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="bg-surface rounded-xl p-3 border border-border">
-            <p className="text-xs text-muted mb-1">Revenus vs même mois N-1</p>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-white">{fmt(d.yoy.income)} €</span>
-              {d.yoy.incomeChange !== 0 && (
-                <span className={`text-xs flex items-center gap-0.5 ${d.yoy.incomeChange > 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {d.yoy.incomeChange > 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-                  {Math.abs(d.yoy.incomeChange)}%
-                </span>
-              )}
-            </div>
-          </div>
-          <div className="bg-surface rounded-xl p-3 border border-border">
-            <p className="text-xs text-muted mb-1">Dépenses vs même mois N-1</p>
-            <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-white">{fmt(d.yoy.expenses)} €</span>
-              {d.yoy.expensesChange !== 0 && (
-                <span className={`text-xs flex items-center gap-0.5 ${d.yoy.expensesChange < 0 ? 'text-green-400' : 'text-red-400'}`}>
-                  {d.yoy.expensesChange > 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
-                  {Math.abs(d.yoy.expensesChange)}%
-                </span>
-              )}
-            </div>
+          <div className="flex gap-1">
+          {RANGES.map(r => (
+            <button
+              key={r.key}
+              onClick={() => setRange(r.key)}
+              className={`px-3 py-2 text-xs rounded-md font-medium transition-colors min-h-[44px] min-w-[44px] ${
+                range === r.key ? 'bg-accent-500/20 text-accent-400' : 'text-muted hover:text-white hover:bg-surface-hover'
+              }`}
+            >
+              {r.label}
+            </button>
+          ))}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* Charts row */}
-      <div className="grid lg:grid-cols-2 gap-2.5">
-        {/* Spending trends bar chart */}
-        <div className="bg-surface rounded-xl p-3 border border-border">
-          <h3 className="text-sm font-semibold text-white mb-3">Tendances (6 mois)</h3>
-          {d.trends.length > 0 ? (
-            <ResponsiveContainer width="100%" height={220}>
-              <BarChart data={d.trends.map(t => ({ ...t, label: monthLabel(t.period) }))}>
-                <XAxis dataKey="label" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(v: any) => `${fmt(v)} €`} contentStyle={{ background: '#1f2937', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }} />
-                <Bar dataKey="income" name="Revenus" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="expenses" name="Dépenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          ) : (
-            <p className="text-muted text-sm">Aucune donnée</p>
-          )}
+      {loading ? (
+        <div className="text-center text-muted py-8">Chargement...</div>
+      ) : !data || (data.totalIncome === 0 && data.totalExpense === 0) ? (
+        <div className="bg-surface rounded-xl border border-border p-8 text-center text-muted">
+          <p className="text-lg mb-2">Aucune transaction sur cette période</p>
+          <p className="text-sm">Synchronisez vos comptes pour voir votre budget.</p>
         </div>
+      ) : (
+        <>
+          {/* Summary cards */}
+          <div className="grid grid-cols-3 gap-3 mb-2">
+            <div className="bg-surface rounded-xl border border-border p-3 text-center">
+              <p className="text-xs text-muted mb-1">Entrées</p>
+              <p className="text-lg font-bold text-green-400">{mask(formatCurrency(data.totalIncome))}</p>
+            </div>
+            <div className="bg-surface rounded-xl border border-border p-3 text-center">
+              <p className="text-xs text-muted mb-1">Sorties</p>
+              <p className="text-lg font-bold text-red-400">{mask(formatCurrency(data.totalExpense))}</p>
+            </div>
+            <div className="bg-surface rounded-xl border border-border p-3 text-center">
+              <p className="text-xs text-muted mb-1">Solde</p>
+              <p className={`text-lg font-bold ${data.net >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {mask(formatCurrency(data.net))}
+              </p>
+            </div>
+          </div>
 
-        {/* Top categories donut */}
-        <div className="bg-surface rounded-xl p-3 border border-border">
-          <h3 className="text-sm font-semibold text-white mb-3">Top catégories de dépenses</h3>
-          {d.topCategories.length > 0 ? (
-            <div className="flex items-center gap-4">
-              <ResponsiveContainer width="50%" height={200}>
-                <PieChart>
-                  <Pie data={d.topCategories} dataKey="amount" nameKey="category" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2}>
-                    {d.topCategories.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
-                  </Pie>
-                  <Tooltip formatter={(v: any) => `${fmt(v)} €`} contentStyle={{ background: '#1f2937', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }} />
-                </PieChart>
+          {/* Monthly cashflow bar chart */}
+          {data.byMonth.length > 0 && (
+            <div className="bg-surface rounded-xl border border-border p-3 mb-2">
+              <h3 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">Cashflow mensuel</h3>
+              <ResponsiveContainer width="100%" height={220}>
+                <BarChart data={data.byMonth} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
+                  <XAxis
+                    dataKey="month"
+                    tickFormatter={(m: string) => {
+                      const [y, mo] = m.split('-');
+                      return `${mo}/${y.slice(2)}`;
+                    }}
+                    tick={{ fontSize: 10, fill: '#888' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis
+                    tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
+                    tick={{ fontSize: 10, fill: '#888' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={40}
+                  />
+                  <Tooltip
+                    formatter={(value: any, name: any) => [formatCurrency(value as number), name === 'income' ? 'Entrées' : 'Sorties']}
+                    contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+                  />
+                  <Bar dataKey="income" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                </BarChart>
               </ResponsiveContainer>
-              <div className="flex-1 space-y-1.5">
-                {d.topCategories.map((cat, i) => (
-                  <div key={i} className="flex items-center gap-2 text-xs">
-                    <div className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ background: COLORS[i % COLORS.length] }} />
-                    <span className="text-muted truncate flex-1">{cat.category}</span>
-                    <span className="text-white font-medium">{cat.percentage}%</span>
+            </div>
+          )}
+
+          {/* Expense distribution donut */}
+          {expenseCategories.length > 0 && (
+            <div className="bg-surface rounded-xl border border-border p-3 mb-2">
+              <h3 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">Répartition des dépenses</h3>
+              <div className="flex items-center gap-4">
+                <div className="w-40 h-40 relative">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={expenseCategories}
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={45}
+                        outerRadius={65}
+                        dataKey="value"
+                        nameKey="name"
+                        stroke="none"
+                      >
+                        {expenseCategories.map((entry) => (
+                          <Cell key={entry.name} fill={getColor(entry.name)} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: any) => [formatCurrency(value as number)]}
+                        contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+                      />
+                    </PieChart>
+                  </ResponsiveContainer>
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <span className="text-xs font-bold text-red-400">{mask(formatCurrency(data.totalExpense))}</span>
                   </div>
-                ))}
+                </div>
+                <div className="flex-1 space-y-1.5">
+                  {expenseCategories.slice(0, 8).map(cat => {
+                    const pct = data.totalExpense > 0 ? (cat.value / data.totalExpense) * 100 : 0;
+                    return (
+                      <div key={cat.name} className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: getColor(cat.name) }} />
+                          <span className="text-muted truncate max-w-[120px]">{cat.name}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-muted">{pct.toFixed(1)}%</span>
+                          <span className="font-medium">{mask(formatCurrency(cat.value))}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </div>
-          ) : (
-            <p className="text-muted text-sm">Aucune dépense</p>
           )}
-        </div>
-      </div>
 
-      {/* Recurring expenses */}
-      {d.recurring.length > 0 && (
-        <div className="bg-surface rounded-xl p-3 border border-border">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-semibold text-white">Dépenses récurrentes</h3>
-            <span className="text-sm font-bold text-orange-400">{fmt(d.recurring.reduce((s, r) => s + r.avgAmount, 0))} € /mois</span>
-          </div>
-          <div className="space-y-2">
-            {d.recurring.map((r, i) => (
-              <div key={i} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
-                <span className="text-sm text-muted truncate flex-1">{r.label}</span>
-                <span className="text-sm text-white font-medium">{fmt(r.avgAmount)} €</span>
+          {/* Category breakdown table */}
+          <div className="bg-surface rounded-xl border border-border divide-y divide-border">
+            <div className="px-4 py-2 flex items-center justify-between text-xs text-muted font-medium uppercase">
+              <span>Catégorie</span>
+              <div className="flex gap-3">
+                <span className="w-20 text-right">Entrées</span>
+                <span className="w-20 text-right">Sorties</span>
               </div>
-            ))}
+            </div>
+            {Object.entries(data.byCategory)
+              .sort(([, a], [, b]) => b.expense - a.expense)
+              .map(([cat, vals]) => (
+                <div key={cat} className="px-4 py-2.5 flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: getColor(cat) }} />
+                    <span className="text-sm">{cat}</span>
+                    <span className="text-xs text-muted">({vals.count})</span>
+                  </div>
+                  <div className="flex gap-3">
+                    <span className="w-20 text-right text-sm text-green-400">
+                      {vals.income > 0 ? mask(formatCurrency(vals.income)) : '–'}
+                    </span>
+                    <span className="w-20 text-right text-sm text-red-400">
+                      {vals.expense > 0 ? mask(formatCurrency(vals.expense)) : '–'}
+                    </span>
+                  </div>
+                </div>
+              ))}
           </div>
-        </div>
+        </>
       )}
-    </div>
-  );
-}
-
-function Card({ label, value, icon, color, sub }: { label: string; value: string; icon: React.ReactNode; color: string; sub?: string }) {
-  return (
-    <div className="bg-surface rounded-xl p-3 border border-border">
-      <div className="flex items-center gap-2 mb-1">
-        <span className={color}>{icon}</span>
-        <span className="text-xs text-muted">{label}</span>
-      </div>
-      <p className={`text-lg font-bold ${color}`}>{value}</p>
-      {sub && <p className="text-[10px] text-muted mt-0.5">{sub}</p>}
     </div>
   );
 }
