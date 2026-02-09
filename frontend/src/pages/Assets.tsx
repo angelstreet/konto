@@ -613,34 +613,41 @@ export default function Assets() {
             const netCashflow = a.monthly_revenues - a.monthly_costs;
             return (
               <div key={a.id} className="bg-surface rounded-xl border border-border overflow-hidden">
-                {/* Main card — 2 lines on mobile, 3 on desktop, tap to expand */}
+                {/* Main card — 2 lines on both mobile and desktop, tap to expand */}
                 <div className="px-4 py-3 cursor-pointer hover:bg-surface-hover transition-colors"
                   onClick={() => setExpandedId(expanded ? null : a.id)}>
-                  {/* Line 1: Name + tag + chevron */}
+                  {/* Line 1: Icon + Name + Value + Change% ... Company badge + chevron */}
                   <div className="flex items-center gap-2">
                     {/* Desktop only: icon */}
-                    <div className="hidden md:flex w-10 h-10 rounded-lg bg-accent-500/10 items-center justify-center flex-shrink-0">
-                      <Icon size={18} className="text-accent-400" />
+                    <div className="hidden md:flex w-8 h-8 rounded-lg bg-accent-500/10 items-center justify-center flex-shrink-0">
+                      <Icon size={16} className="text-accent-400" />
                     </div>
-                    <p className="text-sm font-medium text-white truncate flex-1 min-w-0">{a.name}</p>
-                    {a.usage === 'professional' && a.company_id ? (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400 flex-shrink-0 whitespace-nowrap">
-                        {companies.find(c => c.id === a.company_id)?.name || t('scope_pro')}
-                      </span>
-                    ) : (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-muted flex-shrink-0">
-                        {t('scope_personal')}
-                      </span>
-                    )}
-                    <ChevronDown size={14} className={`text-muted flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
-                  </div>
-                  {/* Line 2: Acquisition + gain + gain% */}
-                  <div className="md:ml-[52px] mt-1 flex items-center gap-2">
-                    <span className="text-sm font-semibold text-accent-400">
+                    <p className="text-sm font-medium text-white truncate min-w-0">{a.name}</p>
+                    <span className="text-sm font-semibold text-accent-400 flex-shrink-0">
                       {hideAmounts ? <span className="amount-masked">{fmtCompact(a.purchase_price || a.current_value || 0)}</span> : fmtCompact(a.purchase_price || a.current_value || 0)}
                     </span>
                     {a.pnl != null && (
-                      <span className={`text-xs font-medium ${a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      <span className={`hidden md:inline text-xs font-medium flex-shrink-0 ${a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {hideAmounts ? (
+                          <span className="amount-masked">{fmtPct(a.pnl_percent!)}</span>
+                        ) : (
+                          fmtPct(a.pnl_percent!)
+                        )}
+                      </span>
+                    )}
+                    <span className="flex-1" />
+                    {a.usage === 'professional' && a.company_id ? (
+                      <span className="hidden md:inline px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400 flex-shrink-0 whitespace-nowrap">
+                        {companies.find(c => c.id === a.company_id)?.name || t('scope_pro')}
+                      </span>
+                    ) : null}
+                    <ChevronDown size={14} className={`text-muted flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+                  </div>
+                  {/* Line 2: Mobile: pnl | Desktop: loan badge + linked account */}
+                  <div className="md:ml-[40px] mt-1 flex items-center gap-1.5 text-xs text-muted">
+                    {/* Mobile only: pnl */}
+                    {a.pnl != null && (
+                      <span className={`md:hidden text-xs font-medium ${a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                         {hideAmounts ? (
                           <span className="amount-masked">{a.pnl >= 0 ? '+' : ''}{fmtCompact(a.pnl)} ({fmtPct(a.pnl_percent!)})</span>
                         ) : (
@@ -648,24 +655,22 @@ export default function Assets() {
                         )}
                       </span>
                     )}
-                  </div>
-                  {/* Line 3: Desktop only — rent/loan/cashflow */}
-                  <div className="hidden md:flex md:ml-[52px] mt-1 items-center gap-1.5 text-xs text-muted">
+                    {/* Desktop: usage badge + loan + cashflow */}
                     {a.type === 'real_estate' && a.property_usage && (
-                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                      <span className={`hidden md:inline px-1.5 py-0.5 rounded text-[10px] font-medium ${
                         a.property_usage === 'principal' ? 'bg-blue-500/20 text-blue-400' :
                         a.property_usage === 'rented_long' ? 'bg-green-500/20 text-green-400' :
                         a.property_usage === 'rented_short' ? 'bg-amber-500/20 text-amber-400' :
                         'bg-white/5 text-muted'
                       }`}>
                         {a.property_usage === 'principal' ? '🏠' : a.property_usage === 'rented_long' ? '🔑' : a.property_usage === 'rented_short' ? '🏖️' : '📦'}
-                        {a.property_usage === 'rented_long' && a.monthly_rent ? ` ${fmt(a.monthly_rent)}/mois` : ''}
+                        {a.property_usage === 'rented_long' && a.monthly_rent ? ` ${fmtCompact(a.monthly_rent)}/m` : ''}
                       </span>
                     )}
-                    {a.loan_name && <span className="truncate">🔗 {a.loan_name}</span>}
+                    {a.loan_name && <span className="hidden md:inline truncate">🔗 {a.loan_name}</span>}
                     {netCashflow !== 0 && (
-                      <span className={`font-medium ${netCashflow >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {netCashflow >= 0 ? '+' : ''}{fmt(netCashflow)}/m
+                      <span className={`hidden md:inline font-medium ${netCashflow >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {netCashflow >= 0 ? '+' : ''}{fmtCompact(netCashflow)}/m
                       </span>
                     )}
                   </div>
