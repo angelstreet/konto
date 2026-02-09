@@ -22,6 +22,7 @@ const CATEGORY_COLORS: Record<string, string> = {
 };
 
 const RANGES = [
+  { key: 'all', label: 'Tout', days: 0 },
   { key: '1m', label: '1M', days: 30 },
   { key: '3m', label: '3M', days: 90 },
   { key: '1y', label: '1A', days: 365 },
@@ -56,8 +57,10 @@ export default function Budget() {
 
   useEffect(() => {
     setLoading(true);
-    const days = RANGES.find(r => r.key === range)?.days || 90;
-    const from = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
+    const days = RANGES.find(r => r.key === range)?.days ?? 90;
+    const from = days === 0
+      ? '2020-01-01'
+      : new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
     const to = new Date().toISOString().split('T')[0];
     authFetch(appendScope(`${API}/budget/cashflow?from=${from}&to=${to}`))
       .then(r => r.json())
