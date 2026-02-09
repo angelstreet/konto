@@ -18,11 +18,11 @@ export default function PatrimoineChart({ showNet = true }: { showNet?: boolean 
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API}/dashboard/history?range=${range}&category=all${showNet ? '' : '&mode=brut'}`)
+    fetch(`${API}/dashboard/history?range=${range}&category=all`)
       .then(r => r.json())
       .then(d => setData(d.history || []))
       .finally(() => setLoading(false));
-  }, [range, showNet]);
+  }, [range]);
 
   const latestValue = data.length > 0 ? data[data.length - 1].value : 0;
   const firstValue = data.length > 0 ? data[0].value : 0;
@@ -35,7 +35,7 @@ export default function PatrimoineChart({ showNet = true }: { showNet?: boolean 
     <div className="bg-surface rounded-xl border border-border p-4 mb-4">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-sm font-medium text-muted tracking-wide">{t('patrimoine_evolution') || 'Évolution du patrimoine'}</h3>
+          <h3 className="text-sm font-medium text-muted tracking-wide">{t('patrimoine_evolution') || 'Évolution du patrimoine'}{!showNet ? ` (${t('balance_brut') || 'brut'})` : ''}</h3>
           {data.length > 0 && (
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-lg font-bold text-accent-400">{formatCurrency(latestValue)}</span>
