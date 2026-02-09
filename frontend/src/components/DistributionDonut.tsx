@@ -1,5 +1,3 @@
-import { useState } from 'react';
-import { ChevronRight } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 const COLORS: Record<string, string> = {
@@ -36,23 +34,12 @@ interface Props {
 
 export default function DistributionDonut({ data, total, hideAmounts }: Props) {
   const positiveData = data.filter(d => d.value > 0);
-  const [expanded, setExpanded] = useState(false);
   if (positiveData.length === 0) return null;
   const fc = (n: number): React.ReactNode => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
 
   return (
     <div className="bg-surface rounded-xl border border-border p-4 mb-4">
-      {/* Mobile: collapsible header */}
-      <button
-        onClick={() => setExpanded(e => !e)}
-        className="w-full flex items-center justify-between md:hidden"
-      >
-        <h3 className="text-sm font-medium text-muted uppercase tracking-wide">Répartition du patrimoine</h3>
-        <ChevronRight size={14} className={`text-muted transition-transform ${expanded ? 'rotate-90' : ''}`} />
-      </button>
-      {/* Desktop: always-visible header */}
-      <h3 className="text-sm font-medium text-muted uppercase tracking-wide mb-3 hidden md:block">Répartition du patrimoine</h3>
-      <div className={`${expanded ? 'block' : 'hidden'} md:block mt-3 md:mt-0`}>
+      <div>
       <div className="flex flex-col sm:flex-row items-center gap-4">
         <div className="w-40 h-40 relative flex-shrink-0">
           <ResponsiveContainer width="100%" height="100%">
