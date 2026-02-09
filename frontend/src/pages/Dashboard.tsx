@@ -178,7 +178,7 @@ export default function Dashboard() {
                 onClick={() => setDonutOpen(o => !o)}
                 className="w-full flex items-center justify-between py-2 group"
               >
-                <h2 className="text-sm font-medium text-muted uppercase tracking-wide">
+                <h2 className="text-sm font-medium text-muted tracking-wide">
                   {t('patrimoine_distribution')}
                 </h2>
                 <ChevronDown
