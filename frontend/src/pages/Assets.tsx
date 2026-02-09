@@ -261,23 +261,21 @@ export default function Assets() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
-        <div className="flex items-center gap-2 min-w-0">
-          <h1 className="text-lg sm:text-xl font-semibold whitespace-nowrap">{t('nav_assets')}</h1>
-          {assetList.length > 0 ? (
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <h1 className="text-lg sm:text-xl font-semibold whitespace-nowrap truncate">{t('nav_assets')}</h1>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <ScopeSelect />
+          {assetList.length > 0 && (
             <button
               onClick={() => setHideAmounts(h => !h)}
-              className="text-muted hover:text-white transition-colors p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center"
+              className="text-muted hover:text-white transition-colors p-2"
               title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
             >
               {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
-          ) : null}
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
-          <ScopeSelect />
-          <button onClick={() => startCreate()} className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black">
-            <Plus size={16} /> {t('add_asset')}
+          )}
+          <button onClick={() => startCreate()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black">
+            <Plus size={16} /> <span className="hidden sm:inline">{t('add_asset')}</span>
           </button>
         </div>
       </div>
@@ -555,63 +553,63 @@ export default function Assets() {
             const netCashflow = a.monthly_revenues - a.monthly_costs;
             return (
               <div key={a.id} className="bg-surface rounded-xl border border-border overflow-hidden">
-                {/* Main card */}
+                {/* Main card — 3 lines max on mobile, tap to expand */}
                 <div className="px-4 py-3 cursor-pointer hover:bg-surface-hover transition-colors"
                   onClick={() => setExpandedId(expanded ? null : a.id)}>
+                  {/* Line 1: Name */}
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-lg bg-accent-500/10 flex items-center justify-center flex-shrink-0">
-                      <Icon size={20} className="text-accent-400" />
+                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-accent-500/10 flex items-center justify-center flex-shrink-0">
+                      <Icon size={18} className="text-accent-400" />
                     </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-white truncate">{a.name}</p>
-                      <div className="flex items-center gap-1.5 text-xs text-muted flex-wrap">
-                        {a.usage === 'professional' && a.company_id ? (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400">
-                            {companies.find(c => c.id === a.company_id)?.name || t('scope_pro')}
-                          </span>
-                        ) : (
-                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-muted">
-                            {t('scope_personal')}
-                          </span>
-                        )}
-                        {a.type === 'real_estate' && a.property_usage && (
-                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                            a.property_usage === 'principal' ? 'bg-blue-500/20 text-blue-400' :
-                            a.property_usage === 'rented_long' ? 'bg-green-500/20 text-green-400' :
-                            a.property_usage === 'rented_short' ? 'bg-amber-500/20 text-amber-400' :
-                            'bg-white/5 text-muted'
-                          }`}>
-                            {a.property_usage === 'principal' ? '🏠' : a.property_usage === 'rented_long' ? '🔑' : a.property_usage === 'rented_short' ? '🏖️' : '📦'}
-                            {a.property_usage === 'rented_long' && a.monthly_rent ? ` ${fmt(a.monthly_rent)}/mois` : ''}
-                          </span>
-                        )}
-                        {a.purchase_date && <span>{t('purchased')} {a.purchase_date}</span>}
-                        {a.loan_name && <span>🔗 {a.loan_name}</span>}
-                      </div>
-                    </div>
+                    <p className="text-sm font-medium text-white truncate flex-1 min-w-0">{a.name}</p>
                     <ChevronDown size={14} className={`text-muted flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
                   </div>
-                  <div className="flex items-center justify-between mt-2 ml-[52px]">
-                    <div>
-                      <span className="text-sm font-semibold text-accent-400">
-                        {f(a.current_value || a.purchase_price || 0)}
+                  {/* Line 2: Value + PnL */}
+                  <div className="ml-11 sm:ml-[52px] mt-1">
+                    <span className="text-sm font-semibold text-accent-400">
+                      {f(a.current_value || a.purchase_price || 0)}
+                    </span>
+                    {a.pnl != null && (
+                      <span className={`text-xs font-medium ml-2 ${a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {a.pnl >= 0 ? '+' : ''}{f(a.pnl)} ({fmtPct(a.pnl_percent!)})
                       </span>
-                      {a.pnl != null && (
-                        <span className={`text-xs font-medium ml-2 ${a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                          {a.pnl >= 0 ? '+' : ''}{f(a.pnl)} ({fmtPct(a.pnl_percent!)})
-                        </span>
-                      )}
-                    </div>
-                    <div className="flex gap-0">
-                      <button onClick={e => { e.stopPropagation(); startEdit(a); }} className="p-2.5 text-muted hover:text-white min-w-[44px] min-h-[44px] flex items-center justify-center"><Pencil size={14} /></button>
-                      <button onClick={e => { e.stopPropagation(); deleteAsset(a.id); }} className="p-2.5 text-muted hover:text-red-400 min-w-[44px] min-h-[44px] flex items-center justify-center"><Trash2 size={14} /></button>
-                    </div>
+                    )}
+                  </div>
+                  {/* Line 3: Usage badge + rent/loan */}
+                  <div className="ml-11 sm:ml-[52px] mt-1 flex items-center gap-1.5 text-xs text-muted">
+                    {a.usage === 'professional' && a.company_id ? (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400">
+                        {companies.find(c => c.id === a.company_id)?.name || t('scope_pro')}
+                      </span>
+                    ) : (
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-muted">
+                        {t('scope_personal')}
+                      </span>
+                    )}
+                    {a.type === 'real_estate' && a.property_usage && (
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                        a.property_usage === 'principal' ? 'bg-blue-500/20 text-blue-400' :
+                        a.property_usage === 'rented_long' ? 'bg-green-500/20 text-green-400' :
+                        a.property_usage === 'rented_short' ? 'bg-amber-500/20 text-amber-400' :
+                        'bg-white/5 text-muted'
+                      }`}>
+                        {a.property_usage === 'principal' ? '🏠' : a.property_usage === 'rented_long' ? '🔑' : a.property_usage === 'rented_short' ? '🏖️' : '📦'}
+                        {a.property_usage === 'rented_long' && a.monthly_rent ? ` ${fmt(a.monthly_rent)}/mois` : ''}
+                      </span>
+                    )}
+                    {a.loan_name && <span className="truncate">🔗 {a.loan_name}</span>}
                   </div>
                 </div>
 
                 {/* Expanded details */}
                 {expanded && (
                   <div className="px-4 pb-4 border-t border-border/50 pt-3">
+                    {/* Action buttons */}
+                    <div className="flex gap-2 mb-3">
+                      <button onClick={e => { e.stopPropagation(); startEdit(a); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-white bg-white/5 hover:bg-white/10 transition-colors"><Pencil size={12} /> {t('edit')}</button>
+                      <button onClick={e => { e.stopPropagation(); deleteAsset(a.id); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-red-400 bg-white/5 hover:bg-red-500/10 transition-colors"><Trash2 size={12} /> {t('delete')}</button>
+                    </div>
+                    {a.purchase_date && <p className="text-xs text-muted mb-2">{t('purchased')} {a.purchase_date}</p>}
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       {a.purchase_price != null && (
                         <div>
