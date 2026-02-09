@@ -1,6 +1,6 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
-import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign } from 'lucide-react';
+import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign, MoreVertical, Search } from 'lucide-react';
 import { useState } from 'react';
 import { useApi } from '../useApi';
 import { useFilter } from '../FilterContext';
@@ -89,6 +89,8 @@ export default function Accounts() {
   const [filterBank, setFilterBank] = useState('');
   const [filterType, setFilterType] = useState('');
   const [filterCrypto, setFilterCrypto] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
+  const [overflowMenuId, setOverflowMenuId] = useState<number | null>(null);
 
   // Add account state
   const [addMode, setAddMode] = useState<AddMode>(null);
@@ -357,35 +359,38 @@ export default function Accounts() {
     return true;
   });
 
+  const activeFilterCount = (filterBank ? 1 : 0) + (filterType ? 1 : 0) + (filterCrypto ? 1 : 0);
+
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">{t('accounts')}</h1>
+      {/* Header — single line on mobile */}
+      <div className="flex items-center justify-between gap-2 mb-4 sm:mb-6">
+        <div className="flex items-center gap-2 min-w-0">
+          <h1 className="text-xl font-semibold whitespace-nowrap">{t('accounts')}</h1>
           {allAccounts.length > 0 && (
             <button
               onClick={() => setAllBalancesHidden(h => !h)}
-              className="text-muted hover:text-white transition-colors p-1"
+              className="text-muted hover:text-white transition-colors p-1 sm:p-2"
               title={allBalancesHidden ? t('show_all_balances') : t('hide_all_balances')}
             >
-              {allBalancesHidden ? <EyeOff size={18} /> : <Eye size={18} />}
+              {allBalancesHidden ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           )}
           {!loading && filteredAccounts.length > 0 && (
-            <span className="text-sm font-semibold text-accent-400">
+            <span className="text-sm font-semibold text-accent-400 truncate">
               {allBalancesHidden ? '••••' : formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}
               <span className="text-muted font-normal text-xs ml-1">· {filteredAccounts.filter(a => !a.hidden).length}</span>
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
-          <ScopeSelect />
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <span className="hidden sm:block"><ScopeSelect /></span>
           <button
             onClick={() => setAddMode('choose')}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black"
+            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black"
           >
             <Plus size={16} />
-            {t('add_account')}
+            <span className="hidden sm:inline">{t('add_account')}</span>
           </button>
         </div>
       </div>
@@ -627,42 +632,71 @@ export default function Accounts() {
         </div>
       )}
 
-      {/* Filters — dropdowns on mobile, pills on desktop */}
+      {/* Filters — unified dropdown on mobile, pills on desktop */}
       {allAccounts.length > 0 && (uniqueBanks.length > 1 || uniqueTypes.length > 1 || hasCrypto) && (
         <>
-          {/* Mobile: dropdowns */}
-          <div className="flex gap-2 mb-4 sm:hidden">
-            {uniqueBanks.length > 1 && (
-              <select
-                value={filterBank}
-                onChange={e => setFilterBank(e.target.value)}
-                className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-xs text-white"
-              >
-                <option value="">{t('all')} — {t('filter_bank')}</option>
-                {uniqueBanks.map(bank => (
-                  <option key={bank} value={bank}>{bank}</option>
-                ))}
-              </select>
-            )}
-            {uniqueTypes.length > 1 && (
-              <select
-                value={filterType}
-                onChange={e => setFilterType(e.target.value)}
-                className="flex-1 bg-surface border border-border rounded-lg px-3 py-2 text-xs text-white"
-              >
-                <option value="">{t('all')} — {t('filter_type')}</option>
-                {uniqueTypes.map(type => (
-                  <option key={type} value={type}>{t(`account_type_${type}`)}</option>
-                ))}
-              </select>
-            )}
-            {hasCrypto && (
-              <button
-                onClick={() => setFilterCrypto(c => !c)}
-                className={`px-3 py-2 rounded-lg text-xs transition-colors ${filterCrypto ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-surface border border-border text-muted'}`}
-              >
-                {t('filter_crypto')}
-              </button>
+          {/* Mobile: unified filter button + dropdown */}
+          <div className="sm:hidden mb-3 relative">
+            <button
+              onClick={() => setMobileFiltersOpen(o => !o)}
+              className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors ${activeFilterCount > 0 ? 'bg-accent-500/20 text-accent-400 border border-accent-500/30' : 'bg-surface border border-border text-muted'}`}
+            >
+              <Search size={14} />
+              <span>{t('filter') || 'Filtrer'}</span>
+              {activeFilterCount > 0 && (
+                <span className="bg-accent-500 text-black rounded-full w-4 h-4 text-[10px] flex items-center justify-center font-bold">{activeFilterCount}</span>
+              )}
+              <span className="text-[10px]">▾</span>
+            </button>
+            {mobileFiltersOpen && (
+              <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border rounded-xl p-3 z-30 space-y-2 shadow-lg">
+                {uniqueBanks.length > 1 && (
+                  <div>
+                    <label className="text-[10px] text-muted uppercase tracking-wider mb-1 block">{t('filter_bank')}</label>
+                    <select
+                      value={filterBank}
+                      onChange={e => setFilterBank(e.target.value)}
+                      className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-xs text-white"
+                    >
+                      <option value="">{t('all')}</option>
+                      {uniqueBanks.map(bank => (
+                        <option key={bank} value={bank}>{bank}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {uniqueTypes.length > 1 && (
+                  <div>
+                    <label className="text-[10px] text-muted uppercase tracking-wider mb-1 block">{t('filter_type')}</label>
+                    <select
+                      value={filterType}
+                      onChange={e => setFilterType(e.target.value)}
+                      className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-xs text-white"
+                    >
+                      <option value="">{t('all')}</option>
+                      {uniqueTypes.map(type => (
+                        <option key={type} value={type}>{t(`account_type_${type}`)}</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                {hasCrypto && (
+                  <button
+                    onClick={() => setFilterCrypto(c => !c)}
+                    className={`w-full px-3 py-2 rounded-lg text-xs transition-colors text-left ${filterCrypto ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-black/30 border border-border text-muted'}`}
+                  >
+                    ⛓️ {t('filter_crypto')}
+                  </button>
+                )}
+                {activeFilterCount > 0 && (
+                  <button
+                    onClick={() => { setFilterBank(''); setFilterType(''); setFilterCrypto(false); }}
+                    className="w-full text-center text-xs text-red-400 hover:text-red-300 pt-1"
+                  >
+                    {t('clear_filters') || 'Effacer les filtres'}
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -727,13 +761,13 @@ export default function Accounts() {
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-3">
           {filteredAccounts.map(acc => {
             const prov = providerBadge(acc.provider);
             const { text: syncText, isStale } = getRelativeTime(acc.last_sync, t);
             return (
-              <div key={acc.id} className="bg-surface rounded-xl border border-border p-3 sm:p-4">
-                {/* Row 1: Name + Balance */}
+              <div key={acc.id} className="bg-surface rounded-xl border border-border p-2.5 sm:p-4 relative">
+                {/* Row 1: Icon + Name (truncated) + Balance */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     {editingId === acc.id ? (
@@ -765,15 +799,15 @@ export default function Accounts() {
                         </button>
                       </div>
                     ) : (
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">{prov.label}</span>
-                        <p className="font-medium truncate">{acc.custom_name || acc.name}</p>
+                      <div className="flex items-center gap-1.5 sm:gap-2">
+                        <span className="text-sm flex-shrink-0">{prov.label}</span>
+                        <p className="font-medium truncate text-sm sm:text-base">{acc.custom_name || acc.name}</p>
                       </div>
                     )}
                   </div>
                   {editingId !== acc.id && (
                     <span
-                      className={`text-base sm:text-lg font-semibold text-accent-400 whitespace-nowrap ${acc.provider === 'manual' ? 'cursor-pointer hover:underline' : ''}`}
+                      className={`text-sm sm:text-lg font-semibold text-accent-400 whitespace-nowrap flex-shrink-0 ${acc.provider === 'manual' ? 'cursor-pointer hover:underline' : ''}`}
                       onClick={() => acc.provider === 'manual' && startEdit(acc)}
                       title={acc.provider === 'manual' ? t('update_balance') : undefined}
                     >
@@ -782,62 +816,97 @@ export default function Accounts() {
                   )}
                 </div>
 
-                {/* Row 2: Badges + Sync */}
-                <div className="flex items-center gap-1.5 sm:gap-2 mt-1 flex-wrap">
-                  {acc.bank_name && (
-                    <span className="hidden sm:inline-flex text-xs px-2 py-0.5 rounded-full bg-white/5 text-muted">{acc.bank_name}</span>
-                  )}
-                  <button
-                    onClick={() => cycleType(acc)}
-                    className={`text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all ${typeBadgeColor(acc.type)}`}
-                  >
-                    {t(`account_type_${acc.type || 'checking'}`)}
-                  </button>
-                  <button
-                    onClick={() => cycleUsage(acc)}
-                    className={`text-xs px-2 py-0.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all ${acc.usage === 'professional' ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-muted'}`}
-                  >
-                    {t(`account_usage_${acc.usage || 'personal'}`)}
-                  </button>
-                  {acc.currency && acc.currency !== 'EUR' && (
-                    <span className="hidden sm:inline-flex text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400">{acc.currency}</span>
-                  )}
-                  {acc.blockchain_address && (
-                    <span className="hidden sm:inline text-xs text-muted font-mono">{acc.blockchain_address.slice(0, 6)}...{acc.blockchain_address.slice(-4)}</span>
-                  )}
-                  {!acc.blockchain_address && acc.account_number && (
-                    <span className="hidden sm:inline text-xs text-muted font-mono">
-                      {acc.hidden || allBalancesHidden ? '••••••••' : maskNumber(acc.account_number)}
-                    </span>
-                  )}
-                  {!acc.blockchain_address && !acc.account_number && acc.iban && (
-                    <span className="hidden sm:inline text-xs text-muted font-mono">
-                      {acc.hidden || allBalancesHidden ? '••••••••' : maskNumber(acc.iban)}
-                    </span>
-                  )}
-                  <span className="hidden sm:inline w-px h-3 bg-border" />
-                  <span className={`inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full ${isStale ? 'bg-red-500' : 'bg-green-500'}`} />
-                  <span className="text-xs text-muted">{syncText}</span>
+                {/* Row 2: Tags + sync + overflow menu (mobile) / action buttons (desktop) */}
+                <div className="flex items-center justify-between mt-1">
+                  <div className="flex items-center gap-1 sm:gap-2 flex-wrap min-w-0">
+                    {acc.bank_name && (
+                      <span className="hidden sm:inline-flex text-xs px-2 py-0.5 rounded-full bg-white/5 text-muted">{acc.bank_name}</span>
+                    )}
+                    <button
+                      onClick={() => cycleType(acc)}
+                      className={`text-[10px] sm:text-xs px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all sm:min-h-[32px] ${typeBadgeColor(acc.type)}`}
+                    >
+                      {t(`account_type_${acc.type || 'checking'}`)}
+                    </button>
+                    <button
+                      onClick={() => cycleUsage(acc)}
+                      className={`text-[10px] sm:text-xs px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all sm:min-h-[32px] ${acc.usage === 'professional' ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-muted'}`}
+                    >
+                      {t(`account_usage_${acc.usage || 'personal'}`)}
+                    </button>
+                    {acc.currency && acc.currency !== 'EUR' && (
+                      <span className="hidden sm:inline-flex text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400">{acc.currency}</span>
+                    )}
+                    {acc.blockchain_address && (
+                      <span className="hidden sm:inline text-xs text-muted font-mono">{acc.blockchain_address.slice(0, 6)}...{acc.blockchain_address.slice(-4)}</span>
+                    )}
+                    {!acc.blockchain_address && acc.account_number && (
+                      <span className="hidden sm:inline text-xs text-muted font-mono">
+                        {acc.hidden || allBalancesHidden ? '••••••••' : maskNumber(acc.account_number)}
+                      </span>
+                    )}
+                    {!acc.blockchain_address && !acc.account_number && acc.iban && (
+                      <span className="hidden sm:inline text-xs text-muted font-mono">
+                        {acc.hidden || allBalancesHidden ? '••••••••' : maskNumber(acc.iban)}
+                      </span>
+                    )}
+                    <span className={`inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full flex-shrink-0 ${isStale ? 'bg-red-500' : 'bg-green-500'}`} />
+                    <span className="text-[10px] sm:text-xs text-muted whitespace-nowrap">{syncText}</span>
+                  </div>
+
+                  {/* Mobile: ⋮ overflow menu */}
+                  <div className="sm:hidden relative flex-shrink-0">
+                    <button
+                      onClick={() => setOverflowMenuId(overflowMenuId === acc.id ? null : acc.id)}
+                      className="text-muted hover:text-white transition-colors p-1.5"
+                    >
+                      <MoreVertical size={16} />
+                    </button>
+                    {overflowMenuId === acc.id && (
+                      <>
+                        <div className="fixed inset-0 z-40" onClick={() => setOverflowMenuId(null)} />
+                        <div className="absolute right-0 top-full mt-1 bg-surface border border-border rounded-xl shadow-lg z-50 py-1 min-w-[160px]">
+                          <button onClick={() => { startEdit(acc); setOverflowMenuId(null); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-white hover:bg-white/5">
+                            <Pencil size={14} className="text-muted" /> {t('edit')}
+                          </button>
+                          <button onClick={() => { toggleHidden(acc); setOverflowMenuId(null); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-white hover:bg-white/5">
+                            {acc.hidden ? <Eye size={14} className="text-muted" /> : <EyeOff size={14} className="text-muted" />}
+                            {acc.hidden ? t('show') : t('hide')}
+                          </button>
+                          <button
+                            onClick={() => { syncAccount(acc.id); setOverflowMenuId(null); }}
+                            disabled={syncingId === acc.id}
+                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-white/5 ${isStale ? 'text-orange-400' : 'text-white'}`}
+                          >
+                            <RefreshCw size={14} className={`${isStale ? 'text-orange-400' : 'text-muted'} ${syncingId === acc.id ? 'animate-spin' : ''}`} /> {t('sync')}
+                          </button>
+                          <button onClick={() => { deleteAccount(acc.id); setOverflowMenuId(null); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-white/5">
+                            <Trash2 size={14} /> {t('delete')}
+                          </button>
+                        </div>
+                      </>
+                    )}
+                  </div>
                 </div>
 
-                {/* Row 3: Action buttons */}
-                <div className="flex items-center gap-1 mt-1 justify-end">
-                  <button onClick={() => startEdit(acc)} className="text-muted hover:text-white transition-colors p-1" title={t('edit')}>
-                    <Pencil size={14} />
+                {/* Desktop: Action buttons row (hidden on mobile) */}
+                <div className="hidden sm:flex items-center gap-0 mt-1 justify-end">
+                  <button onClick={() => startEdit(acc)} className="text-muted hover:text-white transition-colors p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center" title={t('edit')}>
+                    <Pencil size={16} />
                   </button>
-                  <button onClick={() => toggleHidden(acc)} className="text-muted hover:text-white transition-colors p-1" title={acc.hidden ? t('show') : t('hide')}>
-                    {acc.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                  <button onClick={() => toggleHidden(acc)} className="text-muted hover:text-white transition-colors p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center" title={acc.hidden ? t('show') : t('hide')}>
+                    {acc.hidden ? <EyeOff size={16} /> : <Eye size={16} />}
                   </button>
                   <button
                     onClick={() => syncAccount(acc.id)}
                     disabled={syncingId === acc.id}
-                    className={`transition-colors p-1 ${isStale ? 'text-orange-400 hover:text-orange-300' : 'text-muted hover:text-white'} disabled:opacity-50`}
+                    className={`transition-colors p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center ${isStale ? 'text-orange-400 hover:text-orange-300' : 'text-muted hover:text-white'} disabled:opacity-50`}
                     title={t('sync')}
                   >
-                    <RefreshCw size={14} className={syncingId === acc.id ? 'animate-spin' : ''} />
+                    <RefreshCw size={16} className={syncingId === acc.id ? 'animate-spin' : ''} />
                   </button>
-                  <button onClick={() => deleteAccount(acc.id)} className="text-muted hover:text-red-400 transition-colors p-1" title={t('delete')}>
-                    <Trash2 size={14} />
+                  <button onClick={() => deleteAccount(acc.id)} className="text-muted hover:text-red-400 transition-colors p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center" title={t('delete')}>
+                    <Trash2 size={16} />
                   </button>
                 </div>
               </div>
