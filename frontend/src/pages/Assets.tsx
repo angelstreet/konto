@@ -86,12 +86,9 @@ export default function Assets() {
   const accountsUrl = useMemo(() => appendScope(`${API}/bank/accounts`), [scope, appendScope]);
   const kozyUrl = prefs?.kozy_enabled ? `${API}/kozy/properties` : '';
 
-  const dashboardUrl = useMemo(() => appendScope(`${API}/dashboard`), [scope, appendScope]);
-
   const { data: assets, refetch: refetchAssets } = useApi<Asset[]>(assetsUrl);
   const { data: accountsRaw } = useApi<BankAccount[]>(accountsUrl);
   const { data: kozyData } = useApi<{ properties: any[] }>(kozyUrl);
-  const { data: dashboardData } = useApi<{ totals: { brut: number; net: number } }>(dashboardUrl);
 
   const assetList = assets || [];
   const accounts = accountsRaw || [];
@@ -264,7 +261,6 @@ export default function Assets() {
   };
 
   // Totals
-  const totalValue = assetList.reduce((s, a) => s + (a.current_value || a.purchase_price || 0), 0);
   const totalPnl = assetList.reduce((s, a) => s + (a.pnl || 0), 0);
   const totalAcquisition = assetList.reduce((s, a) => s + (a.purchase_price || 0), 0);
   const totalTravaux = assetList.reduce((s, a) => s + (a.travaux || 0), 0);
