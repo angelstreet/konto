@@ -309,7 +309,7 @@ export default function CompanyPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-3">
+      <div className="flex items-center justify-between mb-2 h-10">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold">{t('nav_companies')}</h1>
           <button
