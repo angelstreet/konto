@@ -244,50 +244,90 @@ export default function Income() {
           </div>
         )}
 
-        {/* Entries table */}
+        {/* Entries — table on desktop, cards on mobile */}
         {entries.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="text-muted text-xs border-b border-border">
-                  <th className="text-left py-2 px-2">{t('year')}</th>
-                  <th className="text-left py-2 px-2">{t('period')}</th>
-                  <th className="text-left py-2 px-2">{t('employer')}</th>
-                  <th className="text-left py-2 px-2 hidden sm:table-cell">{t('job_title')}</th>
-                  <th className="text-left py-2 px-2 hidden sm:table-cell">{t('country')}</th>
-                  <th className="text-right py-2 px-2">{t('gross_annual')}</th>
-                  <th className="text-right py-2 px-2 hidden sm:table-cell">{t('net_annual')}</th>
-                  <th className="text-right py-2 px-2"></th>
-                </tr>
-              </thead>
-              <tbody>
-                {entries.map(e => {
-                  const fmtE = e.country === 'CH' ? fmtCHF : fmt;
-                  const period = e.start_date
-                    ? `${e.start_date.slice(5)}${e.end_date ? ' → ' + e.end_date.slice(5) : ' → …'}`
-                    : '—';
-                  return (
-                    <tr key={e.id} className="border-b border-border/50 hover:bg-surface-hover transition-colors">
-                      <td className="py-2 px-2 font-medium">{e.year}</td>
-                      <td className="py-2 px-2 text-xs text-muted">{period}</td>
-                      <td className="py-2 px-2">
-                        {e.employer}
-                        {e.company_name && <span className="text-xs text-accent-400 ml-1">({e.company_name})</span>}
-                      </td>
-                      <td className="py-2 px-2 text-muted hidden sm:table-cell">{e.job_title || '—'}</td>
-                      <td className="py-2 px-2 hidden sm:table-cell">{countries.find(c => c.value === e.country)?.label || e.country}</td>
-                      <td className="py-2 px-2 text-right font-mono font-medium text-green-400">{fmtE(e.gross_annual)}</td>
-                      <td className="py-2 px-2 text-right font-mono text-emerald-300 hidden sm:table-cell">{e.net_annual ? fmtE(e.net_annual) : '—'}</td>
-                      <td className="py-2 px-2 text-right">
-                        <button onClick={() => startEdit(e)} className="p-1 text-muted hover:text-white"><Edit3 size={14} /></button>
-                        <button onClick={() => handleDelete(e.id)} className="p-1 text-muted hover:text-red-400 ml-1"><Trash2 size={14} /></button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <>
+            {/* Mobile cards */}
+            <div className="sm:hidden space-y-2">
+              {entries.map(e => {
+                const fmtE = e.country === 'CH' ? fmtCHF : fmt;
+                const period = e.start_date
+                  ? `${e.start_date.slice(5)}${e.end_date ? ' → ' + e.end_date.slice(5) : ' → …'}`
+                  : '';
+                return (
+                  <div key={e.id} className="bg-surface-hover rounded-lg p-3 space-y-1">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 min-w-0 flex-1">
+                        <span className="text-xs font-medium text-muted">{e.year}</span>
+                        {period && <span className="text-[10px] text-muted">{period}</span>}
+                      </div>
+                      <div className="flex gap-1 flex-shrink-0">
+                        <button onClick={() => startEdit(e)} className="p-2 text-muted hover:text-white min-w-[36px] min-h-[36px] flex items-center justify-center"><Edit3 size={14} /></button>
+                        <button onClick={() => handleDelete(e.id)} className="p-2 text-muted hover:text-red-400 min-w-[36px] min-h-[36px] flex items-center justify-center"><Trash2 size={14} /></button>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between">
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-white truncate">
+                          {e.employer}
+                          {e.company_name && <span className="text-xs text-accent-400 ml-1">({e.company_name})</span>}
+                        </p>
+                        {e.job_title && <p className="text-xs text-muted truncate">{e.job_title}</p>}
+                      </div>
+                      <div className="text-right flex-shrink-0 ml-3">
+                        <p className="text-sm font-mono font-medium text-green-400">{fmtE(e.gross_annual)}</p>
+                        {e.net_annual && <p className="text-xs font-mono text-emerald-300">{fmtE(e.net_annual)} net</p>}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-muted text-xs border-b border-border">
+                    <th className="text-left py-2 px-2">{t('year')}</th>
+                    <th className="text-left py-2 px-2">{t('period')}</th>
+                    <th className="text-left py-2 px-2">{t('employer')}</th>
+                    <th className="text-left py-2 px-2">{t('job_title')}</th>
+                    <th className="text-left py-2 px-2">{t('country')}</th>
+                    <th className="text-right py-2 px-2">{t('gross_annual')}</th>
+                    <th className="text-right py-2 px-2">{t('net_annual')}</th>
+                    <th className="text-right py-2 px-2"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {entries.map(e => {
+                    const fmtE = e.country === 'CH' ? fmtCHF : fmt;
+                    const period = e.start_date
+                      ? `${e.start_date.slice(5)}${e.end_date ? ' → ' + e.end_date.slice(5) : ' → …'}`
+                      : '—';
+                    return (
+                      <tr key={e.id} className="border-b border-border/50 hover:bg-surface-hover transition-colors">
+                        <td className="py-2 px-2 font-medium">{e.year}</td>
+                        <td className="py-2 px-2 text-xs text-muted">{period}</td>
+                        <td className="py-2 px-2">
+                          {e.employer}
+                          {e.company_name && <span className="text-xs text-accent-400 ml-1">({e.company_name})</span>}
+                        </td>
+                        <td className="py-2 px-2 text-muted">{e.job_title || '—'}</td>
+                        <td className="py-2 px-2">{countries.find(c => c.value === e.country)?.label || e.country}</td>
+                        <td className="py-2 px-2 text-right font-mono font-medium text-green-400">{fmtE(e.gross_annual)}</td>
+                        <td className="py-2 px-2 text-right font-mono text-emerald-300">{e.net_annual ? fmtE(e.net_annual) : '—'}</td>
+                        <td className="py-2 px-2 text-right">
+                          <button onClick={() => startEdit(e)} className="p-1 text-muted hover:text-white"><Edit3 size={14} /></button>
+                          <button onClick={() => handleDelete(e.id)} className="p-1 text-muted hover:text-red-400 ml-1"><Trash2 size={14} /></button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
+        
         ) : (
           <p className="text-muted text-sm text-center py-4">{t('no_income_entries')}</p>
         )}
@@ -416,7 +456,7 @@ export default function Income() {
 
         {borrowResult && (
           <div className="bg-bg rounded-lg p-5 space-y-3 mt-2">
-            <div className="grid grid-cols-3 gap-4 text-center">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
               <div>
                 <p className="text-xs text-muted mb-1">{t('max_monthly_payment')}</p>
                 <p className="text-lg font-bold text-white">{fmt(borrowResult.max_payment)}</p>

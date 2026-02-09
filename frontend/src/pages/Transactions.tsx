@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, Eye, EyeOff, SlidersHorizontal, X } from 'lucide-react';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
 import { useAuth } from '@clerk/clerk-react';
@@ -50,6 +50,8 @@ export default function Transactions() {
   const [accountFilter, setAccountFilter] = useState('');
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
+  const hasActiveFilters = !!accountFilter || !!search;
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -95,32 +97,83 @@ export default function Transactions() {
     } catch { return d; }
   };
 
-  const formatAmount = (n: number) => {
-    if (hideAmounts) return '••••';
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+  const formatAmount = (n: number): React.ReactNode => {
+    const formatted = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+    if (hideAmounts) return <span className="amount-masked">{formatted}</span>;
+    return formatted;
   };
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">{t('nav_transactions')}</h1>
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-6">
+        <div className="flex items-center gap-2 min-w-0">
+          <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_transactions')}</h1>
           <button
             onClick={() => setHideAmounts(h => !h)}
-            className="text-muted hover:text-white transition-colors p-1"
+            className="text-muted hover:text-white transition-colors p-2"
             title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
           >
             {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
+          <span className="text-sm text-muted whitespace-nowrap">{total}</span>
         </div>
-        <div className="flex items-center gap-2">
-          <span className="text-sm text-muted">{total} {t('nav_transactions').toLowerCase()}</span>
+        <div className="flex items-center gap-2 flex-shrink-0">
           <ScopeSelect />
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-4">
+      {/* Filters — desktop inline, mobile collapsible */}
+      <div className="sm:hidden mb-3">
+        <button
+          onClick={() => setShowFilters(!showFilters)}
+          className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium min-h-[44px] transition-colors ${
+            hasActiveFilters ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'
+          }`}
+        >
+          <SlidersHorizontal size={16} />
+          {t('filters') || 'Filtres'}
+          {hasActiveFilters && (
+            <span className="w-2 h-2 rounded-full bg-accent-500" />
+          )}
+        </button>
+        {showFilters && (
+          <div className="mt-2 bg-surface rounded-xl border border-border p-3 space-y-3">
+            <form onSubmit={handleSearch}>
+              <div className="relative">
+                <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
+                <input
+                  type="text"
+                  value={searchInput}
+                  onChange={e => setSearchInput(e.target.value)}
+                  placeholder={t('search_transactions')}
+                  className="w-full bg-bg border border-border rounded-lg pl-9 pr-4 py-2.5 text-sm text-white focus:outline-none focus:border-accent-500 transition-colors"
+                />
+              </div>
+            </form>
+            <select
+              value={accountFilter}
+              onChange={e => { setAccountFilter(e.target.value); setPage(0); }}
+              className="w-full bg-bg border border-border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-500"
+            >
+              <option value="">{t('all_accounts_filter')}</option>
+              {accounts.map(acc => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.custom_name || acc.name}
+                </option>
+              ))}
+            </select>
+            {hasActiveFilters && (
+              <button
+                onClick={() => { setAccountFilter(''); setSearch(''); setSearchInput(''); setPage(0); }}
+                className="flex items-center gap-1 text-xs text-muted hover:text-white"
+              >
+                <X size={12} /> {t('clear_filters') || 'Effacer'}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      <div className="hidden sm:flex flex-row gap-3 mb-4">
         <form onSubmit={handleSearch} className="flex-1">
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
@@ -176,25 +229,26 @@ export default function Transactions() {
                     }
                   </div>
 
-                  {/* Label + account */}
+                  {/* Label + date/category — 2-line compact on mobile */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm text-white truncate">{tx.label || '—'}</p>
-                    <p className="text-xs text-muted truncate">
-                      {tx.account_custom_name || tx.account_name}
-                      {tx.category && <span className="ml-2 text-accent-400">{tx.category}</span>}
-                    </p>
-                  </div>
-
-                  {/* Date */}
-                  <div className="text-xs text-muted flex-shrink-0 hidden sm:block">
-                    {formatDate(tx.date)}
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm text-white truncate">{tx.label || '—'}</p>
+                    </div>
+                    <div className="flex items-center gap-1.5 text-xs text-muted">
+                      <span className="sm:hidden">{formatDate(tx.date)}</span>
+                      <span className="hidden sm:inline">{formatDate(tx.date)}</span>
+                      <span className="opacity-40">·</span>
+                      <span className="truncate">{tx.account_custom_name || tx.account_name}</span>
+                      {tx.category && <span className="text-accent-400 truncate hidden sm:inline">{tx.category}</span>}
+                    </div>
                   </div>
 
                   {/* Amount */}
-                  <div className={`text-sm font-semibold flex-shrink-0 ${
+                  <div className={`text-sm font-semibold flex-shrink-0 text-right ${
                     tx.amount >= 0 ? 'text-green-400' : 'text-white'
                   }`}>
-                    {tx.amount >= 0 ? '+' : ''}{formatAmount(tx.amount)}
+                    <span>{tx.amount >= 0 ? '+' : ''}{formatAmount(tx.amount)}</span>
+                    {tx.category && <p className="text-[10px] text-accent-400 font-normal sm:hidden truncate max-w-[80px]">{tx.category}</p>}
                   </div>
                 </div>
 
@@ -237,7 +291,7 @@ export default function Transactions() {
           <button
             onClick={() => setPage(p => Math.max(0, p - 1))}
             disabled={page === 0}
-            className="flex items-center gap-1 text-sm text-muted hover:text-white disabled:opacity-30 transition-colors"
+            className="flex items-center gap-1 text-sm text-muted hover:text-white disabled:opacity-30 transition-colors p-3 min-w-[44px] min-h-[44px] justify-center"
           >
             <ChevronLeft size={16} />
           </button>
@@ -247,7 +301,7 @@ export default function Transactions() {
           <button
             onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
             disabled={page >= totalPages - 1}
-            className="flex items-center gap-1 text-sm text-muted hover:text-white disabled:opacity-30 transition-colors"
+            className="flex items-center gap-1 text-sm text-muted hover:text-white disabled:opacity-30 transition-colors p-3 min-w-[44px] min-h-[44px] justify-center"
           >
             <ChevronRight size={16} />
           </button>

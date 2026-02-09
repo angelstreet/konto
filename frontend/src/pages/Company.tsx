@@ -499,7 +499,7 @@ export default function CompanyPage() {
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted">
                       {c.legal_form && <span className="px-2 py-0.5 rounded bg-white/5">{c.legal_form}</span>}
                       {c.siren && <span className="font-mono">SIREN: {c.siren}</span>}
-                      {c.capital && <span>Capital: {allAmountsHidden ? '••••' : formatBalance(c.capital)}</span>}
+                      {c.capital && <span>Capital: {allAmountsHidden ? <span className="amount-masked">{formatBalance(c.capital)}</span> : formatBalance(c.capital)}</span>}
                     </div>
                     {c.address && <p className="text-xs text-muted mt-1">{c.address}</p>}
                   </div>
@@ -516,7 +516,7 @@ export default function CompanyPage() {
                   <div className="flex items-center justify-between mt-3 mb-3 md:hidden">
                     <div className="flex items-center gap-3 text-xs text-muted">
                       {c.siren && <span className="font-mono">SIREN: {c.siren}</span>}
-                      {c.capital && <span>Capital: {allAmountsHidden ? '••••' : formatBalance(c.capital)}</span>}
+                      {c.capital && <span>Capital: {allAmountsHidden ? <span className="amount-masked">{formatBalance(c.capital)}</span> : formatBalance(c.capital)}</span>}
                     </div>
                     <div className="flex items-center gap-1">
                       <button onClick={() => toggleViewDetails(c)} className={`p-2 transition-colors ${viewingCompanyId === c.id ? 'text-accent-400' : 'text-muted hover:text-white'}`}><Info size={14} /></button>
@@ -626,7 +626,7 @@ export default function CompanyPage() {
                             <span className="text-sm">{acc.custom_name || acc.name}</span>
                           </div>
                           <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-accent-400">{allAmountsHidden ? '••••' : formatBalance(acc.balance)}</span>
+                            <span className="text-sm font-medium text-accent-400">{allAmountsHidden ? <span className="amount-masked">{formatBalance(acc.balance)}</span> : formatBalance(acc.balance)}</span>
                             <button onClick={() => unlinkAccount(acc.id)} className="text-muted hover:text-red-400 p-2 min-w-[32px] min-h-[32px] flex items-center justify-center" title={t('unlink')}>
                               <Unlink size={12} />
                             </button>
@@ -665,7 +665,7 @@ export default function CompanyPage() {
                             />
                             <span>{acc.custom_name || acc.name} {acc.bank_name && `(${acc.bank_name})`}</span>
                           </div>
-                          <span className="text-muted">{allAmountsHidden ? '••••' : formatBalance(acc.balance)}</span>
+                          <span className="text-muted">{allAmountsHidden ? <span className="amount-masked">{formatBalance(acc.balance)}</span> : formatBalance(acc.balance)}</span>
                         </label>
                       ))}
                       <div className="flex justify-end gap-2 mt-2 pt-2 border-t border-border/50">

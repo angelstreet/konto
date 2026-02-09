@@ -378,7 +378,7 @@ export default function Accounts() {
           )}
           {!loading && filteredAccounts.length > 0 && (
             <span className="text-sm font-semibold text-accent-400 truncate">
-              {allBalancesHidden ? '••••' : formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}
+              {allBalancesHidden ? <span className="amount-masked">{formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}</span> : formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}
               <span className="text-muted font-normal text-xs ml-1">· {filteredAccounts.filter(a => !a.hidden).length}</span>
             </span>
           )}
@@ -811,7 +811,7 @@ export default function Accounts() {
                       onClick={() => acc.provider === 'manual' && startEdit(acc)}
                       title={acc.provider === 'manual' ? t('update_balance') : undefined}
                     >
-                      {acc.hidden || allBalancesHidden ? '••••' : formatBalance(acc.balance, acc.currency)}
+                      {acc.hidden || allBalancesHidden ? <span className="amount-masked">{formatBalance(acc.balance, acc.currency)}</span> : formatBalance(acc.balance, acc.currency)}
                     </span>
                   )}
                 </div>

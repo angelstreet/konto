@@ -77,7 +77,7 @@ export default function Dashboard() {
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [speaking, setSpeaking] = useState(false);
   const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
-  const fc = (n: number) => hideAmounts ? '••••' : formatCurrency(n);
+  const fc = (n: number) => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
 
   const quoteIndex = (Math.floor(Date.now() / 86400000) % QUOTE_COUNT) + 1;
   const quoteText = t(`quote_${quoteIndex}`);
@@ -126,7 +126,7 @@ export default function Dashboard() {
           <div className="flex rounded-lg border border-border overflow-hidden">
             <button
               onClick={() => setViewMode('brut')}
-              className={`px-3 py-2 text-xs font-medium transition-colors ${
+              className={`px-3 py-2.5 text-xs font-medium transition-colors min-h-[44px] ${
                 viewMode === 'brut'
                   ? 'bg-accent-500/20 text-accent-400 border-r border-accent-500/30'
                   : 'bg-surface text-muted border-r border-border'
@@ -136,7 +136,7 @@ export default function Dashboard() {
             </button>
             <button
               onClick={() => setViewMode('net')}
-              className={`px-3 py-2 text-xs font-medium transition-colors ${
+              className={`px-3 py-2.5 text-xs font-medium transition-colors min-h-[44px] ${
                 viewMode === 'net'
                   ? 'bg-accent-500/20 text-accent-400'
                   : 'bg-surface text-muted'
@@ -358,7 +358,7 @@ export default function Dashboard() {
 
                   <Link
                     to="/kompta/assets"
-                    className="flex items-center gap-1 text-xs text-accent-400 hover:text-accent-300 transition-colors"
+                    className="flex items-center gap-1 text-xs text-accent-400 hover:text-accent-300 transition-colors py-3 min-h-[44px]"
                   >
                     {t('view_all_assets')} <ArrowRight size={12} />
                   </Link>
@@ -374,7 +374,7 @@ export default function Dashboard() {
             </p>
             <button
               onClick={toggleSpeak}
-              className="mt-2 p-1.5 rounded-lg text-muted hover:text-accent-400 hover:bg-surface-hover transition-colors"
+              className="mt-2 p-3 rounded-lg text-muted hover:text-accent-400 hover:bg-surface-hover transition-colors min-w-[44px] min-h-[44px]"
               title={speaking ? 'Stop' : 'Listen'}
             >
               {speaking ? <VolumeX size={16} /> : <Volume2 size={16} />}

@@ -9,6 +9,19 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Masked/hidden amounts — modern blur effect */
+.amount-masked {
+  filter: blur(6px);
+  opacity: 0.4;
+  user-select: none;
+  pointer-events: none;
+  transition: filter 0.2s, opacity 0.2s;
+}
+
+/* Hide scrollbar for filter pills */
+.scrollbar-none::-webkit-scrollbar { display: none; }
+.scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
+
 /* Theme: Gold (default) */
 :root, [data-theme="gold"] {
   --accent-50: 253 248 232;

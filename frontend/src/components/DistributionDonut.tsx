@@ -38,7 +38,7 @@ export default function DistributionDonut({ data, total, hideAmounts }: Props) {
   const positiveData = data.filter(d => d.value > 0);
   const [expanded, setExpanded] = useState(false);
   if (positiveData.length === 0) return null;
-  const fc = (n: number) => hideAmounts ? '••••' : formatCurrency(n);
+  const fc = (n: number): React.ReactNode => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
 
   return (
     <div className="bg-surface rounded-xl border border-border p-4 mb-4">

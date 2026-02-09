@@ -46,7 +46,7 @@ export default function Assets() {
   const { t } = useTranslation();
   const authFetch = useAuthFetch();
   const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
-  const f = (n: number) => hideAmounts ? '••••' : fmt(n);
+  const f = (n: number): React.ReactNode => hideAmounts ? <span className="amount-masked">{fmt(n)}</span> : fmt(n);
   const [filter, setFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -261,9 +261,9 @@ export default function Assets() {
 
   return (
     <div>
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
         <div className="flex items-center gap-2 min-w-0">
-          <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_assets')}</h1>
+          <h1 className="text-lg sm:text-xl font-semibold whitespace-nowrap">{t('nav_assets')}</h1>
           {assetList.length > 0 ? (
             <button
               onClick={() => setHideAmounts(h => !h)}
@@ -297,15 +297,15 @@ export default function Assets() {
         </p>
       ) : null}
 
-      {/* Filter pills */}
-      <div className="flex gap-2 mb-4 flex-wrap">
+      {/* Filter pills — horizontal scroll on mobile */}
+      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
         <button onClick={() => setFilter('')}
-          className={`px-3 py-2.5 rounded-full text-xs font-medium min-h-[44px] transition-colors ${!filter ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
+          className={`px-3 py-2.5 rounded-full text-xs font-medium min-h-[44px] transition-colors whitespace-nowrap flex-shrink-0 ${!filter ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
           {t('all')}
         </button>
         {TYPES.map(({ id, icon: Icon, labelKey }) => (
           <button key={id} onClick={() => setFilter(id)}
-            className={`flex items-center gap-1.5 px-3 py-2.5 rounded-full text-xs font-medium min-h-[44px] transition-colors ${filter === id ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
+            className={`flex items-center gap-1.5 px-3 py-2.5 rounded-full text-xs font-medium min-h-[44px] transition-colors whitespace-nowrap flex-shrink-0 ${filter === id ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
             <Icon size={12} /> {t(labelKey)}
           </button>
         ))}
@@ -612,7 +612,7 @@ export default function Assets() {
                 {/* Expanded details */}
                 {expanded && (
                   <div className="px-4 pb-4 border-t border-border/50 pt-3">
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+                    <div className="grid grid-cols-2 gap-3 text-sm">
                       {a.purchase_price != null && (
                         <div>
                           <p className="text-[10px] text-muted uppercase">{t('purchase_price')}</p>
@@ -733,7 +733,7 @@ export default function Assets() {
                 </div>
                 <div className="flex items-center gap-4 text-xs text-muted">
                   {p.revenue != null && (
-                    <span className="text-green-400">{t('kozy_revenue')}: {hideAmounts ? '••••' : fmt(p.revenue)}</span>
+                    <span className="text-green-400">{t('kozy_revenue')}: {hideAmounts ? <span className="amount-masked">{fmt(p.revenue)}</span> : fmt(p.revenue)}</span>
                   )}
                   {p.occupancy != null && (
                     <span>{t('kozy_occupancy')}: {Math.round(p.occupancy * 100)}%</span>
