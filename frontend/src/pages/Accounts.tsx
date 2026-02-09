@@ -27,6 +27,7 @@ interface BankAccount {
   currency: string | null;
   blockchain_address: string | null;
   blockchain_network: string | null;
+  subtype: string | null;
 }
 
 function getRelativeTime(isoDate: string | null, t: (key: string, opts?: Record<string, unknown>) => string): { text: string; isStale: boolean } {
@@ -46,6 +47,13 @@ function typeBadgeColor(type: string): string {
   if (type === 'savings') return 'bg-blue-500/20 text-blue-400';
   if (type === 'loan') return 'bg-orange-500/20 text-orange-400';
   if (type === 'investment') return 'bg-purple-500/20 text-purple-400';
+  return 'bg-white/5 text-muted';
+}
+
+function subtypeBadgeColor(subtype: string): string {
+  if (subtype === 'crypto') return 'bg-amber-500/20 text-amber-400';
+  if (subtype === 'stocks') return 'bg-indigo-500/20 text-indigo-400';
+  if (subtype === 'gold') return 'bg-yellow-500/20 text-yellow-400';
   return 'bg-white/5 text-muted';
 }
 
@@ -323,6 +331,7 @@ export default function Accounts() {
 
   const ACCOUNT_TYPES = ['checking', 'savings', 'loan', 'investment'] as const;
   const ACCOUNT_USAGES = ['personal', 'professional'] as const;
+  const INVESTMENT_SUBTYPES = ['crypto', 'stocks', 'gold', 'other'] as const;
 
   const cycleType = async (acc: BankAccount) => {
     const idx = ACCOUNT_TYPES.indexOf(acc.type as typeof ACCOUNT_TYPES[number]);
@@ -348,14 +357,31 @@ export default function Accounts() {
     refetchAll();
   };
 
+  const cycleSubtype = async (acc: BankAccount) => {
+    if (acc.type !== 'investment') return;
+    const idx = INVESTMENT_SUBTYPES.indexOf((acc.subtype || 'other') as typeof INVESTMENT_SUBTYPES[number]);
+    const next = INVESTMENT_SUBTYPES[(idx + 1) % INVESTMENT_SUBTYPES.length];
+    updateAccount(acc.id, { subtype: next });
+    await authFetch(`${API}/bank/accounts/${acc.id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subtype: next }),
+    });
+    refetchAll();
+  };
+
   const allAccounts = accounts || [];
   const uniqueBanks = [...new Set(allAccounts.map(a => a.bank_name).filter(Boolean))] as string[];
   const uniqueTypes = [...new Set(allAccounts.map(a => a.type).filter(Boolean))];
+  const uniqueSubtypes = [...new Set(allAccounts.filter(a => a.type === 'investment' && a.subtype).map(a => a.subtype!))];
   const hasCrypto = allAccounts.some(a => a.provider === 'blockchain' || a.provider === 'coinbase');
   const filteredAccounts = allAccounts.filter(acc => {
     if (filterBank && acc.bank_name !== filterBank) return false;
     if (filterType === 'crypto') {
       if (acc.provider !== 'blockchain' && acc.provider !== 'coinbase') return false;
+    } else if (filterType && filterType.startsWith('investment-')) {
+      const sub = filterType.replace('investment-', '');
+      if (acc.type !== 'investment' || acc.subtype !== sub) return false;
     } else if (filterType && acc.type !== filterType) return false;
     if (filterCrypto && acc.provider !== 'blockchain' && acc.provider !== 'coinbase') return false;
     return true;
@@ -682,6 +708,10 @@ export default function Accounts() {
                       {uniqueTypes.map(type => (
                         <option key={type} value={type}>{t(`account_type_${type}`)}</option>
                       ))}
+                      {uniqueSubtypes.length > 0 && <option disabled>── Invest. subtypes ──</option>}
+                      {uniqueSubtypes.map(sub => (
+                        <option key={`inv-${sub}`} value={`investment-${sub}`}>{t(`account_subtype_${sub}`, sub)}</option>
+                      ))}
                       {hasCrypto && <option value="crypto">Crypto</option>}
                     </select>
                   </div>
@@ -729,6 +759,20 @@ export default function Accounts() {
                 {t(`account_type_${type}`)}
               </button>
             ))}
+            {uniqueSubtypes.length > 1 && (
+              <>
+                <span className="w-px h-5 bg-border self-center" />
+                {uniqueSubtypes.map(sub => (
+                  <button
+                    key={`sub-${sub}`}
+                    onClick={() => setFilterType(filterType === `investment-${sub}` ? '' : `investment-${sub}`)}
+                    className={`text-xs px-3 py-1 rounded-full transition-colors ${filterType === `investment-${sub}` ? subtypeBadgeColor(sub) : 'bg-white/5 text-muted hover:text-white'}`}
+                  >
+                    {t(`account_subtype_${sub}`, sub)}
+                  </button>
+                ))}
+              </>
+            )}
             {hasCrypto && (
               <>
                 {(uniqueBanks.length > 1 || uniqueTypes.length > 1) && <span className="w-px h-5 bg-border self-center" />}
@@ -848,6 +892,14 @@ export default function Accounts() {
                     >
                       {t(`account_type_${acc.type || 'checking'}`)}
                     </button>
+                    {acc.type === 'investment' && acc.subtype && (
+                      <button
+                        onClick={() => cycleSubtype(acc)}
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all ${subtypeBadgeColor(acc.subtype)}`}
+                      >
+                        {t(`account_subtype_${acc.subtype}`, acc.subtype)}
+                      </button>
+                    )}
                     <button
                       onClick={() => cycleUsage(acc)}
                       className={`text-[10px] px-1.5 py-0.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all ${acc.usage === 'professional' ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-muted'}`}

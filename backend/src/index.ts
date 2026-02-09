@@ -398,6 +398,7 @@ app.patch('/api/bank/accounts/:id', async (c) => {
   if (body.hidden !== undefined) { updates.push('hidden = ?'); params.push(body.hidden ? 1 : 0); }
   if (body.type !== undefined) { updates.push('type = ?'); params.push(body.type); }
   if (body.usage !== undefined) { updates.push('usage = ?'); params.push(body.usage); }
+  if (body.subtype !== undefined) { updates.push('subtype = ?'); params.push(body.subtype); }
   if (body.balance !== undefined) { updates.push('balance = ?'); params.push(body.balance); updates.push('last_sync = ?'); params.push(new Date().toISOString()); }
   if (body.company_id !== undefined) {
     updates.push('company_id = ?'); params.push(body.company_id);
@@ -604,8 +605,8 @@ app.post('/api/import', async (c) => {
   if (data.bank_accounts?.length) {
     for (const ba of data.bank_accounts) {
       await db.execute({
-        sql: `INSERT OR IGNORE INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, custom_name, bank_name, account_number, iban, balance, hidden, last_sync, type, usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        args: [userId, ba.company_id, ba.provider, ba.provider_account_id, ba.name, ba.custom_name, ba.bank_name, ba.account_number, ba.iban, ba.balance, ba.hidden, ba.last_sync, ba.type, ba.usage]
+        sql: `INSERT OR IGNORE INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, custom_name, bank_name, account_number, iban, balance, hidden, last_sync, type, usage, subtype) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        args: [userId, ba.company_id, ba.provider, ba.provider_account_id, ba.name, ba.custom_name, ba.bank_name, ba.account_number, ba.iban, ba.balance, ba.hidden, ba.last_sync, ba.type, ba.usage, ba.subtype || null]
       });
       imported.bank_accounts++;
     }
@@ -755,8 +756,8 @@ app.post('/api/accounts/manual', async (c) => {
   if (!body.name) return c.json({ error: 'Name is required' }, 400);
 
   const result = await db.execute({
-    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, bank_name, balance, type, usage, currency, last_sync) VALUES (?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [userId, body.company_id || null, body.name, body.custom_name || null, body.bank_name || body.provider_name || null, body.balance || 0, body.type || 'checking', body.usage || 'personal', body.currency || 'EUR', new Date().toISOString()]
+    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'manual', ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [userId, body.company_id || null, body.name, body.custom_name || null, body.bank_name || body.provider_name || null, body.balance || 0, body.type || 'checking', body.usage || 'personal', classifyAccountSubtype(body.type || 'checking', 'manual', body.name), body.currency || 'EUR', new Date().toISOString()]
   });
   const account = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ?', args: [Number(result.lastInsertRowid)] });
   return c.json(account.rows[0]);
