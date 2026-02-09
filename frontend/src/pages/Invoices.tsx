@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileText, Search, RefreshCw, CheckCircle, AlertTriangle, Link2, Unlink, Trash2 } from 'lucide-react';
+import { FileText, Search, RefreshCw, CheckCircle, AlertTriangle, Link2, Unlink, Trash2, CloudOff } from 'lucide-react';
 import { useAuthFetch } from '../useApi';
 
 interface Invoice {
@@ -90,13 +90,27 @@ export default function Invoices() {
           className="flex items-center gap-2 px-4 py-2.5 bg-accent-500 text-white rounded-lg text-sm font-medium disabled:opacity-40 min-h-[44px]"
         >
           <RefreshCw size={16} className={scanning ? 'animate-spin' : ''} />
-          {scanning ? 'Scan en cours...' : 'Scanner mes factures'}
+          {scanning ? 'Scan en cours...' : <><span className="hidden md:inline">Scanner mes factures</span><span className="md:hidden">Scanner</span></>}
         </button>
       </div>
 
       {!driveStatus?.connected && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4 text-sm text-yellow-300">
-          ⚠️ Google Drive non connecté. Allez dans <strong>Paramètres</strong> pour connecter votre Drive.
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4 text-sm text-yellow-300 flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2">
+            <CloudOff size={16} className="shrink-0" />
+            Drive non connecté
+          </span>
+          <button
+            onClick={async () => {
+              const res = await authFetch(`${API}/drive/connect`, { method: 'POST', body: '{}' });
+              const data = await res.json();
+              if (data.url) window.location.href = data.url;
+              else await load();
+            }}
+            className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-200 rounded-lg text-xs font-medium whitespace-nowrap transition-colors"
+          >
+            Lier Drive
+          </button>
         </div>
       )}
 
