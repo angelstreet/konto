@@ -5,7 +5,6 @@ import {
   Banknote,
   Home,
   FileBarChart,
-  BarChart3,
   BookOpen,
   Receipt,
   Calculator,
@@ -58,7 +57,7 @@ const menuGroups: MenuGroup[] = [
         icon: Briefcase,
         items: [
           { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
-          { path: '/analysis', icon: BarChart3, labelKey: 'nav_analysis' },
+          { path: '/analysis', icon: Wallet, labelKey: 'nav_analysis' },
           { path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
           { path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
         ],
