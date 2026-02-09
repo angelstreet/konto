@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, Eye, EyeOff,
+  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, Eye, EyeOff, SlidersHorizontal,
 } from 'lucide-react';
 
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -117,6 +117,7 @@ export default function Assets() {
   };
 
   const [addressSelected, setAddressSelected] = useState(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // Address search with debounce
   useEffect(() => {
@@ -264,7 +265,7 @@ export default function Assets() {
       <div className="flex items-center justify-between gap-2 mb-3">
         <h1 className="text-lg sm:text-xl font-semibold whitespace-nowrap truncate">{t('nav_assets')}</h1>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <ScopeSelect />
+          <span className="hidden md:block"><ScopeSelect /></span>
           {assetList.length > 0 && (
             <button
               onClick={() => setHideAmounts(h => !h)}
@@ -295,8 +296,52 @@ export default function Assets() {
         </p>
       ) : null}
 
-      {/* Filter pills — horizontal scroll on mobile */}
-      <div className="flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
+      {/* Mobile: Filtrer ▾ button */}
+      <div className="md:hidden mb-3">
+        <button
+          onClick={() => setMobileFiltersOpen(o => !o)}
+          className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium min-h-[44px] transition-colors ${
+            filter ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'
+          }`}
+        >
+          <SlidersHorizontal size={16} />
+          {t('filters')}
+          {filter && <span className="w-2 h-2 rounded-full bg-accent-500" />}
+          <span className="text-[10px]">▾</span>
+        </button>
+        {mobileFiltersOpen && (
+          <div className="mt-2 bg-surface rounded-xl border border-border p-3 space-y-3">
+            <div>
+              <label className="text-[10px] text-muted uppercase tracking-wider mb-1 block">{t('filter_type')}</label>
+              <select
+                value={filter}
+                onChange={e => setFilter(e.target.value)}
+                className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-500"
+              >
+                <option value="">{t('all')}</option>
+                {TYPES.map(({ id, labelKey }) => (
+                  <option key={id} value={id}>{t(labelKey)}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] text-muted uppercase tracking-wider mb-1 block">{t('scope_all')}</label>
+              <ScopeSelect />
+            </div>
+            {filter && (
+              <button
+                onClick={() => setFilter('')}
+                className="flex items-center gap-1 text-xs text-muted hover:text-white"
+              >
+                <X size={12} /> {t('clear_filters')}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Desktop: Filter pills */}
+      <div className="hidden md:flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
         <button onClick={() => setFilter('')}
           className={`px-3 py-2.5 rounded-full text-xs font-medium min-h-[44px] transition-colors whitespace-nowrap flex-shrink-0 ${!filter ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
           {t('all')}
