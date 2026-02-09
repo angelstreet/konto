@@ -1,10 +1,9 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
-import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, Info, X, Eye, EyeOff } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, ChevronRight, Info, X, Eye, EyeOff } from 'lucide-react';
 import { useState, useRef } from 'react';
-import { useApi, invalidateApi } from '../useApi';
+import { useApi, invalidateApi, useAuthFetch } from '../useApi';
 import ConfirmDialog from '../components/ConfirmDialog';
-
 
 interface Company {
   id: number;
@@ -27,6 +26,7 @@ interface BankAccount {
 
 export default function CompanyPage() {
   const { t } = useTranslation();
+  const authFetch = useAuthFetch();
   const { data: companies, loading: loadingCompanies, refetch: refetchCompanies } = useApi<Company[]>(`${API}/companies`);
   const { data: accounts, loading: loadingAccounts, refetch: refetchAccounts } = useApi<BankAccount[]>(`${API}/bank/accounts`);
   const [showForm, setShowForm] = useState(false);
@@ -39,11 +39,21 @@ export default function CompanyPage() {
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null);
   const searchTimeout = useRef<any>(null);
   const [allAmountsHidden, setAllAmountsHidden] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
+  const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
   const [confirmAction, setConfirmAction] = useState<{
     title: string;
     message: string;
     onConfirm: () => void;
   } | null>(null);
+
+  const toggleCard = (id: number) => {
+    setExpandedCards(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+  // Mobile detection handled via Tailwind responsive classes
 
   const loading = loadingCompanies || loadingAccounts;
 
@@ -59,7 +69,7 @@ export default function CompanyPage() {
     if (q.length < 2) { setSearchResults([]); setShowSearch(false); return; }
     clearTimeout(searchTimeout.current);
     searchTimeout.current = setTimeout(async () => {
-      const res = await fetch(`${API}/companies/search?q=${encodeURIComponent(q)}`);
+      const res = await authFetch(`${API}/companies/search?q=${encodeURIComponent(q)}`);
       const data = await res.json();
       setSearchResults(data.results || []);
       setShowSearch(true);
@@ -92,7 +102,7 @@ export default function CompanyPage() {
     if (r.siren) {
       setEnrichLoading(true);
       try {
-        const res = await fetch(`${API}/companies/info/${r.siren}`);
+        const res = await authFetch(`${API}/companies/info/${r.siren}`);
         if (res.ok) {
           const data = await res.json();
           setEnrichedInfo(data);
@@ -141,15 +151,13 @@ export default function CompanyPage() {
     };
 
     if (editingId) {
-      await fetch(`${API}/companies/${editingId}`, {
+      await authFetch(`${API}/companies/${editingId}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
     } else {
-      await fetch(`${API}/companies`, {
+      await authFetch(`${API}/companies`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
       });
     }
@@ -165,7 +173,7 @@ export default function CompanyPage() {
       message: t('confirm_delete_company'),
       onConfirm: async () => {
         setConfirmAction(null);
-        await fetch(`${API}/companies/${id}`, { method: 'DELETE' });
+        await authFetch(`${API}/companies/${id}`, { method: 'DELETE' });
         refetchAll();
       },
     });
@@ -173,9 +181,8 @@ export default function CompanyPage() {
 
   const linkAccounts = async (accountIds: number[], companyId: number) => {
     await Promise.all(accountIds.map(id =>
-      fetch(`${API}/bank/accounts/${id}`, {
+      authFetch(`${API}/bank/accounts/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ company_id: companyId }),
       })
     ));
@@ -193,9 +200,8 @@ export default function CompanyPage() {
   };
 
   const unlinkAccount = async (accountId: number) => {
-    await fetch(`${API}/bank/accounts/${accountId}`, {
+    await authFetch(`${API}/bank/accounts/${accountId}`, {
       method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ company_id: null }),
     });
     refetchAll();
@@ -207,7 +213,7 @@ export default function CompanyPage() {
       message: t('confirm_unlink_all'),
       onConfirm: async () => {
         setConfirmAction(null);
-        await fetch(`${API}/companies/${companyId}/unlink-all`, { method: 'POST' });
+        await authFetch(`${API}/companies/${companyId}/unlink-all`, { method: 'POST' });
         refetchAll();
       },
     });
@@ -222,7 +228,7 @@ export default function CompanyPage() {
     if (!viewingCache[c.id] && c.siren) {
       setViewingLoading(true);
       try {
-        const res = await fetch(`${API}/companies/info/${c.siren}`);
+        const res = await authFetch(`${API}/companies/info/${c.siren}`);
         if (res.ok) {
           const data = await res.json();
           setViewingCache(prev => ({ ...prev, [c.id]: data }));
@@ -234,6 +240,12 @@ export default function CompanyPage() {
 
   const linkedAccounts = (companyId: number) => (accounts || []).filter(a => a.company_id === companyId);
   const unlinkedAccounts = (accounts || []).filter(a => !a.company_id);
+
+  // Fix duplicate name pattern: "X (X)" → "X"
+  const cleanName = (name: string) => {
+    const match = name.match(/^(.+?)\s*\(\1\)$/);
+    return match ? match[1] : name;
+  };
 
   const formatBalance = (n: number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
@@ -257,10 +269,10 @@ export default function CompanyPage() {
         </div>
         <button
           onClick={startCreate}
-          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black"
+          className="flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black px-2.5 py-2.5 md:px-4 md:py-2"
         >
           <Plus size={16} />
-          {t('add_company')}
+          <span className="hidden md:inline">{t('add_company')}</span>
         </button>
       </div>
 
@@ -454,34 +466,65 @@ export default function CompanyPage() {
           <p className="text-muted text-sm mb-4">{t('no_companies')}</p>
           <button
             onClick={startCreate}
-            className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg bg-accent-500 text-black"
+            className="inline-flex items-center gap-2 text-sm font-medium rounded-lg bg-accent-500 text-black px-2.5 py-2.5 md:px-4 md:py-2"
           >
             <Plus size={14} />
-            {t('add_company')}
+            <span className="hidden md:inline">{t('add_company')}</span>
           </button>
         </div>
       ) : (
         <div className="space-y-4">
           {(companies || []).map(c => {
             const linked = linkedAccounts(c.id);
+            const isExpanded = expandedCards.has(c.id);
             return (
-              <div key={c.id} className="bg-surface rounded-xl border border-border p-5">
-                <div className="flex items-start justify-between mb-3">
+              <div key={c.id} className="bg-surface rounded-xl border border-border p-4 md:p-5">
+                {/* Compact header — always visible */}
+                <button
+                  onClick={() => toggleCard(c.id)}
+                  className="w-full flex items-center justify-between md:hidden"
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <h3 className="font-semibold text-sm truncate">{cleanName(c.name)}</h3>
+                    {c.legal_form && <span className="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-muted flex-shrink-0">{c.legal_form}</span>}
+                    <span className="text-[10px] text-muted flex-shrink-0">{linked.length} {linked.length === 1 ? 'compte' : 'comptes'}</span>
+                  </div>
+                  <ChevronRight size={14} className={`text-muted transition-transform flex-shrink-0 ml-2 ${isExpanded ? 'rotate-90' : ''}`} />
+                </button>
+
+                {/* Desktop header — always visible */}
+                <div className="hidden md:flex items-start justify-between mb-3">
                   <div>
-                    <h3 className="font-semibold text-lg">{c.name}</h3>
+                    <h3 className="font-semibold text-lg">{cleanName(c.name)}</h3>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted">
-                      {c.legal_form && <span className="px-2 py-0.5 rounded-full bg-white/5">{c.legal_form}</span>}
+                      {c.legal_form && <span className="px-2 py-0.5 rounded bg-white/5">{c.legal_form}</span>}
                       {c.siren && <span className="font-mono">SIREN: {c.siren}</span>}
                       {c.capital && <span>Capital: {allAmountsHidden ? '••••' : formatBalance(c.capital)}</span>}
                     </div>
                     {c.address && <p className="text-xs text-muted mt-1">{c.address}</p>}
                   </div>
                   <div className="flex items-center gap-1">
-                    <button onClick={() => toggleViewDetails(c)} className={`p-1 transition-colors ${viewingCompanyId === c.id ? 'text-accent-400' : 'text-muted hover:text-white'}`} title={t('details')}><Info size={14} /></button>
-                    <button onClick={() => startEdit(c)} className="text-muted hover:text-white p-1" title={t('edit')}><Pencil size={14} /></button>
-                    <button onClick={() => deleteCompany(c.id)} className="text-muted hover:text-red-400 p-1" title={t('delete')}><Trash2 size={14} /></button>
+                    <button onClick={() => toggleViewDetails(c)} className={`p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${viewingCompanyId === c.id ? 'text-accent-400' : 'text-muted hover:text-white'}`} title={t('details')}><Info size={14} /></button>
+                    <button onClick={() => startEdit(c)} className="text-muted hover:text-white p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center" title={t('edit')}><Pencil size={14} /></button>
+                    <button onClick={() => deleteCompany(c.id)} className="text-muted hover:text-red-400 p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center" title={t('delete')}><Trash2 size={14} /></button>
                   </div>
                 </div>
+
+                {/* Expanded details on mobile */}
+                <div className={`${isExpanded ? 'block' : 'hidden'} md:block`}>
+                  {/* Mobile action buttons + details */}
+                  <div className="flex items-center justify-between mt-3 mb-3 md:hidden">
+                    <div className="flex items-center gap-3 text-xs text-muted">
+                      {c.siren && <span className="font-mono">SIREN: {c.siren}</span>}
+                      {c.capital && <span>Capital: {allAmountsHidden ? '••••' : formatBalance(c.capital)}</span>}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      <button onClick={() => toggleViewDetails(c)} className={`p-2 transition-colors ${viewingCompanyId === c.id ? 'text-accent-400' : 'text-muted hover:text-white'}`}><Info size={14} /></button>
+                      <button onClick={() => startEdit(c)} className="text-muted hover:text-white p-2"><Pencil size={14} /></button>
+                      <button onClick={() => deleteCompany(c.id)} className="text-muted hover:text-red-400 p-2"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                  {c.address && <p className="text-xs text-muted mb-2 md:hidden">{c.address}</p>}
 
                 {/* Company details panel */}
                 {viewingCompanyId === c.id && (
@@ -558,14 +601,14 @@ export default function CompanyPage() {
                       {linked.length > 0 && (
                         <button
                           onClick={() => unlinkAllAccounts(c.id)}
-                          className="text-xs flex items-center gap-1 hover:text-red-400 text-muted"
+                          className="text-xs flex items-center gap-1 hover:text-red-400 text-muted py-2 min-h-[32px]"
                         >
                           <Unlink size={12} /> {t('unlink_all')}
                         </button>
                       )}
                       <button
                         onClick={() => { setLinkingCompanyId(linkingCompanyId === c.id ? null : c.id); setSelectedLinkIds(new Set()); }}
-                        className="text-xs flex items-center gap-1 hover:text-white text-muted"
+                        className="text-xs flex items-center gap-1 hover:text-white text-muted py-2 min-h-[32px]"
                       >
                         <Link size={12} /> {t('link_account')}
                       </button>
@@ -584,7 +627,7 @@ export default function CompanyPage() {
                           </div>
                           <div className="flex items-center gap-2">
                             <span className="text-sm font-medium text-accent-400">{allAmountsHidden ? '••••' : formatBalance(acc.balance)}</span>
-                            <button onClick={() => unlinkAccount(acc.id)} className="text-muted hover:text-red-400" title={t('unlink')}>
+                            <button onClick={() => unlinkAccount(acc.id)} className="text-muted hover:text-red-400 p-2 min-w-[32px] min-h-[32px] flex items-center justify-center" title={t('unlink')}>
                               <Unlink size={12} />
                             </button>
                           </div>
@@ -646,6 +689,7 @@ export default function CompanyPage() {
                     <p className="text-xs text-muted italic mt-2">{t('all_accounts_linked')}</p>
                   )}
                 </div>
+                </div>{/* end expanded/collapsible section */}
               </div>
             );
           })}
