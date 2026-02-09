@@ -99,7 +99,7 @@ export default function Dashboard() {
     { icon: Landmark, label: t('summary_cash'), value: cashTotal, color: 'text-white' },
     { icon: TrendingUp, label: t('summary_stocks'), value: investments, color: 'text-purple-400' },
     { icon: Home, label: t('immobilier'), value: immoValue, color: 'text-green-400' },
-    ...(showNet ? [{ icon: CreditCard, label: t('total_loans'), value: loans, color: 'text-orange-400' }] : []),
+    { icon: CreditCard, label: t('total_loans'), value: loans, color: 'text-orange-400' },
   ].filter(b => b.value !== 0) : [];
 
   // Donut data
