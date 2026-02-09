@@ -1,9 +1,11 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
-import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, ChevronRight, Info, X, Eye, EyeOff, MoreVertical, RefreshCw } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, ChevronRight, Info, X, MoreVertical, RefreshCw } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useApi, invalidateApi, useAuthFetch } from '../useApi';
 import ConfirmDialog from '../components/ConfirmDialog';
+import { useAmountVisibility } from '../AmountVisibilityContext';
+import EyeToggle from '../components/EyeToggle';
 
 interface Company {
   id: number;
@@ -41,7 +43,7 @@ export default function CompanyPage() {
   const [showSearch, setShowSearch] = useState(false);
   const [selectedCompanyInfo, setSelectedCompanyInfo] = useState<any>(null);
   const searchTimeout = useRef<any>(null);
-  const [allAmountsHidden, setAllAmountsHidden] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
+  const { hideAmounts: allAmountsHidden, toggleHideAmounts: toggleAllAmountsHidden } = useAmountVisibility();
   const [expandedCards, setExpandedCards] = useState<Set<number>>(new Set());
   const [confirmAction, setConfirmAction] = useState<{
     title: string;
@@ -314,13 +316,7 @@ export default function CompanyPage() {
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_companies')}</h1>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            onClick={() => setAllAmountsHidden(h => !h)}
-            className="text-muted hover:text-white transition-colors p-1"
-            title={allAmountsHidden ? t('show_all_balances') : t('hide_all_balances')}
-          >
-            {allAmountsHidden ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
+          <EyeToggle hidden={allAmountsHidden} onToggle={toggleAllAmountsHidden} />
           <button
             onClick={startCreate}
             className="flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black px-2.5 py-2.5 md:px-4 md:py-2"

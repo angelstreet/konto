@@ -1,8 +1,10 @@
 import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, Eye, EyeOff, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, SlidersHorizontal, X } from 'lucide-react';
 import { useFilter } from '../FilterContext';
+import { useAmountVisibility } from '../AmountVisibilityContext';
+import EyeToggle from '../components/EyeToggle';
 import ScopeSelect from '../components/ScopeSelect';
 import { useAuth } from '@clerk/clerk-react';
 const clerkEnabledTx = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -39,7 +41,7 @@ export default function Transactions() {
     }
     return fetch(url, { headers }).then(r => r.json());
   };
-  const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
+  const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const { scope, appendScope } = useFilter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -111,13 +113,7 @@ export default function Transactions() {
           <span className="text-sm text-muted whitespace-nowrap">{total}</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <button
-            onClick={() => setHideAmounts(h => !h)}
-            className="text-muted hover:text-white transition-colors p-2"
-            title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
-          >
-            {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           {/* Mobile: single Filtrer ▾ button */}
           <div className="md:hidden">
             <button

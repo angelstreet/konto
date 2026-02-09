@@ -8,6 +8,7 @@ import ScopeSelect from '../components/ScopeSelect';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { usePreferences } from '../PreferencesContext';
 import { useAmountVisibility } from '../AmountVisibilityContext';
+import EyeToggle from '../components/EyeToggle';
 import { useAuth } from '@clerk/clerk-react';
 
 const clerkEnabledAcc = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -405,13 +406,7 @@ export default function Accounts() {
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {allAccounts.length > 0 && (
-            <button
-              onClick={toggleAllBalancesHidden}
-              className="text-muted hover:text-white transition-colors p-1 sm:p-2"
-              title={allBalancesHidden ? t('show_all_balances') : t('hide_all_balances')}
-            >
-              {allBalancesHidden ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
+            <EyeToggle hidden={allBalancesHidden} onToggle={toggleAllBalancesHidden} />
           )}
           <span className="hidden md:block"><ScopeSelect /></span>
           <button
