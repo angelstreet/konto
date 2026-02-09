@@ -13,6 +13,10 @@ function formatCurrency0(v: number) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 }
 
+function formatMobile(v: number) {
+  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(Math.round(v));
+}
+
 export default function CreditSimulator() {
   const authFetch = useAuthFetch();
   const [amount, setAmount] = useState(200000);
@@ -21,6 +25,7 @@ export default function CreditSimulator() {
   const [insuranceRate, setInsuranceRate] = useState(0.34);
   const [rates, setRates] = useState<Rate[]>([]);
   const [showTable, setShowTable] = useState(false);
+  const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
 
   useEffect(() => {
     authFetch(`${API}/rates/current`)
@@ -173,25 +178,25 @@ export default function CreditSimulator() {
       </button>
 
       {showTable && (
-        <div className="bg-surface rounded-xl border border-border overflow-x-auto max-h-96 overflow-y-auto">
-          <table className="w-full text-xs">
+        <div className="bg-surface rounded-xl border border-border max-h-96 overflow-y-auto">
+          <table className="w-full text-[11px] md:text-xs">
             <thead className="sticky top-0 bg-surface">
               <tr className="text-muted uppercase border-b border-border">
-                <th className="px-3 py-2 text-left">Mois</th>
-                <th className="px-3 py-2 text-right">Mensualité</th>
-                <th className="px-3 py-2 text-right">Capital</th>
-                <th className="px-3 py-2 text-right">Intérêts</th>
-                <th className="px-3 py-2 text-right">Restant dû</th>
+                <th className="px-1 py-1 md:px-3 md:py-2 text-left">Mois</th>
+                <th className="px-1 py-1 md:px-3 md:py-2 text-right"><span className="md:hidden">Mens.</span><span className="hidden md:inline">Mensualité</span></th>
+                <th className="px-1 py-1 md:px-3 md:py-2 text-right"><span className="md:hidden">Cap.</span><span className="hidden md:inline">Capital</span></th>
+                <th className="px-1 py-1 md:px-3 md:py-2 text-right"><span className="md:hidden">Int.</span><span className="hidden md:inline">Intérêts</span></th>
+                <th className="px-1 py-1 md:px-3 md:py-2 text-right"><span className="md:hidden">Reste</span><span className="hidden md:inline">Restant dû</span></th>
               </tr>
             </thead>
             <tbody>
               {schedule.filter((_, i) => i % 12 === 0 || i === schedule.length - 1).map(row => (
                 <tr key={row.month} className="border-b border-border/50 hover:bg-surface-hover">
-                  <td className="px-3 py-1.5">{row.month}</td>
-                  <td className="px-3 py-1.5 text-right">{formatCurrency(row.payment)}</td>
-                  <td className="px-3 py-1.5 text-right text-green-400">{formatCurrency(row.capital)}</td>
-                  <td className="px-3 py-1.5 text-right text-orange-400">{formatCurrency(row.interest)}</td>
-                  <td className="px-3 py-1.5 text-right">{formatCurrency0(row.remaining)}</td>
+                  <td className="px-1 py-1 md:px-3 md:py-1.5">{row.month}</td>
+                  <td className="px-1 py-1 md:px-3 md:py-1.5 text-right">{isMobile ? formatMobile(row.payment) : formatCurrency(row.payment)}</td>
+                  <td className="px-1 py-1 md:px-3 md:py-1.5 text-right text-green-400">{isMobile ? formatMobile(row.capital) : formatCurrency(row.capital)}</td>
+                  <td className="px-1 py-1 md:px-3 md:py-1.5 text-right text-orange-400">{isMobile ? formatMobile(row.interest) : formatCurrency(row.interest)}</td>
+                  <td className="px-1 py-1 md:px-3 md:py-1.5 text-right">{isMobile ? formatMobile(row.remaining) : formatCurrency0(row.remaining)}</td>
                 </tr>
               ))}
             </tbody>
