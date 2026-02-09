@@ -183,36 +183,18 @@ export default function Analytics() {
         </div>
       </div>
 
-      {/* Savings rate gauge */}
-      <div className="bg-surface rounded-xl p-3 border border-border">
-        <h3 className="text-sm font-semibold text-white mb-3">Taux d'épargne</h3>
-        <div className="flex items-center gap-4">
-          <div className="flex-1">
-            <div className="h-4 bg-surface-hover rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all duration-500 ${d.savingsRate >= 20 ? 'bg-green-500' : d.savingsRate >= 0 ? 'bg-yellow-500' : 'bg-red-500'}`}
-                style={{ width: `${Math.min(Math.max(d.savingsRate, 0), 100)}%` }}
-              />
-            </div>
-            <div className="flex justify-between text-[10px] text-muted mt-1">
-              <span>0%</span>
-              <span>20% (objectif)</span>
-              <span>50%</span>
-            </div>
-          </div>
-          <span className={`text-2xl font-bold ${savingsColor}`}>{d.savingsRate}%</span>
-        </div>
-      </div>
-
       {/* Recurring expenses */}
       {d.recurring.length > 0 && (
         <div className="bg-surface rounded-xl p-3 border border-border">
-          <h3 className="text-sm font-semibold text-white mb-3">Dépenses récurrentes détectées</h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-semibold text-white">Dépenses récurrentes</h3>
+            <span className="text-sm font-bold text-orange-400">{fmt(d.recurring.reduce((s, r) => s + r.avgAmount, 0))} € /mois</span>
+          </div>
           <div className="space-y-2">
             {d.recurring.map((r, i) => (
               <div key={i} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
                 <span className="text-sm text-muted truncate flex-1">{r.label}</span>
-                <span className="text-sm text-white font-medium">{fmt(r.avgAmount)} € /mois</span>
+                <span className="text-sm text-white font-medium">{fmt(r.avgAmount)} €</span>
               </div>
             ))}
           </div>

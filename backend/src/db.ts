@@ -285,6 +285,17 @@ export async function migrateDatabase() {
   } catch {
     await db.execute("ALTER TABLE assets ADD COLUMN usage TEXT NOT NULL DEFAULT 'personal'");
   }
+
+  // Add subtype column to bank_accounts (for investment sub-classification)
+  try {
+    await db.execute("SELECT subtype FROM bank_accounts LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE bank_accounts ADD COLUMN subtype TEXT");
+    // Auto-populate subtype for existing investment accounts
+    await db.execute("UPDATE bank_accounts SET subtype = 'crypto' WHERE type = 'investment' AND (provider = 'blockchain' OR provider = 'coinbase')");
+    await db.execute("UPDATE bank_accounts SET subtype = 'stocks' WHERE type = 'investment' AND subtype IS NULL AND (LOWER(name) LIKE '%pea%' OR LOWER(name) LIKE '%action%' OR LOWER(name) LIKE '%bourse%' OR LOWER(name) LIKE '%trading%')");
+    await db.execute("UPDATE bank_accounts SET subtype = 'other' WHERE type = 'investment' AND subtype IS NULL");
+  }
 }
 
 // Find or create user by Clerk ID. On first login, migrates existing user_id=1 data.
