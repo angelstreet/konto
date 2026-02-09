@@ -1,7 +1,8 @@
 import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, RefreshCw, CheckCircle, AlertTriangle, Link2, Unlink, Trash2, CloudOff } from 'lucide-react';
+import { Search, RefreshCw, CheckCircle, AlertTriangle, Link2, Unlink, Trash2, CloudOff, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
 
 interface Invoice {
@@ -31,6 +32,7 @@ interface Stats {
 
 export default function Invoices() {
   const { t: _t } = useTranslation();
+  const navigate = useNavigate();
   const authFetch = useAuthFetch();
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
@@ -81,7 +83,12 @@ export default function Invoices() {
   return (
     <div>
       <div className="flex items-center justify-between gap-2 mb-2 h-10">
-        <h1 className="text-xl font-semibold whitespace-nowrap">Justificatifs</h1>
+        <div className="flex items-center gap-2 min-w-0">
+          <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-semibold whitespace-nowrap">Justificatifs</h1>
+        </div>
         <button
           onClick={scan}
           disabled={scanning || !driveStatus?.connected}

@@ -395,6 +395,14 @@ export default function Accounts() {
       <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <div className="flex items-center gap-2 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('accounts')}</h1>
+          {!loading && filteredAccounts.length > 0 && (
+            <span className="text-sm font-semibold text-accent-400 truncate">
+              {allBalancesHidden ? <span className="amount-masked">{formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}</span> : formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}
+              <span className="text-muted font-normal text-xs ml-1">· {filteredAccounts.filter(a => !a.hidden).length}</span>
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-2 flex-shrink-0">
           {allAccounts.length > 0 && (
             <button
               onClick={() => setAllBalancesHidden(h => !h)}
@@ -404,14 +412,6 @@ export default function Accounts() {
               {allBalancesHidden ? <EyeOff size={16} /> : <Eye size={16} />}
             </button>
           )}
-          {!loading && filteredAccounts.length > 0 && (
-            <span className="text-sm font-semibold text-accent-400 truncate">
-              {allBalancesHidden ? <span className="amount-masked">{formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}</span> : formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}
-              <span className="text-muted font-normal text-xs ml-1">· {filteredAccounts.filter(a => !a.hidden).length}</span>
-            </span>
-          )}
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
           <span className="hidden md:block"><ScopeSelect /></span>
           <button
             onClick={() => setAddMode('choose')}

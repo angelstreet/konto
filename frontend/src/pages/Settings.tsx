@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload, Type, EyeOff, Coins, Bitcoin, Home } from 'lucide-react';
+import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload, Type, EyeOff, Coins, Bitcoin, Home, ArrowLeft } from 'lucide-react';
 import { usePreferences } from '../PreferencesContext';
 import { useAuthFetch } from '../useApi';
 
@@ -67,7 +67,12 @@ export default function Settings() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold mb-6">{t('settings')}</h1>
+      <div className="flex items-center gap-2 mb-2 h-10">
+        <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
+          <ArrowLeft size={20} />
+        </button>
+        <h1 className="text-xl font-semibold whitespace-nowrap">{t('settings')}</h1>
+      </div>
 
       <div className="bg-surface rounded-xl border border-border divide-y divide-border">
         <button

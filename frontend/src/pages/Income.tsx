@@ -2,7 +2,8 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Plus, Trash2, Edit3, X, Check, Briefcase, TrendingUp, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Check, TrendingUp, ChevronDown, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
 
 interface Company {
@@ -32,6 +33,7 @@ function fmtCHF(v: number) { return fmt(v, 'CHF'); }
 
 export default function Income() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const authFetch = useAuthFetch();
 
   // Income tracking state
@@ -107,9 +109,12 @@ export default function Income() {
 
   return (
     <div className="space-y-8 max-w-5xl">
-      <h1 className="text-2xl font-bold flex items-center gap-2">
-        <Briefcase size={24} /> {t('nav_income')}
-      </h1>
+      <div className="flex items-center gap-2 mb-2 h-10">
+        <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
+          <ArrowLeft size={20} />
+        </button>
+        <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_income')}</h1>
+      </div>
 
       {/* ===== SECTION 1: Income Tracking ===== */}
       <section className="bg-surface rounded-xl border border-border p-4 space-y-2.5">
