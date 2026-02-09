@@ -354,7 +354,9 @@ export default function Accounts() {
   const hasCrypto = allAccounts.some(a => a.provider === 'blockchain' || a.provider === 'coinbase');
   const filteredAccounts = allAccounts.filter(acc => {
     if (filterBank && acc.bank_name !== filterBank) return false;
-    if (filterType && acc.type !== filterType) return false;
+    if (filterType === 'crypto') {
+      if (acc.provider !== 'blockchain' && acc.provider !== 'coinbase') return false;
+    } else if (filterType && acc.type !== filterType) return false;
     if (filterCrypto && acc.provider !== 'blockchain' && acc.provider !== 'coinbase') return false;
     return true;
   });
@@ -650,6 +652,10 @@ export default function Accounts() {
             </button>
             {mobileFiltersOpen && (
               <div className="absolute top-full left-0 right-0 mt-1 bg-surface border border-border rounded-xl p-3 z-30 space-y-2 shadow-lg">
+                <div>
+                  <label className="text-[10px] text-muted uppercase tracking-wider mb-1 block">{t('scope_all')}</label>
+                  <ScopeSelect />
+                </div>
                 {uniqueBanks.length > 1 && (
                   <div>
                     <label className="text-[10px] text-muted uppercase tracking-wider mb-1 block">{t('filter_bank')}</label>
@@ -677,21 +683,10 @@ export default function Accounts() {
                       {uniqueTypes.map(type => (
                         <option key={type} value={type}>{t(`account_type_${type}`)}</option>
                       ))}
+                      {hasCrypto && <option value="crypto">Crypto</option>}
                     </select>
                   </div>
                 )}
-                {hasCrypto && (
-                  <button
-                    onClick={() => setFilterCrypto(c => !c)}
-                    className={`w-full px-3 py-2 rounded-lg text-xs transition-colors text-left ${filterCrypto ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30' : 'bg-black/30 border border-border text-muted'}`}
-                  >
-                    ⛓️ {t('filter_crypto')}
-                  </button>
-                )}
-                <div>
-                  <label className="text-[10px] text-muted uppercase tracking-wider mb-1 block">{t('scope_all')}</label>
-                  <ScopeSelect />
-                </div>
                 {activeFilterCount > 0 && (
                   <button
                     onClick={() => { setFilterBank(''); setFilterType(''); setFilterCrypto(false); }}
