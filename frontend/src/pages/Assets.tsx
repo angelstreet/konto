@@ -9,6 +9,7 @@ import { useNavigate } from 'react-router-dom';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ScopeSelect from '../components/ScopeSelect';
 import { usePreferences } from '../PreferencesContext';
+import { useAmountVisibility } from '../AmountVisibilityContext';
 import { useFilter } from '../FilterContext';
 import { useApi, useAuthFetch, invalidateApi } from '../useApi';
 
@@ -52,7 +53,7 @@ export default function Assets() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const authFetch = useAuthFetch();
-  const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
+  const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const f = (n: number): React.ReactNode => hideAmounts ? <span className="amount-masked">{fmt(n)}</span> : fmt(n);
   const [filter, setFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
@@ -280,7 +281,7 @@ export default function Assets() {
         <div className="flex items-center gap-1 flex-shrink-0">
           {assetList.length > 0 && (
             <button
-              onClick={() => setHideAmounts(h => !h)}
+              onClick={toggleHideAmounts}
               className="text-muted hover:text-white transition-colors p-1 flex-shrink-0"
               title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
             >

@@ -5,6 +5,8 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pi
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
+import { useAmountVisibility } from '../AmountVisibilityContext';
+import EyeToggle from '../components/EyeToggle';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
 
@@ -46,6 +48,8 @@ export default function Budget() {
   const { t } = useTranslation();
   const authFetch = useAuthFetch();
   const { scope, appendScope } = useFilter();
+  const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
+  const mask = (v: string) => hideAmounts ? '••••' : v;
   const [range, setRange] = useState('3m');
   const [data, setData] = useState<CashflowData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,6 +82,7 @@ export default function Budget() {
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_budget') || 'Budget'}</h1>
         </div>
         <div className="flex items-center gap-2">
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           <ScopeSelect />
           <div className="flex gap-1">
           {RANGES.map(r => (
@@ -108,16 +113,16 @@ export default function Budget() {
           <div className="grid grid-cols-3 gap-3 mb-2">
             <div className="bg-surface rounded-xl border border-border p-3 text-center">
               <p className="text-xs text-muted mb-1">Entrées</p>
-              <p className="text-lg font-bold text-green-400">{formatCurrency(data.totalIncome)}</p>
+              <p className="text-lg font-bold text-green-400">{mask(formatCurrency(data.totalIncome))}</p>
             </div>
             <div className="bg-surface rounded-xl border border-border p-3 text-center">
               <p className="text-xs text-muted mb-1">Sorties</p>
-              <p className="text-lg font-bold text-red-400">{formatCurrency(data.totalExpense)}</p>
+              <p className="text-lg font-bold text-red-400">{mask(formatCurrency(data.totalExpense))}</p>
             </div>
             <div className="bg-surface rounded-xl border border-border p-3 text-center">
               <p className="text-xs text-muted mb-1">Solde</p>
               <p className={`text-lg font-bold ${data.net >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {formatCurrency(data.net)}
+                {mask(formatCurrency(data.net))}
               </p>
             </div>
           </div>
@@ -185,7 +190,7 @@ export default function Budget() {
                     </PieChart>
                   </ResponsiveContainer>
                   <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-xs font-bold text-red-400">{formatCurrency(data.totalExpense)}</span>
+                    <span className="text-xs font-bold text-red-400">{mask(formatCurrency(data.totalExpense))}</span>
                   </div>
                 </div>
                 <div className="flex-1 space-y-1.5">
@@ -199,7 +204,7 @@ export default function Budget() {
                         </div>
                         <div className="flex items-center gap-2">
                           <span className="text-muted">{pct.toFixed(1)}%</span>
-                          <span className="font-medium">{formatCurrency(cat.value)}</span>
+                          <span className="font-medium">{mask(formatCurrency(cat.value))}</span>
                         </div>
                       </div>
                     );
@@ -229,10 +234,10 @@ export default function Budget() {
                   </div>
                   <div className="flex gap-3">
                     <span className="w-20 text-right text-sm text-green-400">
-                      {vals.income > 0 ? formatCurrency(vals.income) : '–'}
+                      {vals.income > 0 ? mask(formatCurrency(vals.income)) : '–'}
                     </span>
                     <span className="w-20 text-right text-sm text-red-400">
-                      {vals.expense > 0 ? formatCurrency(vals.expense) : '–'}
+                      {vals.expense > 0 ? mask(formatCurrency(vals.expense)) : '–'}
                     </span>
                   </div>
                 </div>

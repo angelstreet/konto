@@ -2,9 +2,10 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Plus, Trash2, Edit3, X, Check, TrendingUp, ChevronDown, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Check, TrendingUp, ChevronDown, ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
+import { useAmountVisibility } from '../AmountVisibilityContext';
 
 interface Company {
   id: number;
@@ -35,6 +36,8 @@ export default function Income() {
   const { t } = useTranslation();
   const navigate = useNavigate();
   const authFetch = useAuthFetch();
+  const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
+  const mask = (v: string) => hideAmounts ? '••••' : v;
 
   // Income tracking state
   const [entries, setEntries] = useState<IncomeEntry[]>([]);
@@ -109,11 +112,20 @@ export default function Income() {
 
   return (
     <div className="space-y-8 max-w-5xl">
-      <div className="flex items-center gap-2 mb-2 h-10">
-        <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
-          <ArrowLeft size={20} />
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <div className="flex items-center gap-2 min-w-0">
+          <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_income')}</h1>
+        </div>
+        <button
+          onClick={toggleHideAmounts}
+          className="text-muted hover:text-white transition-colors p-2 flex-shrink-0"
+          title={hideAmounts ? 'Afficher les montants' : 'Masquer les montants'}
+        >
+          {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
         </button>
-        <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_income')}</h1>
       </div>
 
       {/* ===== SECTION 1: Income Tracking ===== */}
@@ -234,7 +246,7 @@ export default function Income() {
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <span className="text-sm font-bold text-white">{year}</span>
-                          <span className="text-sm font-mono font-medium text-green-400">{fmtYear(totalGross)}</span>
+                          <span className="text-sm font-mono font-medium text-green-400">{mask(fmtYear(totalGross))}</span>
                         </div>
                         <div className="flex items-center gap-2 flex-shrink-0">
                           <span className="text-xs text-muted">{yearEntries.length} {yearEntries.length > 1 ? 'employeurs' : 'employeur'}</span>
@@ -258,7 +270,7 @@ export default function Income() {
                                   {months && <span className="text-[10px] text-muted flex-shrink-0">({months})</span>}
                                 </div>
                                 <div className="flex items-center gap-1 flex-shrink-0">
-                                  <span className="text-sm font-mono text-green-400">{fmtE(e.gross_annual)}</span>
+                                  <span className="text-sm font-mono text-green-400">{mask(fmtE(e.gross_annual))}</span>
                                   <button onClick={(ev) => { ev.stopPropagation(); startEdit(e); }} className="p-1.5 text-muted hover:text-white"><Edit3 size={12} /></button>
                                   <button onClick={(ev) => { ev.stopPropagation(); handleDelete(e.id); }} className="p-1.5 text-muted hover:text-red-400"><Trash2 size={12} /></button>
                                 </div>
@@ -296,7 +308,7 @@ export default function Income() {
                       >
                         <div className="flex items-center gap-4 min-w-0">
                           <span className="text-base font-bold text-white">{year}</span>
-                          <span className="text-base font-mono font-medium text-green-400">{fmtYear(totalGross)}</span>
+                          <span className="text-base font-mono font-medium text-green-400">{mask(fmtYear(totalGross))}</span>
                         </div>
                         <div className="flex items-center gap-3 flex-shrink-0">
                           <span className="text-xs text-muted">{yearEntries.length} {yearEntries.length > 1 ? 'employeurs' : 'employeur'}</span>
@@ -332,8 +344,8 @@ export default function Income() {
                                     </td>
                                     <td className="py-2 px-2 text-muted">{e.job_title || '—'}</td>
                                     <td className="py-2 px-2">{countries.find(c => c.value === e.country)?.label || e.country}</td>
-                                    <td className="py-2 px-2 text-right font-mono font-medium text-green-400">{fmtE(e.gross_annual)}</td>
-                                    <td className="py-2 px-2 text-right font-mono text-emerald-300">{e.net_annual ? fmtE(e.net_annual) : '—'}</td>
+                                    <td className="py-2 px-2 text-right font-mono font-medium text-green-400">{mask(fmtE(e.gross_annual))}</td>
+                                    <td className="py-2 px-2 text-right font-mono text-emerald-300">{e.net_annual ? mask(fmtE(e.net_annual)) : '—'}</td>
                                     <td className="py-2 px-2 text-right">
                                       <button onClick={() => startEdit(e)} className="p-1 text-muted hover:text-white"><Edit3 size={14} /></button>
                                       <button onClick={() => handleDelete(e.id)} className="p-1 text-muted hover:text-red-400 ml-1"><Trash2 size={14} /></button>
@@ -365,7 +377,7 @@ export default function Income() {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="year" tick={{ fill: '#888', fontSize: 12 }} />
                 <YAxis tick={{ fill: '#888', fontSize: 12 }} tickFormatter={v => `${Math.round(v / 1000)}k`} />
-                <Tooltip formatter={(v: any) => fmt(v)} contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8 }} />
+                <Tooltip formatter={(v: any) => mask(fmt(v))} contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8 }} />
                 <Bar dataKey="total" fill="#6366f1" radius={[4, 4, 0, 0]} name="Salaire brut" />
               </BarChart>
             </ResponsiveContainer>

@@ -1,10 +1,12 @@
 import { API } from '../config';
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Eye, EyeOff, Download, Volume2, VolumeX, ChevronDown, Landmark, TrendingUp, Home, CreditCard } from 'lucide-react';
+import { Download, Volume2, VolumeX, ChevronDown, Landmark, TrendingUp, Home, CreditCard } from 'lucide-react';
+import EyeToggle from '../components/EyeToggle';
 import { useApi } from '../useApi';
 import { useFilter } from '../FilterContext';
 import { usePreferences } from '../PreferencesContext';
+import { useAmountVisibility } from '../AmountVisibilityContext';
 import ScopeSelect from '../components/ScopeSelect';
 import PatrimoineChart from '../components/PatrimoineChart';
 import DistributionDonut from '../components/DistributionDonut';
@@ -55,7 +57,7 @@ export default function Dashboard() {
   const { appendScope } = useFilter();
   const { formatCurrency, convertToDisplay } = usePreferences();
   const { data, loading } = useApi<DashboardData>(appendScope(`${API}/dashboard`));
-  const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
+  const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const [showNet, setShowNet] = useState(() => localStorage.getItem('kompta_show_net') !== 'false');
   const [donutOpen, setDonutOpen] = useState(true);
   const [speaking, setSpeaking] = useState(false);
@@ -131,13 +133,7 @@ export default function Dashboard() {
           </button>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <button
-            onClick={() => setHideAmounts(h => { const v = !h; localStorage.setItem('kompta_hide_amounts', String(!v)); return v; })}
-            className="text-muted hover:text-white transition-colors p-2 flex-shrink-0"
-            title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
-          >
-            {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           <ScopeSelect />
           <button
             onClick={() => window.open(API + '/report/patrimoine?categories=all', '_blank')}

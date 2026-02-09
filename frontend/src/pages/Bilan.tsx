@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Receipt, Building2, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
+import { useAmountVisibility } from '../AmountVisibilityContext';
+import EyeToggle from '../components/EyeToggle';
 
 interface BilanData {
   year: number;
@@ -28,6 +30,8 @@ export default function Bilan() {
   const { t: _t } = useTranslation();
   const navigate = useNavigate();
   const authFetch = useAuthFetch();
+  const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
+  const mask = (v: string) => hideAmounts ? '••••' : v;
   const [year, setYear] = useState(new Date().getFullYear());
   const [data, setData] = useState<BilanData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,6 +64,7 @@ export default function Bilan() {
           <h1 className="text-xl font-semibold whitespace-nowrap">Bilan Annuel</h1>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} size={16} />
           <button onClick={() => setYear(y => y - 1)} className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ChevronLeft size={18} />
           </button>
@@ -74,11 +79,11 @@ export default function Bilan() {
       <div className={`rounded-xl p-4 text-center border ${isProfit ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
         <div className="text-sm text-muted mb-1">Résultat Net</div>
         <div className={`text-3xl font-bold ${isProfit ? 'text-green-400' : 'text-red-400'}`}>
-          {fmt(cr.resultat_net)}
+          {mask(fmt(cr.resultat_net))}
         </div>
         <div className="flex justify-center gap-3 mt-3 text-sm">
-          <span className="text-green-400 flex items-center gap-1"><TrendingUp size={14} /> CA: {fmt(cr.chiffre_affaires)}</span>
-          <span className="text-red-400 flex items-center gap-1"><TrendingDown size={14} /> Charges: {fmt(cr.charges.total)}</span>
+          <span className="text-green-400 flex items-center gap-1"><TrendingUp size={14} /> CA: {mask(fmt(cr.chiffre_affaires))}</span>
+          <span className="text-red-400 flex items-center gap-1"><TrendingDown size={14} /> Charges: {mask(fmt(cr.charges.total))}</span>
         </div>
       </div>
 
@@ -88,22 +93,22 @@ export default function Bilan() {
         <div className="grid grid-cols-3 gap-2.5 text-center">
           <div>
             <div className="text-xs text-muted">Collectée</div>
-            <div className="text-sm font-medium">{fmt(data.tva.collectee)}</div>
+            <div className="text-sm font-medium">{mask(fmt(data.tva.collectee))}</div>
           </div>
           <div>
             <div className="text-xs text-muted">Déductible</div>
-            <div className="text-sm font-medium">{fmt(data.tva.deductible)}</div>
+            <div className="text-sm font-medium">{mask(fmt(data.tva.deductible))}</div>
           </div>
           <div>
             <div className="text-xs text-muted">À payer</div>
             <div className={`text-sm font-bold ${data.tva.nette > 0 ? 'text-red-400' : 'text-green-400'}`}>
-              {fmt(data.tva.nette)}
+              {mask(fmt(data.tva.nette))}
             </div>
           </div>
         </div>
         {data.tva.from_invoices && (
           <div className="mt-2 text-xs text-muted text-center">
-            📄 TVA depuis factures: {fmt(data.tva.from_invoices.tva)} (sur {fmt(data.tva.from_invoices.ht)} HT)
+            📄 TVA depuis factures: {mask(fmt(data.tva.from_invoices.tva))} (sur {mask(fmt(data.tva.from_invoices.ht))} HT)
           </div>
         )}
       </div>
@@ -121,7 +126,7 @@ export default function Bilan() {
                 <div key={i}>
                   <div className="flex justify-between text-xs mb-0.5">
                     <span>{ch.category}</span>
-                    <span className="text-muted">{fmt(ch.total)} ({ch.count})</span>
+                    <span className="text-muted">{mask(fmt(ch.total))} ({ch.count})</span>
                   </div>
                   <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
                     <div className="h-full bg-accent-500/60 rounded-full" style={{ width: `${pct}%` }} />
@@ -170,12 +175,12 @@ export default function Bilan() {
               data.bilan.actif.items.map((a, i) => (
                 <div key={i} className="flex justify-between text-xs py-0.5">
                   <span className="truncate">{a.name}</span>
-                  <span className="ml-2 tabular-nums">{fmt(a.balance)}</span>
+                  <span className="ml-2 tabular-nums">{mask(fmt(a.balance))}</span>
                 </div>
               ))
             )}
             <div className="border-t border-border mt-2 pt-1 flex justify-between text-xs font-bold">
-              <span>Total</span><span>{fmt(data.bilan.actif.total)}</span>
+              <span>Total</span><span>{mask(fmt(data.bilan.actif.total))}</span>
             </div>
           </div>
           <div>
@@ -186,18 +191,18 @@ export default function Bilan() {
               data.bilan.passif.items.map((p, i) => (
                 <div key={i} className="flex justify-between text-xs py-0.5">
                   <span className="truncate">{p.name}</span>
-                  <span className="ml-2 tabular-nums">{fmt(p.balance)}</span>
+                  <span className="ml-2 tabular-nums">{mask(fmt(p.balance))}</span>
                 </div>
               ))
             )}
             <div className="border-t border-border mt-2 pt-1 flex justify-between text-xs font-bold">
-              <span>Total</span><span>{fmt(data.bilan.passif.total)}</span>
+              <span>Total</span><span>{mask(fmt(data.bilan.passif.total))}</span>
             </div>
           </div>
         </div>
         <div className="mt-3 text-center text-sm font-semibold">
           Capitaux propres: <span className={data.bilan.capitaux_propres >= 0 ? 'text-green-400' : 'text-red-400'}>
-            {fmt(data.bilan.capitaux_propres)}
+            {mask(fmt(data.bilan.capitaux_propres))}
           </span>
         </div>
       </div>

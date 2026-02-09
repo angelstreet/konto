@@ -23,6 +23,7 @@ import Outils from './pages/Outils';
 import Onboarding from './pages/Onboarding';
 import { FilterProvider } from './FilterContext';
 import { PreferencesProvider, usePreferences } from './PreferencesContext';
+import { AmountVisibilityProvider } from './AmountVisibilityContext';
 
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -132,11 +133,13 @@ function ClerkAppInner({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <FilterProvider>
-      <Layout onLogout={onLogout}>
-        <AppRoutes />
-      </Layout>
-    </FilterProvider>
+    <AmountVisibilityProvider>
+      <FilterProvider>
+        <Layout onLogout={onLogout}>
+          <AppRoutes />
+        </Layout>
+      </FilterProvider>
+    </AmountVisibilityProvider>
   );
 }
 
@@ -182,11 +185,13 @@ function LegacyAppInner({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <FilterProvider>
-      <Layout onLogout={onLogout}>
-        <AppRoutes />
-      </Layout>
-    </FilterProvider>
+    <AmountVisibilityProvider>
+      <FilterProvider>
+        <Layout onLogout={onLogout}>
+          <AppRoutes />
+        </Layout>
+      </FilterProvider>
+    </AmountVisibilityProvider>
   );
 }
 

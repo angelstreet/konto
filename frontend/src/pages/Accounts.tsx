@@ -7,6 +7,7 @@ import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { usePreferences } from '../PreferencesContext';
+import { useAmountVisibility } from '../AmountVisibilityContext';
 import { useAuth } from '@clerk/clerk-react';
 
 const clerkEnabledAcc = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
@@ -92,7 +93,7 @@ export default function Accounts() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
   const [editBalance, setEditBalance] = useState('');
-  const [allBalancesHidden, setAllBalancesHidden] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
+  const { hideAmounts: allBalancesHidden, toggleHideAmounts: toggleAllBalancesHidden } = useAmountVisibility();
   const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [filterBank, setFilterBank] = useState('');
   const [filterType, setFilterType] = useState('');
@@ -405,7 +406,7 @@ export default function Accounts() {
         <div className="flex items-center gap-2 flex-shrink-0">
           {allAccounts.length > 0 && (
             <button
-              onClick={() => setAllBalancesHidden(h => !h)}
+              onClick={toggleAllBalancesHidden}
               className="text-muted hover:text-white transition-colors p-1 sm:p-2"
               title={allBalancesHidden ? t('show_all_balances') : t('hide_all_balances')}
             >

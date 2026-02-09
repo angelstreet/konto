@@ -7,6 +7,8 @@ import { RefreshCw, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ArrowUp
 import { useNavigate } from 'react-router-dom';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
+import { useAmountVisibility } from '../AmountVisibilityContext';
+import EyeToggle from '../components/EyeToggle';
 
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#22c55e', '#ec4899', '#6b7280'];
@@ -44,6 +46,8 @@ export default function Analytics() {
   const period = `${year}-${String(month).padStart(2, '0')}`;
 
   const { appendScope } = useFilter();
+  const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
+  const mask = (v: string) => hideAmounts ? '••••' : v;
   const { data, loading, refetch } = useApi<AnalyticsData>(appendScope(`${API}/analytics?period=${period}`));
   const [refreshing, setRefreshing] = useState(false);
 
