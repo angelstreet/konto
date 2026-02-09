@@ -69,6 +69,11 @@ export default function Income() {
   const [borrowInput, setBorrowInput] = useState({ net_monthly: '', existing_payments: '', rate: '3.35', duration_years: '20' });
   const [borrowResult, setBorrowResult] = useState<BorrowingResult | null>(null);
 
+  // Collapsible sections
+  const [incomeOpen, setIncomeOpen] = useState(true);
+  const [taxOpen, setTaxOpen] = useState(false);
+  const [borrowOpen, setBorrowOpen] = useState(false);
+
   useEffect(() => { fetchEntries(); fetchCompanies(); }, []);
 
   const fetchEntries = () => {
@@ -160,18 +165,22 @@ export default function Income() {
       </h1>
 
       {/* ===== SECTION 1: Income Tracking ===== */}
-      <section className="bg-surface rounded-xl border border-border p-6 space-y-4">
+      <section className="bg-surface rounded-xl border border-border p-4 space-y-2.5">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold flex items-center gap-2">
+          <h2 className="text-lg font-semibold flex items-center gap-2 cursor-pointer select-none" onClick={() => setIncomeOpen(!incomeOpen)}>
             <TrendingUp size={20} /> {t('income_tracking')}
+            <ChevronDown size={16} className={`text-muted transition-transform ${incomeOpen ? '' : '-rotate-90'}`} />
           </h2>
-          <button
-            onClick={() => { setShowForm(true); setEditId(null); setForm({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' }); }}
-            className="flex items-center gap-1.5 px-3 py-2.5 bg-accent-500 text-white rounded-lg text-sm min-h-[44px] font-medium hover:bg-accent-600 transition-colors"
-          >
-            <Plus size={16} /> <span className="hidden sm:inline">{t('add_employer')}</span>
-          </button>
+          {incomeOpen && (
+            <button
+              onClick={() => { setShowForm(true); setEditId(null); setForm({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' }); }}
+              className="flex items-center gap-1.5 px-3 py-2.5 bg-accent-500 text-white rounded-lg text-sm min-h-[44px] font-medium hover:bg-accent-600 transition-colors"
+            >
+              <Plus size={16} /> <span className="hidden sm:inline">{t('add_employer')}</span>
+            </button>
+          )}
         </div>
+        {incomeOpen && (<>
 
         {/* Form */}
         {showForm && (
@@ -357,7 +366,7 @@ export default function Income() {
           </>
         
         ) : (
-          <p className="text-muted text-sm text-center py-4">{t('no_income_entries')}</p>
+          <p className="text-muted text-sm text-center py-2.5">{t('no_income_entries')}</p>
         )}
 
         {/* Salary progression chart */}
@@ -375,14 +384,17 @@ export default function Income() {
             </ResponsiveContainer>
           </div>
         )}
+        </>)}
       </section>
 
       {/* ===== SECTION 2: Tax Estimation ===== */}
-      <section className="bg-surface rounded-xl border border-border p-6 space-y-4">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
+      <section className="bg-surface rounded-xl border border-border p-4 space-y-2.5">
+        <h2 className="text-lg font-semibold flex items-center gap-2 cursor-pointer select-none" onClick={() => setTaxOpen(!taxOpen)}>
           <Calculator size={20} /> {t('tax_estimation')}
+          <ChevronDown size={16} className={`text-muted transition-transform ${taxOpen ? '' : '-rotate-90'}`} />
         </h2>
 
+        {taxOpen && (<>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
           <div>
             <label className="text-xs text-muted mb-1 block">{t('gross_annual')}</label>
@@ -428,32 +440,35 @@ export default function Income() {
 
         {taxResult && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-2">
-            <div className="bg-background rounded-lg p-4 text-center">
+            <div className="bg-background rounded-lg p-2.5 text-center">
               <p className="text-xs text-muted mb-1">{t('gross_annual')}</p>
               <p className="text-lg font-bold text-white">{fmtTax(taxResult.gross_annual)}</p>
             </div>
-            <div className="bg-background rounded-lg p-4 text-center">
+            <div className="bg-background rounded-lg p-2.5 text-center">
               <p className="text-xs text-muted mb-1">{t('estimated_tax')}</p>
               <p className="text-lg font-bold text-red-400">{fmtTax(taxResult.tax)}</p>
             </div>
-            <div className="bg-background rounded-lg p-4 text-center">
+            <div className="bg-background rounded-lg p-2.5 text-center">
               <p className="text-xs text-muted mb-1">{t('net_income')}</p>
               <p className="text-lg font-bold text-green-400">{fmtTax(taxResult.netIncome)}</p>
             </div>
-            <div className="bg-background rounded-lg p-4 text-center">
+            <div className="bg-background rounded-lg p-2.5 text-center">
               <p className="text-xs text-muted mb-1">{t('effective_rate')}</p>
               <p className="text-lg font-bold text-yellow-400">{taxResult.effectiveRate}%</p>
             </div>
           </div>
         )}
+        </>)}
       </section>
 
       {/* ===== SECTION 3: Borrowing Capacity ===== */}
-      <section className="bg-surface rounded-xl border border-border p-6 space-y-4">
-        <h2 className="text-lg font-semibold flex items-center gap-2">
+      <section className="bg-surface rounded-xl border border-border p-4 space-y-2.5">
+        <h2 className="text-lg font-semibold flex items-center gap-2 cursor-pointer select-none" onClick={() => setBorrowOpen(!borrowOpen)}>
           <CreditCard size={20} /> {t('borrowing_capacity')}
+          <ChevronDown size={16} className={`text-muted transition-transform ${borrowOpen ? '' : '-rotate-90'}`} />
         </h2>
 
+        {borrowOpen && (<>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <div>
             <label className="text-xs text-muted mb-1 block">{t('net_monthly_income')}</label>
@@ -505,6 +520,7 @@ export default function Income() {
             </p>
           </div>
         )}
+        </>)}
       </section>
     </div>
   );
