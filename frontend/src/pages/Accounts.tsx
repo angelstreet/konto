@@ -384,7 +384,7 @@ export default function Accounts() {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <span className="hidden sm:block"><ScopeSelect /></span>
+          <span className="hidden md:block"><ScopeSelect /></span>
           <button
             onClick={() => setAddMode('choose')}
             className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black"
@@ -636,7 +636,7 @@ export default function Accounts() {
       {allAccounts.length > 0 && (uniqueBanks.length > 1 || uniqueTypes.length > 1 || hasCrypto) && (
         <>
           {/* Mobile: unified filter button + dropdown */}
-          <div className="sm:hidden mb-3 relative">
+          <div className="md:hidden mb-3 relative">
             <button
               onClick={() => setMobileFiltersOpen(o => !o)}
               className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs transition-colors ${activeFilterCount > 0 ? 'bg-accent-500/20 text-accent-400 border border-accent-500/30' : 'bg-surface border border-border text-muted'}`}
@@ -688,12 +688,16 @@ export default function Accounts() {
                     ⛓️ {t('filter_crypto')}
                   </button>
                 )}
+                <div>
+                  <label className="text-[10px] text-muted uppercase tracking-wider mb-1 block">{t('scope_all')}</label>
+                  <ScopeSelect />
+                </div>
                 {activeFilterCount > 0 && (
                   <button
                     onClick={() => { setFilterBank(''); setFilterType(''); setFilterCrypto(false); }}
                     className="w-full text-center text-xs text-red-400 hover:text-red-300 pt-1"
                   >
-                    {t('clear_filters') || 'Effacer les filtres'}
+                    {t('clear_filters')}
                   </button>
                 )}
               </div>
@@ -701,7 +705,7 @@ export default function Accounts() {
           </div>
 
           {/* Desktop: pills */}
-          <div className="hidden sm:flex flex-wrap gap-2 mb-4">
+          <div className="hidden md:flex flex-wrap gap-2 mb-4">
             {uniqueBanks.length > 1 && (
               <>
                 <button
