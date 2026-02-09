@@ -189,14 +189,14 @@ export default function Dashboard() {
                   className={`text-muted transition-transform ${donutOpen ? '' : '-rotate-90'}`}
                 />
               </button>
-              {donutOpen && (
+              <div className={donutOpen ? 'block' : 'hidden'}>
                 <DistributionDonut data={donutData} total={posTotal} hideAmounts={hideAmounts} />
-              )}
+              </div>
             </div>
           )}
 
-          {/* Daily quote — hidden on mobile */}
-          <div className="mt-6 text-center hidden sm:block">
+          {/* Daily quote */}
+          <div className="mt-6 text-center">
             <p className={`italic text-muted ${sizeClasses[quoteSize] || 'text-base'}`}>
               {quoteText}
             </p>
