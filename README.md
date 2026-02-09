@@ -14,6 +14,7 @@ Kompta aggregates all your financial accounts (banks, crypto, manual), tracks yo
 | Dev Server | Vite 5 (frontend) + tsx watch (backend) |
 | Process Manager | PM2 |
 | i18n | i18next (FR/EN) |
+| Deployment | Vercel (configured for serverless deployment) |
 
 ## Quick Start
 
@@ -56,6 +57,24 @@ npm run dev:backend    # → http://localhost:3004/api/
 | Variable | Description | Required |
 |----------|-------------|----------|
 | `VITE_CLERK_PUBLISHABLE_KEY` | Clerk publishable key | Yes |
+
+## Features Highlights
+
+### Crypto Integrations
+- **One-click MetaMask**: Connect your MetaMask wallet instantly — same address works across all EVM chains
+- **Multi-chain support**: Ethereum, Base, Polygon, BNB Chain, Avalanche, Arbitrum, Optimism, XRP
+- **Bitcoin wallets**: Single addresses (bc1q...) or HD wallets (xpub... with automatic address derivation)
+- **Solana support**: Native SOL balance tracking
+- **Automatic sync**: Real-time balance refresh from public RPCs (no API keys needed)
+
+### Net/Brut Toggle
+- Dashboard shows both gross (brut) and net patrimoine
+- Toggle affects donut chart, evolution chart, and legend
+- Helps visualize patrimoine with/without loan liabilities
+
+### Outils Hub
+- Centralized tools page (2×2 grid) for quick access to simulators and utilities
+- Credit simulator, budget analyzer, and more
 
 ## Project Structure
 

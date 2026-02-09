@@ -17,7 +17,7 @@
 ### 3. Blockchain Wallets
 **Status:** ✅ Live
 
-Supports 9 networks. Same address (e.g. MetaMask 0x...) works across all EVM chains.
+Supports 10 networks. **One-click MetaMask connect** — same address (e.g. MetaMask 0x...) works across all EVM chains.
 
 | Network | Currency | API | Key needed |
 |---------|----------|-----|------------|
@@ -30,6 +30,7 @@ Supports 9 networks. Same address (e.g. MetaMask 0x...) works across all EVM cha
 | Avalanche | AVAX | api.avax.network | No |
 | Arbitrum | ETH | arb1.arbitrum.io | No |
 | Optimism | ETH | mainnet.optimism.io | No |
+| XRP | XRP | xrpl.org public API | No |
 | Solana | SOL | api.mainnet-beta.solana.com | No |
 
 **Input formats:**

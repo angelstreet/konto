@@ -23,6 +23,7 @@ All routes are under the `/kompta` base path.
 | `/simulators` | `CreditSimulator` | Credit simulation + borrowing capacity |
 | `/settings` | `Settings` | App settings |
 | `/analytics` | `Analytics` | Revenue & expense analytics with cached metrics |
+| `/outils` | `Outils` | Tools hub page (2×2 grid) — quick access to simulators and utilities |
 | `/bilan` | `Bilan` | Annual balance sheet (bilan annuel) |
 | `/invoices` | `Invoices` | Invoice management with Google Drive scanning & transaction matching |
 | `/onboarding` | `Onboarding` | New user onboarding wizard |
