@@ -283,6 +283,14 @@ export default function Assets() {
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <span className="hidden md:block"><ScopeSelect /></span>
+          <button
+            onClick={() => setMobileFiltersOpen(o => !o)}
+            className={`md:hidden flex items-center gap-1 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors ${
+              filter ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'
+            }`}
+          >
+            {t('filters')} <span className="text-[10px]">▾</span>
+          </button>
           <button onClick={() => startCreate()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black">
             <Plus size={16} /> <span className="hidden sm:inline">{t('add_asset')}</span>
           </button>
@@ -304,19 +312,8 @@ export default function Assets() {
         </div>
       )}
 
-      {/* Mobile: Filtrer ▾ button */}
+      {/* Mobile: Filter dropdown panel (toggled from header button) */}
       <div className="md:hidden mb-3">
-        <button
-          onClick={() => setMobileFiltersOpen(o => !o)}
-          className={`flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium min-h-[44px] transition-colors ${
-            filter ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'
-          }`}
-        >
-          <SlidersHorizontal size={16} />
-          {t('filters')}
-          {filter && <span className="w-2 h-2 rounded-full bg-accent-500" />}
-          <span className="text-[10px]">▾</span>
-        </button>
         {mobileFiltersOpen && (
           <div className="mt-2 bg-surface rounded-xl border border-border p-3 space-y-3">
             <div>
