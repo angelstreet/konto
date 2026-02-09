@@ -39,7 +39,8 @@ function AppRoutes() {
       <Route path="/analysis" element={<Analytics />} />
       <Route path="/cashflow" element={<ComingSoon titleKey="nav_cashflow" />} />
       <Route path="/ledger" element={<ComingSoon titleKey="nav_ledger" />} />
-      <Route path="/reports" element={<Report />} />
+      <Route path="/rapport-patrimoine" element={<Report />} />
+      <Route path="/reports" element={<Navigate to="/rapport-patrimoine" replace />} />
       <Route path="/vat" element={<ComingSoon titleKey="nav_vat" />} />
       <Route path="/fec-export" element={<ComingSoon titleKey="nav_fec_export" />} />
       <Route path="/budget" element={<Budget />} />

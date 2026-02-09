@@ -14,11 +14,12 @@ interface Tool {
 }
 
 const tools: Tool[] = [
+  { icon: '📊', lucideIcon: FileSearch, labelKey: 'nav_rapport_patrimoine', path: '/rapport-patrimoine' },
   { icon: '🧮', lucideIcon: Calculator, labelKey: 'tool_credit_simulator', path: '/simulators' },
   { icon: '📄', lucideIcon: FileSearch, labelKey: 'tool_invoice_scanner', path: '/reconciliation' },
   { icon: '☁️', lucideIcon: CloudUpload, labelKey: 'tool_sync_drive', path: '/settings' },
   { icon: '📥', lucideIcon: Download, labelKey: 'tool_import_data', path: '/import' },
-  { icon: '📤', lucideIcon: Upload, labelKey: 'tool_export_data', path: '/reports' },
+  { icon: '📤', lucideIcon: Upload, labelKey: 'tool_export_data', path: '/rapport-patrimoine' },
   { icon: '⚙️', lucideIcon: Settings, labelKey: 'settings', path: '/settings' },
 ];
 

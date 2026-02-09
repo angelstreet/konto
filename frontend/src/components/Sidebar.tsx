@@ -93,7 +93,6 @@ const navGroups: NavGroup[] = [
         labelKey: 'nav_scope_pro',
         icon: Briefcase,
         children: [
-          { kind: 'leaf', path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
           { kind: 'leaf', path: '/analysis', icon: Wallet, labelKey: 'nav_analysis' },
           { kind: 'leaf', path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
           { kind: 'leaf', path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
@@ -104,6 +103,7 @@ const navGroups: NavGroup[] = [
   {
     labelKey: 'nav_group_outils',
     children: [
+      { kind: 'leaf', path: '/rapport-patrimoine', icon: FileSpreadsheet, labelKey: 'nav_rapport_patrimoine' },
       { kind: 'leaf', path: '/import', icon: Upload, labelKey: 'nav_import', disabled: true },
       { kind: 'leaf', path: '/reconciliation', icon: GitCompareArrows, labelKey: 'nav_reconciliation' },
       { kind: 'leaf', path: '/simulators', icon: Calculator, labelKey: 'nav_simulators' },
