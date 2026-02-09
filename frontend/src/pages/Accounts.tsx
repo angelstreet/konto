@@ -389,10 +389,9 @@ export default function Accounts() {
           <span className="hidden md:block"><ScopeSelect /></span>
           <button
             onClick={() => setAddMode('choose')}
-            className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black"
+            className="flex items-center justify-center w-8 h-8 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black"
           >
             <Plus size={16} />
-            <span className="hidden sm:inline">{t('add_account')}</span>
           </button>
         </div>
       </div>
