@@ -641,8 +641,8 @@ app.get('/api/assets', async (c) => {
   let where = '1=1';
   const params: any[] = [];
   if (type) { where += ' AND a.type = ?'; params.push(type); }
-  if (usage === 'personal') { where += " AND (a.usage = 'personal' OR a.usage IS NULL)"; }
-  else if (usage === 'professional') { where += " AND a.usage = 'professional'"; }
+  if (usage === 'personal') { where += " AND (a.usage = 'personal' OR a.usage IS NULL) AND a.company_id IS NULL"; }
+  else if (usage === 'professional') { where += " AND (a.usage = 'professional' OR a.company_id IS NOT NULL)"; }
   if (companyId) { where += ' AND a.company_id = ?'; params.push(companyId); }
 
   const result = await db.execute({
@@ -1284,27 +1284,30 @@ app.get('/api/rates/current', async (c) => {
 
 app.get('/api/income', async (c) => {
   const userId = await getUserId(c);
-  const result = await db.execute({ sql: 'SELECT * FROM income_entries WHERE user_id = ? ORDER BY year DESC, employer', args: [userId] });
+  const result = await db.execute({
+    sql: `SELECT ie.*, co.name as company_name FROM income_entries ie LEFT JOIN companies co ON co.id = ie.company_id WHERE ie.user_id = ? ORDER BY ie.year DESC, ie.start_date DESC, ie.employer`,
+    args: [userId]
+  });
   return c.json({ entries: result.rows });
 });
 
 app.post('/api/income', async (c) => {
   const userId = await getUserId(c);
-  const { year, employer, job_title, country, gross_annual } = await c.req.json();
+  const { year, employer, job_title, country, gross_annual, net_annual, start_date, end_date, company_id } = await c.req.json();
   if (!year || !employer || !gross_annual) return c.json({ error: 'Missing required fields' }, 400);
   const result = await db.execute({
-    sql: 'INSERT INTO income_entries (user_id, year, employer, job_title, country, gross_annual) VALUES (?, ?, ?, ?, ?, ?)',
-    args: [userId, year, employer, job_title || null, country || 'FR', gross_annual]
+    sql: 'INSERT INTO income_entries (user_id, year, employer, job_title, country, gross_annual, net_annual, start_date, end_date, company_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    args: [userId, year, employer, job_title || null, country || 'FR', gross_annual, net_annual || null, start_date || null, end_date || null, company_id || null]
   });
-  return c.json({ id: Number(result.lastInsertRowid), year, employer, job_title, country, gross_annual });
+  return c.json({ id: Number(result.lastInsertRowid), year, employer, job_title, country, gross_annual, net_annual, start_date, end_date, company_id });
 });
 
 app.put('/api/income/:id', async (c) => {
   const id = c.req.param('id');
-  const { year, employer, job_title, country, gross_annual } = await c.req.json();
+  const { year, employer, job_title, country, gross_annual, net_annual, start_date, end_date, company_id } = await c.req.json();
   await db.execute({
-    sql: 'UPDATE income_entries SET year=?, employer=?, job_title=?, country=?, gross_annual=? WHERE id=?',
-    args: [year, employer, job_title || null, country || 'FR', gross_annual, id]
+    sql: 'UPDATE income_entries SET year=?, employer=?, job_title=?, country=?, gross_annual=?, net_annual=?, start_date=?, end_date=?, company_id=? WHERE id=?',
+    args: [year, employer, job_title || null, country || 'FR', gross_annual, net_annual || null, start_date || null, end_date || null, company_id || null, id]
   });
   return c.json({ success: true });
 });

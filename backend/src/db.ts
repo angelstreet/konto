@@ -5,6 +5,17 @@ const db: Client = createClient({
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
+// Graceful shutdown: flush WAL to prevent data loss on kill/restart
+for (const sig of ['SIGTERM', 'SIGINT', 'SIGHUP'] as const) {
+  process.on(sig, async () => {
+    try {
+      await db.execute('PRAGMA wal_checkpoint(TRUNCATE)');
+    } catch {}
+    db.close();
+    process.exit(0);
+  });
+}
+
 export async function initDatabase() {
   await db.executeMultiple(`
     CREATE TABLE IF NOT EXISTS users (
@@ -92,6 +103,7 @@ export async function initDatabase() {
       type TEXT NOT NULL CHECK(type IN ('real_estate','vehicle','valuable','other')),
       name TEXT NOT NULL,
       purchase_price REAL,
+      notary_fees REAL,
       purchase_date TEXT,
       current_value REAL,
       current_value_date TEXT,
@@ -161,6 +173,10 @@ export async function initDatabase() {
       job_title TEXT,
       country TEXT NOT NULL DEFAULT 'FR',
       gross_annual REAL NOT NULL,
+      net_annual REAL,
+      start_date TEXT,
+      end_date TEXT,
+      company_id INTEGER REFERENCES companies(id),
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -241,6 +257,28 @@ export async function migrateDatabase() {
     await db.execute("ALTER TABLE bank_accounts ADD COLUMN user_id INTEGER REFERENCES users(id)");
     // Migrate existing accounts: assign to user 1
     await db.execute("UPDATE bank_accounts SET user_id = 1 WHERE user_id IS NULL");
+  }
+  try {
+    await db.execute("SELECT notary_fees FROM assets LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE assets ADD COLUMN notary_fees REAL");
+  }
+  // income_entries: add new columns
+  for (const col of ['net_annual REAL', 'start_date TEXT', 'end_date TEXT', 'company_id INTEGER REFERENCES companies(id)']) {
+    const name = col.split(' ')[0];
+    try { await db.execute(`SELECT ${name} FROM income_entries LIMIT 1`); } catch {
+      await db.execute(`ALTER TABLE income_entries ADD COLUMN ${col}`);
+    }
+  }
+  try {
+    await db.execute("SELECT company_id FROM assets LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE assets ADD COLUMN company_id INTEGER REFERENCES companies(id)");
+  }
+  try {
+    await db.execute("SELECT usage FROM assets LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE assets ADD COLUMN usage TEXT NOT NULL DEFAULT 'personal'");
   }
 }
 
