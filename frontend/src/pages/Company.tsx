@@ -1,6 +1,6 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
-import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, ChevronRight, Info, X, Eye, EyeOff, MoreVertical } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, ChevronRight, Info, X, Eye, EyeOff, MoreVertical, RefreshCw } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useApi, invalidateApi, useAuthFetch } from '../useApi';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -248,6 +248,27 @@ export default function CompanyPage() {
   const cleanName = (name: string) => {
     const match = name.match(/^(.+?)\s*\(\1\)$/);
     return match ? match[1] : name;
+  };
+
+  const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set());
+  const toggleAccount = (id: number) => {
+    setExpandedAccounts(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const abbreviateLegalForm = (form: string): string => {
+    const abbrevs: Record<string, string> = {
+      'Société civile immobilière': 'SCI',
+      'Société par actions simplifiée': 'SAS',
+      'Société par actions simplifiée unipersonnelle': 'SASU',
+      'Société à responsabilité limitée': 'SARL',
+      'Entreprise individuelle': 'EI',
+      'Auto-entrepreneur': 'AE',
+    };
+    return abbrevs[form] || form;
   };
 
   const formatBalance = (n: number) =>
@@ -525,8 +546,8 @@ export default function CompanyPage() {
                   className="w-full flex items-center justify-between md:hidden"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <h3 className="font-semibold text-sm break-words min-w-0">{cleanName(c.name)}</h3>
-                    {c.legal_form && <span className="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-muted flex-shrink-0">{c.legal_form}</span>}
+                    <h3 className="font-semibold text-sm truncate min-w-0">{cleanName(c.name)}</h3>
+                    {c.legal_form && <span className="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-muted flex-shrink-0">{abbreviateLegalForm(c.legal_form)}</span>}
                     <span className="text-[10px] text-muted flex-shrink-0">{linked.length} {linked.length === 1 ? 'compte' : 'comptes'}</span>
                   </div>
                   <ChevronRight size={14} className={`text-muted transition-transform flex-shrink-0 ml-2 ${isExpanded ? 'rotate-90' : ''}`} />
@@ -537,7 +558,7 @@ export default function CompanyPage() {
                   <div>
                     <h3 className="font-semibold text-lg">{cleanName(c.name)}</h3>
                     <div className="flex items-center gap-3 mt-1 text-xs text-muted">
-                      {c.legal_form && <span className="px-2 py-0.5 rounded bg-white/5">{c.legal_form}</span>}
+                      {c.legal_form && <span className="px-2 py-0.5 rounded bg-white/5">{abbreviateLegalForm(c.legal_form)}</span>}
                       {c.siren && <span className="font-mono">SIREN: {c.siren}</span>}
                       {c.capital && <span>Capital: {allAmountsHidden ? <span className="amount-masked">{formatBalance(c.capital)}</span> : formatBalance(c.capital)}</span>}
                     </div>
@@ -641,60 +662,52 @@ export default function CompanyPage() {
                   </div>
                 )}
 
-                {/* Linked accounts */}
+                {/* Linked accounts — clean list */}
+                {linked.length > 0 && (
                 <div className="border-t border-border pt-3 mt-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-xs text-muted uppercase tracking-wide">{t('linked_accounts')} ({linked.length})</span>
-                    <div className="flex items-center gap-3">
-                      {linked.length > 0 && (
-                        <button
-                          onClick={() => unlinkAllAccounts(c.id)}
-                          className="text-xs flex items-center gap-1 hover:text-red-400 text-muted py-2 min-h-[32px]"
-                        >
-                          <Unlink size={12} /> {t('unlink_all')}
-                        </button>
-                      )}
-                      <button
-                        onClick={() => { setLinkingCompanyId(linkingCompanyId === c.id ? null : c.id); setSelectedLinkIds(new Set()); }}
-                        className="text-xs flex items-center gap-1 hover:text-white text-muted py-2 min-h-[32px]"
-                      >
-                        <Link size={12} /> {t('link_account')}
-                      </button>
-                    </div>
+                  <div className="space-y-0.5">
+                    {linked.map(acc => {
+                      const shortName = (acc.custom_name || acc.name || '')
+                        .replace(new RegExp(`^${c.name}\\s*[-–]\\s*`, 'i'), '')
+                        .replace(new RegExp(`^${acc.bank_name || ''}\\s*[-–]?\\s*`, 'i'), '')
+                        .trim() || acc.custom_name || acc.name;
+                      const isAccExpanded = expandedAccounts.has(acc.id);
+                      return (
+                        <div key={acc.id}>
+                          <button
+                            onClick={() => toggleAccount(acc.id)}
+                            className="w-full flex items-center justify-between py-2 px-2 rounded hover:bg-white/5 transition-colors"
+                          >
+                            <span className="text-sm truncate min-w-0">{shortName}</span>
+                            <span className="text-sm font-medium text-accent-400 flex-shrink-0 ml-2">{allAmountsHidden ? <span className="amount-masked">{formatBalance(acc.balance)}</span> : formatBalance(acc.balance)}</span>
+                          </button>
+                          {isAccExpanded && (
+                            <div className="px-2 pb-2 flex flex-col gap-1.5">
+                              {acc.account_number && (
+                                <div className="flex items-center gap-2 text-xs text-muted">
+                                  <span>N° compte:</span>
+                                  <span className="font-mono">{acc.account_number}</span>
+                                </div>
+                              )}
+                              {acc.iban && (
+                                <div className="flex items-center gap-2 text-xs text-muted">
+                                  <span>IBAN:</span>
+                                  <span className="font-mono">{acc.iban}</span>
+                                </div>
+                              )}
+                              <div className="flex items-center gap-2 mt-1">
+                                <button className="text-xs text-muted hover:text-white flex items-center gap-1 transition-colors">
+                                  <RefreshCw size={12} /> Sync
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
-
-                  {linked.length === 0 ? (
-                    <p className="text-xs text-muted italic">{t('no_linked_accounts')}</p>
-                  ) : (
-                    <div className="space-y-1">
-                      {linked.map(acc => {
-                        // Shorten name: remove bank name and company name prefix if present
-                        const shortName = (acc.custom_name || acc.name || '')
-                          .replace(new RegExp(`^${c.name}\\s*[-–]\\s*`, 'i'), '')
-                          .replace(new RegExp(`^${acc.bank_name || ''}\\s*[-–]?\\s*`, 'i'), '')
-                          .trim() || acc.custom_name || acc.name;
-                        const lastDigits = acc.account_number
-                          ? `••${acc.account_number.slice(-4)}`
-                          : acc.iban
-                          ? `••${acc.iban.slice(-4)}`
-                          : '';
-                        return (
-                          <div key={acc.id} className="flex items-center justify-between py-1.5 px-2 rounded bg-white/5">
-                            <div className="flex items-center gap-2 min-w-0 flex-1">
-                              <span className="text-sm truncate">{shortName}</span>
-                              {lastDigits && <span className="text-[10px] text-muted font-mono flex-shrink-0">{lastDigits}</span>}
-                            </div>
-                            <div className="flex items-center gap-2 flex-shrink-0">
-                              <span className="text-sm font-medium text-accent-400">{allAmountsHidden ? <span className="amount-masked">{formatBalance(acc.balance)}</span> : formatBalance(acc.balance)}</span>
-                              <button onClick={() => unlinkAccount(acc.id)} className="text-muted hover:text-red-400 p-2 min-w-[32px] min-h-[32px] flex items-center justify-center" title={t('unlink')}>
-                                <Unlink size={12} />
-                              </button>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  )}
+                </div>
+                )}
 
                   {/* Link account multi-select */}
                   {linkingCompanyId === c.id && unlinkedAccounts.length > 0 && (
