@@ -30,9 +30,11 @@ interface Props {
   data: { key: string; value: number }[];
   total: number;
   hideAmounts?: boolean;
+  showNet?: boolean;
+  loans?: number;
 }
 
-export default function DistributionDonut({ data, total, hideAmounts }: Props) {
+export default function DistributionDonut({ data, total, hideAmounts, showNet = true, loans = 0 }: Props) {
   const positiveData = data.filter(d => d.value > 0);
   if (positiveData.length === 0) return null;
   const fc = (n: number): React.ReactNode => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
@@ -70,7 +72,8 @@ export default function DistributionDonut({ data, total, hideAmounts }: Props) {
         </div>
         <div className="flex-1 space-y-1.5">
           {positiveData.map(d => {
-            const pct = total > 0 ? (d.value / total) * 100 : 0;
+            const posSum = positiveData.reduce((s, x) => s + x.value, 0);
+            const pct = posSum > 0 ? (d.value / posSum) * 100 : 0;
             return (
               <div key={d.key} className="flex items-center justify-between text-xs">
                 <div className="flex items-center gap-1.5">
@@ -84,6 +87,15 @@ export default function DistributionDonut({ data, total, hideAmounts }: Props) {
               </div>
             );
           })}
+          {showNet && loans < 0 && (
+            <div className="flex items-center justify-between text-xs border-t border-border pt-1.5 mt-1.5">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: COLORS.loan }} />
+                <span className="text-muted">{LABELS.loan}</span>
+              </div>
+              <span className="font-medium text-orange-400">{fc(loans)}</span>
+            </div>
+          )}
         </div>
       </div>
       </div>{/* end collapsible */}
