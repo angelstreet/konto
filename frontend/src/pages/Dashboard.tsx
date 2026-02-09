@@ -120,7 +120,7 @@ export default function Dashboard() {
     <div>
       {/* Title row — all on one line */}
       <div className="flex items-center justify-between gap-2 mb-2">
-        <h1 className="text-xl font-semibold whitespace-nowrap truncate">{t('dashboard')}</h1>
+        <h1 className="text-xl font-semibold whitespace-nowrap truncate">{t('nav_dashboard')}</h1>
         <div className="flex items-center gap-1 flex-shrink-0">
           <ScopeSelect />
           <button

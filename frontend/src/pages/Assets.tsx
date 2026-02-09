@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, Eye, EyeOff, SlidersHorizontal,
+  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, Eye, EyeOff,
 } from 'lucide-react';
 
 import ConfirmDialog from '../components/ConfirmDialog';
