@@ -59,7 +59,7 @@ export default function Income() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' });
-  const [expandedEntryId, setExpandedEntryId] = useState<number | null>(null);
+  const [expandedEntryId, setExpandedEntryId] = useState<number | null>(null); // year on mobile, entry id on desktop
 
   // Tax estimation state
   const [taxInput, setTaxInput] = useState({ gross_annual: '', country: 'FR', canton: 'ZH', situation: 'single', children: 0 });
@@ -248,51 +248,68 @@ export default function Income() {
         {/* Entries — table on desktop, cards on mobile */}
         {entries.length > 0 ? (
           <>
-            {/* Mobile cards — max 3 lines, tap to expand */}
-            <div className="sm:hidden space-y-2">
-              {entries.map(e => {
-                const fmtE = e.country === 'CH' ? fmtCHF : fmt;
-                const isExpanded = expandedEntryId === e.id;
-                const period = e.start_date
-                  ? `${e.start_date.slice(5)}${e.end_date ? ' → ' + e.end_date.slice(5) : ' → …'}`
-                  : '';
-                return (
-                  <div key={e.id} className="bg-surface-hover rounded-lg overflow-hidden">
-                    {/* Compact 3-line view — tap to expand */}
-                    <div
-                      className="p-3 cursor-pointer"
-                      onClick={() => setExpandedEntryId(isExpanded ? null : e.id)}
-                    >
-                      {/* Line 1: Employer — Company */}
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm font-medium text-white truncate flex-1 min-w-0">
-                          {e.employer}
-                          {e.company_name && <span className="text-xs text-accent-400 ml-1">({e.company_name})</span>}
-                        </p>
-                        <ChevronDown size={14} className={`text-muted flex-shrink-0 ml-2 transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+            {/* Mobile: group by year, one line per year, expand for details */}
+            <div className="sm:hidden space-y-1">
+              {(() => {
+                // Group entries by year, sort descending
+                const byYear = new Map<number, IncomeEntry[]>();
+                entries.forEach(e => {
+                  if (!byYear.has(e.year)) byYear.set(e.year, []);
+                  byYear.get(e.year)!.push(e);
+                });
+                const years = [...byYear.keys()].sort((a, b) => b - a);
+                return years.map(year => {
+                  const yearEntries = byYear.get(year)!;
+                  const totalGross = yearEntries.reduce((s, e) => s + e.gross_annual, 0);
+                  const isExpanded = expandedEntryId === year;
+                  const mainCurrency = yearEntries[0]?.country === 'CH' ? 'CHF' : 'EUR';
+                  const fmtYear = mainCurrency === 'CHF' ? fmtCHF : fmt;
+                  return (
+                    <div key={year} className="bg-surface-hover rounded-lg overflow-hidden">
+                      {/* Year summary line */}
+                      <div
+                        className="flex items-center justify-between px-3 py-2.5 cursor-pointer"
+                        onClick={() => setExpandedEntryId(isExpanded ? null : year)}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-sm font-bold text-white">{year}</span>
+                          <span className="text-sm font-mono font-medium text-green-400">{fmtYear(totalGross)}</span>
+                        </div>
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <span className="text-xs text-muted">{yearEntries.length} {yearEntries.length > 1 ? 'employeurs' : 'employeur'}</span>
+                          <ChevronDown size={14} className={`text-muted transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                        </div>
                       </div>
-                      {/* Line 2: Gross salary */}
-                      <div className="flex items-center justify-between mt-0.5">
-                        <span className="text-sm font-mono font-medium text-green-400">{fmtE(e.gross_annual)}</span>
-                        {e.net_annual && <span className="text-xs font-mono text-emerald-300">{fmtE(e.net_annual)} net</span>}
-                      </div>
-                      {/* Line 3: Year — period — job title */}
-                      <div className="flex items-center gap-2 mt-0.5 text-xs text-muted">
-                        <span className="font-medium">{e.year}</span>
-                        {period && <span>{period}</span>}
-                        {e.job_title && <span className="truncate">· {e.job_title}</span>}
-                      </div>
+                      {/* Expanded: individual entries */}
+                      {isExpanded && (
+                        <div className="px-3 pb-2 space-y-1">
+                          {yearEntries.map(e => {
+                            const fmtE = e.country === 'CH' ? fmtCHF : fmt;
+                            const months = e.start_date && e.end_date
+                              ? `${new Date(e.start_date).toLocaleDateString('fr-FR', { month: 'short' })}–${new Date(e.end_date).toLocaleDateString('fr-FR', { month: 'short' })}`
+                              : e.start_date
+                              ? `${new Date(e.start_date).toLocaleDateString('fr-FR', { month: 'short' })}–…`
+                              : '';
+                            return (
+                              <div key={e.id} className="flex items-center justify-between py-1.5 pl-2 border-l-2 border-accent-500/30">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <span className="text-sm truncate">{e.employer}</span>
+                                  {months && <span className="text-[10px] text-muted flex-shrink-0">({months})</span>}
+                                </div>
+                                <div className="flex items-center gap-1 flex-shrink-0">
+                                  <span className="text-sm font-mono text-green-400">{fmtE(e.gross_annual)}</span>
+                                  <button onClick={(ev) => { ev.stopPropagation(); startEdit(e); }} className="p-1.5 text-muted hover:text-white"><Edit3 size={12} /></button>
+                                  <button onClick={(ev) => { ev.stopPropagation(); handleDelete(e.id); }} className="p-1.5 text-muted hover:text-red-400"><Trash2 size={12} /></button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
                     </div>
-                    {/* Expanded details */}
-                    {isExpanded && (
-                      <div className="px-3 pb-3 border-t border-border/50 pt-2 flex gap-2">
-                        <button onClick={() => startEdit(e)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-white bg-white/5 hover:bg-white/10 transition-colors"><Edit3 size={12} /> {t('edit')}</button>
-                        <button onClick={() => handleDelete(e.id)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-red-400 bg-white/5 hover:bg-red-500/10 transition-colors"><Trash2 size={12} /> {t('delete')}</button>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+                  );
+                });
+              })()}
             </div>
             {/* Desktop table */}
             <div className="hidden sm:block overflow-x-auto">

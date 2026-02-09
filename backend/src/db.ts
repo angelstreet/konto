@@ -276,6 +276,11 @@ export async function migrateDatabase() {
     await db.execute("ALTER TABLE assets ADD COLUMN company_id INTEGER REFERENCES companies(id)");
   }
   try {
+    await db.execute("SELECT travaux FROM assets LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE assets ADD COLUMN travaux REAL");
+  }
+  try {
     await db.execute("SELECT usage FROM assets LIMIT 1");
   } catch {
     await db.execute("ALTER TABLE assets ADD COLUMN usage TEXT NOT NULL DEFAULT 'personal'");

@@ -22,7 +22,7 @@ interface Cost { id?: number; label: string; amount: number; frequency: string; 
 interface Revenue { id?: number; label: string; amount: number; frequency: string; }
 interface Asset {
   id: number; type: string; name: string;
-  purchase_price: number | null; notary_fees: number | null; purchase_date: string | null;
+  purchase_price: number | null; notary_fees: number | null; travaux: number | null; purchase_date: string | null;
   current_value: number | null; current_value_date: string | null;
   linked_loan_account_id: number | null; loan_name: string | null; loan_balance: number | null;
   notes: string | null;
@@ -53,7 +53,7 @@ export default function Assets() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [form, setForm] = useState({
-    type: 'real_estate', name: '', purchase_price: '', notary_fees: '', purchase_date: '',
+    type: 'real_estate', name: '', purchase_price: '', notary_fees: '', travaux: '', purchase_date: '',
     current_value: '', linked_loan_account_id: '', notes: '',
     address: '', citycode: '', latitude: 0, longitude: 0,
     surface: '', property_type: 'Appartement',
@@ -102,7 +102,7 @@ export default function Assets() {
 
   const resetForm = () => {
     setForm({
-      type: 'real_estate', name: '', purchase_price: '', notary_fees: '', purchase_date: '',
+      type: 'real_estate', name: '', purchase_price: '', notary_fees: '', travaux: '', purchase_date: '',
       current_value: '', linked_loan_account_id: '', notes: '',
       address: '', citycode: '', latitude: 0, longitude: 0,
       surface: '', property_type: 'Appartement',
@@ -168,6 +168,7 @@ export default function Assets() {
       type: a.type, name: a.name,
       purchase_price: a.purchase_price ? String(a.purchase_price) : '',
       notary_fees: a.notary_fees ? String(a.notary_fees) : '',
+      travaux: a.travaux ? String(a.travaux) : '',
       purchase_date: a.purchase_date || '',
       current_value: a.current_value ? String(a.current_value) : '',
       linked_loan_account_id: a.linked_loan_account_id ? String(a.linked_loan_account_id) : '',
@@ -195,6 +196,7 @@ export default function Assets() {
       type: form.type, name: form.name,
       purchase_price: form.purchase_price ? parseFloat(form.purchase_price) : null,
       notary_fees: form.notary_fees ? parseFloat(form.notary_fees) : null,
+      travaux: form.travaux ? parseFloat(form.travaux) : null,
       purchase_date: form.purchase_date || null,
       current_value: form.current_value ? parseFloat(form.current_value) : null,
       current_value_date: form.current_value ? new Date().toISOString().split('T')[0] : null,
@@ -499,6 +501,11 @@ export default function Assets() {
                 onChange={e => setForm(f => ({ ...f, notary_fees: e.target.value }))}
                 className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
             )}
+            {form.type === 'real_estate' && (
+              <input placeholder="Travaux (€)" type="number" value={form.travaux}
+                onChange={e => setForm(f => ({ ...f, travaux: e.target.value }))}
+                className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
+            )}
             <input placeholder={t('purchase_date')} type="date" value={form.purchase_date}
               onChange={e => setForm(f => ({ ...f, purchase_date: e.target.value }))}
               className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
@@ -643,6 +650,11 @@ export default function Assets() {
                       </span>
                     )}
                     {a.loan_name && <span className="truncate">🔗 {a.loan_name}</span>}
+                    {netCashflow !== 0 && (
+                      <span className={`font-medium ${netCashflow >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {netCashflow >= 0 ? '+' : ''}{fmt(netCashflow)}/m
+                      </span>
+                    )}
                   </div>
                 </div>
 
@@ -666,6 +678,18 @@ export default function Assets() {
                         <div>
                           <p className="text-[10px] text-muted uppercase">{t('notary_fees')}</p>
                           <p>{f(a.notary_fees)}</p>
+                        </div>
+                      )}
+                      {a.travaux != null && a.travaux > 0 && (
+                        <div>
+                          <p className="text-[10px] text-muted uppercase">Travaux</p>
+                          <p>{f(a.travaux)}</p>
+                        </div>
+                      )}
+                      {a.purchase_price != null && ((a.notary_fees && a.notary_fees > 0) || (a.travaux && a.travaux > 0)) && (
+                        <div>
+                          <p className="text-[10px] text-muted uppercase">Investissement total</p>
+                          <p className="font-semibold">{f(a.purchase_price + (a.notary_fees || 0) + (a.travaux || 0))}</p>
                         </div>
                       )}
                       {a.current_value != null && (
@@ -743,15 +767,33 @@ export default function Assets() {
                       </div>
                     )}
 
-                    {/* Net cashflow */}
-                    {(a.costs.length > 0 || a.revenues.length > 0) && (
-                      <div className="mt-3 pt-2 border-t border-border/50 flex justify-between text-sm font-medium">
-                        <span>{t('net_cashflow')}</span>
-                        <span className={netCashflow >= 0 ? 'text-green-400' : 'text-red-400'}>
-                          {netCashflow >= 0 ? '+' : ''}{f(netCashflow)}/mois
-                        </span>
-                      </div>
-                    )}
+                    {/* Net cashflow (including loan payment) */}
+                    {(a.costs.length > 0 || a.revenues.length > 0 || a.loan_balance != null) && (() => {
+                      const monthlyCf = a.monthly_revenues - a.monthly_costs;
+                      const annualCf = monthlyCf * 12;
+                      return (
+                        <div className="mt-3 pt-2 border-t border-border/50 space-y-1">
+                          <div className="flex justify-between text-sm font-medium">
+                            <span>Cashflow mensuel</span>
+                            <span className={monthlyCf >= 0 ? 'text-green-400' : 'text-red-400'}>
+                              {monthlyCf >= 0 ? '+' : ''}{f(monthlyCf)}/mois
+                            </span>
+                          </div>
+                          <div className="flex justify-between text-sm font-medium">
+                            <span>Cashflow annuel</span>
+                            <span className={annualCf >= 0 ? 'text-green-400' : 'text-red-400'}>
+                              {annualCf >= 0 ? '+' : ''}{f(annualCf)}/an
+                            </span>
+                          </div>
+                          {a.purchase_price != null && annualCf !== 0 && (
+                            <div className="flex justify-between text-xs text-muted">
+                              <span>Rendement brut</span>
+                              <span>{((a.monthly_revenues * 12) / (a.purchase_price + (a.notary_fees || 0) + (a.travaux || 0)) * 100).toFixed(1)}%</span>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {a.notes && <p className="mt-2 text-xs text-muted italic">{a.notes}</p>}
                   </div>

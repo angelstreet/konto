@@ -658,7 +658,7 @@ app.get('/api/assets', async (c) => {
     asset.revenues = revenuesResult.rows;
     asset.monthly_costs = (asset.costs as any[]).reduce((sum: number, c: any) => sum + (c.frequency === 'yearly' ? c.amount / 12 : c.frequency === 'one_time' ? 0 : c.amount), 0);
     asset.monthly_revenues = (asset.revenues as any[]).reduce((sum: number, r: any) => sum + (r.frequency === 'yearly' ? r.amount / 12 : r.frequency === 'one_time' ? 0 : r.amount), 0);
-    const totalAcquisition = asset.purchase_price ? asset.purchase_price + (asset.notary_fees || 0) : null;
+    const totalAcquisition = asset.purchase_price ? asset.purchase_price + (asset.notary_fees || 0) + (asset.travaux || 0) : null;
     asset.pnl = asset.current_value && totalAcquisition ? asset.current_value - totalAcquisition : null;
     asset.pnl_percent = asset.pnl != null && totalAcquisition ? (asset.pnl / totalAcquisition) * 100 : null;
   }
@@ -680,8 +680,8 @@ app.get('/api/assets/:id', async (c) => {
 app.post('/api/assets', async (c) => {
   const body = await c.req.json() as any;
   const result = await db.execute({
-    sql: `INSERT INTO assets (type, name, purchase_price, notary_fees, purchase_date, current_value, current_value_date, photo_url, linked_loan_account_id, notes, address, citycode, latitude, longitude, surface, property_type, estimated_value, estimated_price_m2, estimation_date, property_usage, monthly_rent, tenant_name, kozy_property_id, usage, company_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    args: [body.type, body.name, body.purchase_price || null, body.notary_fees || null, body.purchase_date || null, body.current_value || null, body.current_value_date || null, body.photo_url || null, body.linked_loan_account_id || null, body.notes || null, body.address || null, body.citycode || null, body.latitude || null, body.longitude || null, body.surface || null, body.property_type || null, body.estimated_value || null, body.estimated_price_m2 || null, body.estimated_value ? new Date().toISOString() : null, body.property_usage || 'principal', body.monthly_rent || null, body.tenant_name || null, body.kozy_property_id || null, body.usage || 'personal', body.company_id || null]
+    sql: `INSERT INTO assets (type, name, purchase_price, notary_fees, travaux, purchase_date, current_value, current_value_date, photo_url, linked_loan_account_id, notes, address, citycode, latitude, longitude, surface, property_type, estimated_value, estimated_price_m2, estimation_date, property_usage, monthly_rent, tenant_name, kozy_property_id, usage, company_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    args: [body.type, body.name, body.purchase_price || null, body.notary_fees || null, body.travaux || null, body.purchase_date || null, body.current_value || null, body.current_value_date || null, body.photo_url || null, body.linked_loan_account_id || null, body.notes || null, body.address || null, body.citycode || null, body.latitude || null, body.longitude || null, body.surface || null, body.property_type || null, body.estimated_value || null, body.estimated_price_m2 || null, body.estimated_value ? new Date().toISOString() : null, body.property_usage || 'principal', body.monthly_rent || null, body.tenant_name || null, body.kozy_property_id || null, body.usage || 'personal', body.company_id || null]
   });
 
   const newId = Number(result.lastInsertRowid);
@@ -703,7 +703,7 @@ app.patch('/api/assets/:id', async (c) => {
   const id = c.req.param('id');
   const body = await c.req.json() as any;
 
-  const fields = ['type', 'name', 'purchase_price', 'notary_fees', 'purchase_date', 'current_value', 'current_value_date', 'photo_url', 'linked_loan_account_id', 'notes', 'address', 'citycode', 'latitude', 'longitude', 'surface', 'property_type', 'estimated_value', 'estimated_price_m2', 'estimation_date', 'property_usage', 'monthly_rent', 'tenant_name', 'kozy_property_id', 'usage', 'company_id'];
+  const fields = ['type', 'name', 'purchase_price', 'notary_fees', 'travaux', 'purchase_date', 'current_value', 'current_value_date', 'photo_url', 'linked_loan_account_id', 'notes', 'address', 'citycode', 'latitude', 'longitude', 'surface', 'property_type', 'estimated_value', 'estimated_price_m2', 'estimation_date', 'property_usage', 'monthly_rent', 'tenant_name', 'kozy_property_id', 'usage', 'company_id'];
   const updates: string[] = [];
   const values: any[] = [];
   for (const f of fields) {

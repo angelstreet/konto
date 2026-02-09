@@ -22,6 +22,9 @@ interface BankAccount {
   bank_name: string | null;
   balance: number;
   company_id: number;
+  account_number: string | null;
+  iban: string | null;
+  type: string | null;
 }
 
 export default function CompanyPage() {
@@ -619,20 +622,32 @@ export default function CompanyPage() {
                     <p className="text-xs text-muted italic">{t('no_linked_accounts')}</p>
                   ) : (
                     <div className="space-y-1">
-                      {linked.map(acc => (
-                        <div key={acc.id} className="flex items-center justify-between py-1.5 px-2 rounded bg-white/5">
-                          <div className="flex items-center gap-2">
-                            {acc.bank_name && <span className="text-xs px-1.5 py-0.5 rounded bg-white/10 text-muted">{acc.bank_name}</span>}
-                            <span className="text-sm">{acc.custom_name || acc.name}</span>
+                      {linked.map(acc => {
+                        // Shorten name: remove bank name and company name prefix if present
+                        const shortName = (acc.custom_name || acc.name || '')
+                          .replace(new RegExp(`^${c.name}\\s*[-–]\\s*`, 'i'), '')
+                          .replace(new RegExp(`^${acc.bank_name || ''}\\s*[-–]?\\s*`, 'i'), '')
+                          .trim() || acc.custom_name || acc.name;
+                        const lastDigits = acc.account_number
+                          ? `••${acc.account_number.slice(-4)}`
+                          : acc.iban
+                          ? `••${acc.iban.slice(-4)}`
+                          : '';
+                        return (
+                          <div key={acc.id} className="flex items-center justify-between py-1.5 px-2 rounded bg-white/5">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              <span className="text-sm truncate">{shortName}</span>
+                              {lastDigits && <span className="text-[10px] text-muted font-mono flex-shrink-0">{lastDigits}</span>}
+                            </div>
+                            <div className="flex items-center gap-2 flex-shrink-0">
+                              <span className="text-sm font-medium text-accent-400">{allAmountsHidden ? <span className="amount-masked">{formatBalance(acc.balance)}</span> : formatBalance(acc.balance)}</span>
+                              <button onClick={() => unlinkAccount(acc.id)} className="text-muted hover:text-red-400 p-2 min-w-[32px] min-h-[32px] flex items-center justify-center" title={t('unlink')}>
+                                <Unlink size={12} />
+                              </button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-accent-400">{allAmountsHidden ? <span className="amount-masked">{formatBalance(acc.balance)}</span> : formatBalance(acc.balance)}</span>
-                            <button onClick={() => unlinkAccount(acc.id)} className="text-muted hover:text-red-400 p-2 min-w-[32px] min-h-[32px] flex items-center justify-center" title={t('unlink')}>
-                              <Unlink size={12} />
-                            </button>
-                          </div>
-                        </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   )}
 
