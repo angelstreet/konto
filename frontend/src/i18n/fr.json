@@ -246,5 +246,10 @@
   "currency_eur": "EUR (€)",
   "currency_usd": "USD ($)",
   "currency_chf": "CHF (Fr.)",
-  "btc_xpub_hint": "Ledger : utilisez votre clé xpub (Ledger Live → Compte → Avancé → Clé publique étendue) pour voir le solde total du portefeuille."
+  "btc_xpub_hint": "Ledger : utilisez votre clé xpub (Ledger Live → Compte → Avancé → Clé publique étendue) pour voir le solde total du portefeuille.",
+  "net_worth": "Patrimoine net",
+  "summary_cash": "Liquidités",
+  "summary_stocks": "Investissements",
+  "patrimoine_evolution": "Évolution du patrimoine",
+  "patrimoine_distribution": "Répartition du patrimoine"
 }

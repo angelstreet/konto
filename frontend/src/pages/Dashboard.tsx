@@ -56,7 +56,6 @@ export default function Dashboard() {
   const { formatCurrency, convertToDisplay } = usePreferences();
   const { data, loading } = useApi<DashboardData>(appendScope(`${API}/dashboard`));
   const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
-  const [chartOpen, setChartOpen] = useState(false);
   const [donutOpen, setDonutOpen] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const fc = (n: number) => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
@@ -96,10 +95,10 @@ export default function Dashboard() {
 
   // Summary blocks
   const summaryBlocks = data ? [
-    { icon: Landmark, label: t('summary_cash') || 'Liquidités', value: cashTotal, color: 'text-white' },
-    { icon: TrendingUp, label: t('summary_stocks') || 'Investissements', value: investments, color: 'text-purple-400' },
-    { icon: Home, label: t('immobilier') || 'Immobilier', value: immoValue, color: 'text-green-400' },
-    { icon: CreditCard, label: t('total_loans') || 'Emprunts', value: loans, color: 'text-orange-400' },
+    { icon: Landmark, label: t('summary_cash'), value: cashTotal, color: 'text-white' },
+    { icon: TrendingUp, label: t('summary_stocks'), value: investments, color: 'text-purple-400' },
+    { icon: Home, label: t('immobilier'), value: immoValue, color: 'text-green-400' },
+    { icon: CreditCard, label: t('total_loans'), value: loans, color: 'text-orange-400' },
   ].filter(b => b.value !== 0) : [];
 
   // Donut data
@@ -119,19 +118,10 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Title row */}
-      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-        <div className="flex items-center gap-2 min-w-0">
-          <h1 className="text-xl font-semibold whitespace-nowrap">{t('dashboard')}</h1>
-          <button
-            onClick={() => setHideAmounts(h => { const v = !h; localStorage.setItem('kompta_hide_amounts', String(!v)); return v; })}
-            className="text-muted hover:text-white transition-colors p-2"
-            title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
-          >
-            {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
-        </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+      {/* Title row — all on one line */}
+      <div className="flex items-center justify-between gap-2 mb-4">
+        <h1 className="text-xl font-semibold whitespace-nowrap truncate">{t('dashboard')}</h1>
+        <div className="flex items-center gap-1 flex-shrink-0">
           <ScopeSelect />
           <button
             onClick={() => window.open(API + '/report/patrimoine?categories=all', '_blank')}
@@ -139,6 +129,13 @@ export default function Dashboard() {
             title="Télécharger rapport PDF"
           >
             <Download size={16} />
+          </button>
+          <button
+            onClick={() => setHideAmounts(h => { const v = !h; localStorage.setItem('kompta_hide_amounts', String(!v)); return v; })}
+            className="text-muted hover:text-white transition-colors p-2"
+            title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
+          >
+            {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         </div>
       </div>
@@ -149,10 +146,10 @@ export default function Dashboard() {
         <>
           {/* Net Worth hero */}
           <div className="bg-surface rounded-xl border border-border p-4 sm:p-6 mb-4 text-center">
-            <p className="text-xs text-muted uppercase tracking-wider mb-1">{t('net_worth') || 'Patrimoine net'}</p>
+            <p className="text-xs text-muted uppercase tracking-wider mb-1">{t('net_worth')}</p>
             <p className="text-2xl sm:text-3xl font-bold text-accent-400">{fc(netTotal)}</p>
             {brutTotal !== netTotal && (
-              <p className="text-xs text-muted mt-1">{t('balance_brut') || 'Brut'}: {fc(brutTotal)}</p>
+              <p className="text-xs text-muted mt-1">{t('balance_brut')}: {fc(brutTotal)}</p>
             )}
           </div>
 
@@ -174,39 +171,29 @@ export default function Dashboard() {
             })}
           </div>
 
-          {/* Patrimoine evolution chart — collapsible */}
-          <div className="mb-3">
-            <button
-              onClick={() => setChartOpen(o => !o)}
-              className="w-full flex items-center justify-between py-2 group"
-            >
-              <h2 className="text-sm font-medium text-muted uppercase tracking-wide">
-                {t('patrimoine_evolution') || 'Évolution du patrimoine'}
-              </h2>
-              <ChevronDown
-                size={14}
-                className={`text-muted transition-transform ${chartOpen ? '' : '-rotate-90'}`}
-              />
-            </button>
-            {chartOpen && <PatrimoineChart />}
-          </div>
-
-          {/* Distribution donut — collapsible */}
-          <div className="mb-3">
-            <button
-              onClick={() => setDonutOpen(o => !o)}
-              className="w-full flex items-center justify-between py-2 group"
-            >
-              <h2 className="text-sm font-medium text-muted uppercase tracking-wide">
-                {t('patrimoine_distribution') || 'Répartition du patrimoine'}
-              </h2>
-              <ChevronDown
-                size={14}
-                className={`text-muted transition-transform ${donutOpen ? '' : '-rotate-90'}`}
-              />
-            </button>
-            {donutOpen && <DistributionDonut data={donutData} total={posTotal} hideAmounts={hideAmounts} />}
-          </div>
+          {/* Patrimoine details — single collapsible section */}
+          {donutData.length > 0 && (
+            <div className="mb-3">
+              <button
+                onClick={() => setDonutOpen(o => !o)}
+                className="w-full flex items-center justify-between py-2 group"
+              >
+                <h2 className="text-sm font-medium text-muted uppercase tracking-wide">
+                  {t('patrimoine_distribution')}
+                </h2>
+                <ChevronDown
+                  size={14}
+                  className={`text-muted transition-transform ${donutOpen ? '' : '-rotate-90'}`}
+                />
+              </button>
+              {donutOpen && (
+                <div className="space-y-4">
+                  <DistributionDonut data={donutData} total={posTotal} hideAmounts={hideAmounts} />
+                  <PatrimoineChart />
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Daily quote */}
           <div className="mt-6 text-center">
