@@ -766,8 +766,8 @@ export default function Accounts() {
             const prov = providerBadge(acc.provider);
             const { text: syncText, isStale } = getRelativeTime(acc.last_sync, t);
             return (
-              <div key={acc.id} className="bg-surface rounded-xl border border-border p-2.5 sm:p-4 relative">
-                {/* Row 1: Icon + Name (truncated) + Balance */}
+              <div key={acc.id} className="bg-surface rounded-xl border border-border p-2.5 sm:px-4 sm:py-2.5 relative">
+                {/* Row 1: Icon + Name + metadata badges + balance + actions (all one line on desktop) */}
                 <div className="flex items-center justify-between gap-2">
                   <div className="flex-1 min-w-0">
                     {editingId === acc.id ? (
@@ -805,53 +805,75 @@ export default function Accounts() {
                       </div>
                     )}
                   </div>
-                  {editingId !== acc.id && (
-                    <span
-                      className={`text-sm sm:text-lg font-semibold text-accent-400 whitespace-nowrap flex-shrink-0 ${acc.provider === 'manual' ? 'cursor-pointer hover:underline' : ''}`}
-                      onClick={() => acc.provider === 'manual' && startEdit(acc)}
-                      title={acc.provider === 'manual' ? t('update_balance') : undefined}
-                    >
-                      {acc.hidden || allBalancesHidden ? <span className="amount-masked">{formatBalance(acc.balance, acc.currency)}</span> : formatBalance(acc.balance, acc.currency)}
-                    </span>
-                  )}
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {editingId !== acc.id && (
+                      <span
+                        className={`text-sm sm:text-base font-semibold text-accent-400 whitespace-nowrap ${acc.provider === 'manual' ? 'cursor-pointer hover:underline' : ''}`}
+                        onClick={() => acc.provider === 'manual' && startEdit(acc)}
+                        title={acc.provider === 'manual' ? t('update_balance') : undefined}
+                      >
+                        {acc.hidden || allBalancesHidden ? <span className="amount-masked">{formatBalance(acc.balance, acc.currency)}</span> : formatBalance(acc.balance, acc.currency)}
+                      </span>
+                    )}
+                    {/* Desktop: inline action icons */}
+                    <div className="hidden sm:flex items-center gap-0 ml-1">
+                      <button onClick={() => startEdit(acc)} className="text-muted hover:text-white transition-colors p-1.5" title={t('edit')}>
+                        <Pencil size={14} />
+                      </button>
+                      <button onClick={() => toggleHidden(acc)} className="text-muted hover:text-white transition-colors p-1.5" title={acc.hidden ? t('show') : t('hide')}>
+                        {acc.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
+                      </button>
+                      <button
+                        onClick={() => syncAccount(acc.id)}
+                        disabled={syncingId === acc.id}
+                        className={`transition-colors p-1.5 ${isStale ? 'text-orange-400 hover:text-orange-300' : 'text-muted hover:text-white'} disabled:opacity-50`}
+                        title={t('sync')}
+                      >
+                        <RefreshCw size={14} className={syncingId === acc.id ? 'animate-spin' : ''} />
+                      </button>
+                      <button onClick={() => deleteAccount(acc.id)} className="text-muted hover:text-red-400 transition-colors p-1.5" title={t('delete')}>
+                        <Trash2 size={14} />
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
-                {/* Row 2: Tags + sync + overflow menu (mobile) / action buttons (desktop) */}
-                <div className="flex items-center justify-between mt-1">
-                  <div className="flex items-center gap-1 sm:gap-2 flex-wrap min-w-0">
+                {/* Row 2: Tags + sync status + overflow menu (mobile) */}
+                <div className="flex items-center justify-between mt-0.5">
+                  <div className="flex items-center gap-1 sm:gap-1.5 flex-wrap min-w-0">
                     {acc.bank_name && (
-                      <span className="hidden sm:inline-flex text-xs px-2 py-0.5 rounded-full bg-white/5 text-muted">{acc.bank_name}</span>
+                      <span className="hidden sm:inline-flex text-[10px] px-1.5 py-0.5 rounded-full bg-white/5 text-muted">{acc.bank_name}</span>
                     )}
                     <button
                       onClick={() => cycleType(acc)}
-                      className={`text-[10px] sm:text-xs px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all sm:min-h-[32px] ${typeBadgeColor(acc.type)}`}
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all ${typeBadgeColor(acc.type)}`}
                     >
                       {t(`account_type_${acc.type || 'checking'}`)}
                     </button>
                     <button
                       onClick={() => cycleUsage(acc)}
-                      className={`text-[10px] sm:text-xs px-1.5 sm:px-2.5 py-0.5 sm:py-1.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all sm:min-h-[32px] ${acc.usage === 'professional' ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-muted'}`}
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full cursor-pointer hover:ring-1 hover:ring-white/20 transition-all ${acc.usage === 'professional' ? 'bg-green-500/20 text-green-400' : 'bg-white/5 text-muted'}`}
                     >
                       {t(`account_usage_${acc.usage || 'personal'}`)}
                     </button>
                     {acc.currency && acc.currency !== 'EUR' && (
-                      <span className="hidden sm:inline-flex text-xs px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400">{acc.currency}</span>
+                      <span className="hidden sm:inline-flex text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400">{acc.currency}</span>
                     )}
                     {acc.blockchain_address && (
-                      <span className="hidden sm:inline text-xs text-muted font-mono">{acc.blockchain_address.slice(0, 6)}...{acc.blockchain_address.slice(-4)}</span>
+                      <span className="hidden sm:inline text-[10px] text-muted font-mono">{acc.blockchain_address.slice(0, 6)}...{acc.blockchain_address.slice(-4)}</span>
                     )}
                     {!acc.blockchain_address && acc.account_number && (
-                      <span className="hidden sm:inline text-xs text-muted font-mono">
+                      <span className="hidden sm:inline text-[10px] text-muted font-mono">
                         {acc.hidden || allBalancesHidden ? '••••••••' : maskNumber(acc.account_number)}
                       </span>
                     )}
                     {!acc.blockchain_address && !acc.account_number && acc.iban && (
-                      <span className="hidden sm:inline text-xs text-muted font-mono">
+                      <span className="hidden sm:inline text-[10px] text-muted font-mono">
                         {acc.hidden || allBalancesHidden ? '••••••••' : maskNumber(acc.iban)}
                       </span>
                     )}
-                    <span className={`inline-block w-1.5 h-1.5 sm:w-2 sm:h-2 rounded-full flex-shrink-0 ${isStale ? 'bg-red-500' : 'bg-green-500'}`} />
-                    <span className="text-[10px] sm:text-xs text-muted whitespace-nowrap">{syncText}</span>
+                    <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${isStale ? 'bg-red-500' : 'bg-green-500'}`} />
+                    <span className="text-[10px] text-muted whitespace-nowrap">{syncText}</span>
                   </div>
 
                   {/* Mobile: ⋮ overflow menu */}
@@ -887,27 +909,6 @@ export default function Accounts() {
                       </>
                     )}
                   </div>
-                </div>
-
-                {/* Desktop: Action buttons row (hidden on mobile) */}
-                <div className="hidden sm:flex items-center gap-0 mt-1 justify-end">
-                  <button onClick={() => startEdit(acc)} className="text-muted hover:text-white transition-colors p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center" title={t('edit')}>
-                    <Pencil size={16} />
-                  </button>
-                  <button onClick={() => toggleHidden(acc)} className="text-muted hover:text-white transition-colors p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center" title={acc.hidden ? t('show') : t('hide')}>
-                    {acc.hidden ? <EyeOff size={16} /> : <Eye size={16} />}
-                  </button>
-                  <button
-                    onClick={() => syncAccount(acc.id)}
-                    disabled={syncingId === acc.id}
-                    className={`transition-colors p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center ${isStale ? 'text-orange-400 hover:text-orange-300' : 'text-muted hover:text-white'} disabled:opacity-50`}
-                    title={t('sync')}
-                  >
-                    <RefreshCw size={16} className={syncingId === acc.id ? 'animate-spin' : ''} />
-                  </button>
-                  <button onClick={() => deleteAccount(acc.id)} className="text-muted hover:text-red-400 transition-colors p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center" title={t('delete')}>
-                    <Trash2 size={16} />
-                  </button>
                 </div>
               </div>
             );

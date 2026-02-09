@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useUser, useClerk as useClerkHook, SignIn } from '@clerk/clerk-react';
+import { dark } from '@clerk/themes';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -17,6 +18,7 @@ import Income from './pages/Income';
 import Analytics from './pages/Analytics';
 import Invoices from './pages/Invoices';
 import Bilan from './pages/Bilan';
+import More from './pages/More';
 import Onboarding from './pages/Onboarding';
 import { FilterProvider } from './FilterContext';
 import { PreferencesProvider, usePreferences } from './PreferencesContext';
@@ -45,6 +47,7 @@ function AppRoutes() {
       <Route path="/invoices" element={<Invoices />} />
       <Route path="/bilan" element={<Bilan />} />
       <Route path="/simulators" element={<CreditSimulator />} />
+      <Route path="/more" element={<More />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -71,7 +74,7 @@ function ClerkApp() {
           <SignIn
             routing="hash"
             appearance={{
-              baseTheme: undefined,
+              baseTheme: dark,
               variables: {
                 colorBackground: '#1a1a1a',
                 colorText: '#e5e5e5',
