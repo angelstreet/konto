@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
-import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, ChevronRight, Info, X, Eye, EyeOff } from 'lucide-react';
-import { useState, useRef } from 'react';
+import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, ChevronRight, Info, X, Eye, EyeOff, MoreVertical } from 'lucide-react';
+import { useState, useRef, useEffect } from 'react';
 import { useApi, invalidateApi, useAuthFetch } from '../useApi';
 import ConfirmDialog from '../components/ConfirmDialog';
 
@@ -255,13 +255,50 @@ export default function CompanyPage() {
 
   const legalForms = ['SARL', 'SAS', 'SASU', 'EURL', 'SA', 'SCI', 'Auto-entrepreneur', 'EI', 'Autre'];
 
+  function CompanyOverflowMenu({ onDetails, onEdit, onLinkAccount, onUnlinkAll, onDelete, hasLinked, t: tr }: {
+    onDetails: () => void; onEdit: () => void; onLinkAccount: () => void; onUnlinkAll: () => void; onDelete: () => void; hasLinked: boolean; t: (k: string) => string;
+  }) {
+    const [open, setOpen] = useState(false);
+    const ref = useRef<HTMLDivElement>(null);
+    useEffect(() => {
+      if (!open) return;
+      const handler = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
+      document.addEventListener('mousedown', handler);
+      return () => document.removeEventListener('mousedown', handler);
+    }, [open]);
+    const items = [
+      { label: tr('details'), onClick: onDetails, icon: <Info size={14} /> },
+      { label: tr('edit'), onClick: onEdit, icon: <Pencil size={14} /> },
+      { label: tr('link_account') || 'Lier un compte', onClick: onLinkAccount, icon: <Link size={14} /> },
+      ...(hasLinked ? [{ label: tr('unlink_all') || 'Tout détacher', onClick: onUnlinkAll, icon: <Unlink size={14} /> }] : []),
+      { label: tr('delete'), onClick: onDelete, icon: <Trash2 size={14} />, danger: true },
+    ];
+    return (
+      <div ref={ref} className="relative">
+        <button onClick={() => setOpen(o => !o)} className="text-muted hover:text-white p-2 transition-colors"><MoreVertical size={16} /></button>
+        {open && (
+          <div className="absolute right-0 top-full mt-1 z-50 bg-surface border border-border rounded-lg shadow-lg py-1 min-w-[160px]">
+            {items.map((item, i) => (
+              <button key={i} onClick={() => { setOpen(false); item.onClick(); }}
+                className={`w-full flex items-center gap-2 px-3 py-2 text-sm text-left transition-colors ${
+                  (item as any).danger ? 'text-red-400 hover:bg-red-500/10' : 'text-muted hover:text-white hover:bg-white/5'
+                }`}>
+                {item.icon} {item.label}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   if (loading) return <div className="text-center text-muted py-8">Loading...</div>;
 
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
-          <h1 className="text-xl font-semibold">{t('company_profile')}</h1>
+          <h1 className="text-xl font-semibold">{t('nav_companies')}</h1>
           <button
             onClick={() => setAllAmountsHidden(h => !h)}
             className="text-muted hover:text-white transition-colors p-1"
@@ -488,7 +525,7 @@ export default function CompanyPage() {
                   className="w-full flex items-center justify-between md:hidden"
                 >
                   <div className="flex items-center gap-2 min-w-0">
-                    <h3 className="font-semibold text-sm truncate">{cleanName(c.name)}</h3>
+                    <h3 className="font-semibold text-sm break-words min-w-0">{cleanName(c.name)}</h3>
                     {c.legal_form && <span className="px-1.5 py-0.5 rounded text-[10px] bg-white/5 text-muted flex-shrink-0">{c.legal_form}</span>}
                     <span className="text-[10px] text-muted flex-shrink-0">{linked.length} {linked.length === 1 ? 'compte' : 'comptes'}</span>
                   </div>
@@ -506,11 +543,15 @@ export default function CompanyPage() {
                     </div>
                     {c.address && <p className="text-xs text-muted mt-1">{c.address}</p>}
                   </div>
-                  <div className="flex items-center gap-1">
-                    <button onClick={() => toggleViewDetails(c)} className={`p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center transition-colors ${viewingCompanyId === c.id ? 'text-accent-400' : 'text-muted hover:text-white'}`} title={t('details')}><Info size={14} /></button>
-                    <button onClick={() => startEdit(c)} className="text-muted hover:text-white p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center" title={t('edit')}><Pencil size={14} /></button>
-                    <button onClick={() => deleteCompany(c.id)} className="text-muted hover:text-red-400 p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center" title={t('delete')}><Trash2 size={14} /></button>
-                  </div>
+                  <CompanyOverflowMenu
+                    onDetails={() => toggleViewDetails(c)}
+                    onEdit={() => startEdit(c)}
+                    onLinkAccount={() => setLinkingCompanyId(linkingCompanyId === c.id ? null : c.id)}
+                    onUnlinkAll={() => unlinkAllAccounts(c.id)}
+                    onDelete={() => deleteCompany(c.id)}
+                    hasLinked={linkedAccounts(c.id).length > 0}
+                    t={t}
+                  />
                 </div>
 
                 {/* Expanded details on mobile */}
@@ -521,11 +562,15 @@ export default function CompanyPage() {
                       {c.siren && <span className="font-mono">SIREN: {c.siren}</span>}
                       {c.capital && <span>Capital: {allAmountsHidden ? <span className="amount-masked">{formatBalance(c.capital)}</span> : formatBalance(c.capital)}</span>}
                     </div>
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => toggleViewDetails(c)} className={`p-2 transition-colors ${viewingCompanyId === c.id ? 'text-accent-400' : 'text-muted hover:text-white'}`}><Info size={14} /></button>
-                      <button onClick={() => startEdit(c)} className="text-muted hover:text-white p-2"><Pencil size={14} /></button>
-                      <button onClick={() => deleteCompany(c.id)} className="text-muted hover:text-red-400 p-2"><Trash2 size={14} /></button>
-                    </div>
+                    <CompanyOverflowMenu
+                      onDetails={() => toggleViewDetails(c)}
+                      onEdit={() => startEdit(c)}
+                      onLinkAccount={() => setLinkingCompanyId(linkingCompanyId === c.id ? null : c.id)}
+                      onUnlinkAll={() => unlinkAllAccounts(c.id)}
+                      onDelete={() => deleteCompany(c.id)}
+                      hasLinked={linkedAccounts(c.id).length > 0}
+                      t={t}
+                    />
                   </div>
                   {c.address && <p className="text-xs text-muted mb-2 md:hidden">{c.address}</p>}
 
