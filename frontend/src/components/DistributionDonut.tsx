@@ -40,8 +40,8 @@ export default function DistributionDonut({ data, total, hideAmounts }: Props) {
   return (
     <div className="bg-surface rounded-xl border border-border p-4 mb-4">
       <h3 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">Répartition du patrimoine</h3>
-      <div className="flex items-center gap-4">
-        <div className="w-40 h-40 relative">
+      <div className="flex flex-col sm:flex-row items-center gap-4">
+        <div className="w-40 h-40 relative flex-shrink-0">
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie

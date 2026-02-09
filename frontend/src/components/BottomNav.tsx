@@ -16,7 +16,7 @@ export default function BottomNav() {
   const { t } = useTranslation();
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 bg-surface border-t border-border">
+    <nav className="fixed bottom-0 left-0 right-0 bg-surface border-t border-border pb-[env(safe-area-inset-bottom)]">
       <div className="flex justify-around max-w-lg mx-auto">
         {items.map(({ path, icon: Icon, labelKey }) => {
           const active = pathname === path;
@@ -24,7 +24,7 @@ export default function BottomNav() {
             <button
               key={path}
               onClick={() => navigate(path)}
-              className={`flex flex-col items-center py-2 px-3 text-xs transition-colors ${
+              className={`flex flex-col items-center py-3 px-3 text-xs transition-colors min-h-[56px] justify-center ${
                 active ? 'text-accent-400' : 'text-muted hover:text-white'
               }`}
             >

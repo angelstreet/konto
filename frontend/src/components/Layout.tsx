@@ -40,10 +40,10 @@ export default function Layout({ children, onLogout }: Props) {
   return (
     <div className="min-h-screen bg-background">
       {sandbox && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-1.5 text-center text-xs text-amber-400 flex items-center justify-center gap-2">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-2 text-center text-xs text-amber-400 flex items-center justify-center gap-2">
           <span>🎮</span>
-          <span>Mode démo — données fictives, rien n'est sauvegardé</span>
-          <button onClick={handleLogout} className="ml-2 underline hover:text-amber-300">Quitter</button>
+          <span className="truncate">Mode démo — données fictives, rien n'est sauvegardé</span>
+          <button onClick={handleLogout} className="ml-2 underline hover:text-amber-300 py-1 px-2 min-h-[44px] flex items-center">Quitter</button>
         </div>
       )}
       <div className="hidden md:block">
@@ -51,7 +51,7 @@ export default function Layout({ children, onLogout }: Props) {
       </div>
 
       <main
-        className={`pb-20 md:pb-0 px-4 md:px-8 pt-3 max-w-6xl w-full transition-all duration-200 ${
+        className={`pb-24 md:pb-0 px-4 md:px-8 pt-3 max-w-6xl w-full transition-all duration-200 ${
           collapsed ? 'md:ml-16' : 'md:ml-56'
         }`}
       >

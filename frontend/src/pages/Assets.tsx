@@ -267,7 +267,7 @@ export default function Assets() {
           {assetList.length > 0 ? (
             <button
               onClick={() => setHideAmounts(h => !h)}
-              className="text-muted hover:text-white transition-colors p-1"
+              className="text-muted hover:text-white transition-colors p-2.5 min-w-[44px] min-h-[44px] flex items-center justify-center"
               title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
             >
               {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
@@ -300,12 +300,12 @@ export default function Assets() {
       {/* Filter pills */}
       <div className="flex gap-2 mb-4 flex-wrap">
         <button onClick={() => setFilter('')}
-          className={`px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${!filter ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
+          className={`px-3 py-2.5 rounded-full text-xs font-medium min-h-[44px] transition-colors ${!filter ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
           {t('all')}
         </button>
         {TYPES.map(({ id, icon: Icon, labelKey }) => (
           <button key={id} onClick={() => setFilter(id)}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium transition-colors ${filter === id ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
+            className={`flex items-center gap-1.5 px-3 py-2.5 rounded-full text-xs font-medium min-h-[44px] transition-colors ${filter === id ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
             <Icon size={12} /> {t(labelKey)}
           </button>
         ))}
@@ -556,52 +556,56 @@ export default function Assets() {
             return (
               <div key={a.id} className="bg-surface rounded-xl border border-border overflow-hidden">
                 {/* Main card */}
-                <div className="flex items-center gap-4 px-4 py-3 cursor-pointer hover:bg-surface-hover transition-colors"
+                <div className="px-4 py-3 cursor-pointer hover:bg-surface-hover transition-colors"
                   onClick={() => setExpandedId(expanded ? null : a.id)}>
-                  <div className="w-10 h-10 rounded-lg bg-accent-500/10 flex items-center justify-center flex-shrink-0">
-                    <Icon size={20} className="text-accent-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white truncate">{a.name}</p>
-                    <div className="flex items-center gap-1.5 text-xs text-muted flex-wrap">
-                      {a.usage === 'professional' && a.company_id ? (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400">
-                          {companies.find(c => c.id === a.company_id)?.name || t('scope_pro')}
-                        </span>
-                      ) : (
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-muted">
-                          {t('scope_personal')}
-                        </span>
-                      )}
-                      {a.type === 'real_estate' && a.property_usage && (
-                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
-                          a.property_usage === 'principal' ? 'bg-blue-500/20 text-blue-400' :
-                          a.property_usage === 'rented_long' ? 'bg-green-500/20 text-green-400' :
-                          a.property_usage === 'rented_short' ? 'bg-amber-500/20 text-amber-400' :
-                          'bg-white/5 text-muted'
-                        }`}>
-                          {a.property_usage === 'principal' ? '🏠' : a.property_usage === 'rented_long' ? '🔑' : a.property_usage === 'rented_short' ? '🏖️' : '📦'}
-                          {a.property_usage === 'rented_long' && a.monthly_rent ? ` ${fmt(a.monthly_rent)}/mois` : ''}
-                        </span>
-                      )}
-                      {a.purchase_date && <span>{t('purchased')} {a.purchase_date}</span>}
-                      {a.loan_name && <span>🔗 {a.loan_name}</span>}
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-lg bg-accent-500/10 flex items-center justify-center flex-shrink-0">
+                      <Icon size={20} className="text-accent-400" />
                     </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-white truncate">{a.name}</p>
+                      <div className="flex items-center gap-1.5 text-xs text-muted flex-wrap">
+                        {a.usage === 'professional' && a.company_id ? (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400">
+                            {companies.find(c => c.id === a.company_id)?.name || t('scope_pro')}
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-muted">
+                            {t('scope_personal')}
+                          </span>
+                        )}
+                        {a.type === 'real_estate' && a.property_usage && (
+                          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
+                            a.property_usage === 'principal' ? 'bg-blue-500/20 text-blue-400' :
+                            a.property_usage === 'rented_long' ? 'bg-green-500/20 text-green-400' :
+                            a.property_usage === 'rented_short' ? 'bg-amber-500/20 text-amber-400' :
+                            'bg-white/5 text-muted'
+                          }`}>
+                            {a.property_usage === 'principal' ? '🏠' : a.property_usage === 'rented_long' ? '🔑' : a.property_usage === 'rented_short' ? '🏖️' : '📦'}
+                            {a.property_usage === 'rented_long' && a.monthly_rent ? ` ${fmt(a.monthly_rent)}/mois` : ''}
+                          </span>
+                        )}
+                        {a.purchase_date && <span>{t('purchased')} {a.purchase_date}</span>}
+                        {a.loan_name && <span>🔗 {a.loan_name}</span>}
+                      </div>
+                    </div>
+                    <ChevronDown size={14} className={`text-muted flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
                   </div>
-                  <div className="text-right flex-shrink-0">
-                    <p className="text-sm font-semibold text-accent-400">
-                      {f(a.current_value || a.purchase_price || 0)}
-                    </p>
-                    {a.pnl != null && (
-                      <p className={`text-xs font-medium ${a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {a.pnl >= 0 ? '+' : ''}{f(a.pnl)} ({fmtPct(a.pnl_percent!)})
-                      </p>
-                    )}
-                  </div>
-                  <div className="flex gap-1">
-                    <button onClick={e => { e.stopPropagation(); startEdit(a); }} className="p-1.5 text-muted hover:text-white"><Pencil size={14} /></button>
-                    <button onClick={e => { e.stopPropagation(); deleteAsset(a.id); }} className="p-1.5 text-muted hover:text-red-400"><Trash2 size={14} /></button>
-                    <ChevronDown size={14} className={`text-muted mt-1.5 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+                  <div className="flex items-center justify-between mt-2 ml-[52px]">
+                    <div>
+                      <span className="text-sm font-semibold text-accent-400">
+                        {f(a.current_value || a.purchase_price || 0)}
+                      </span>
+                      {a.pnl != null && (
+                        <span className={`text-xs font-medium ml-2 ${a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {a.pnl >= 0 ? '+' : ''}{f(a.pnl)} ({fmtPct(a.pnl_percent!)})
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex gap-0">
+                      <button onClick={e => { e.stopPropagation(); startEdit(a); }} className="p-2.5 text-muted hover:text-white min-w-[44px] min-h-[44px] flex items-center justify-center"><Pencil size={14} /></button>
+                      <button onClick={e => { e.stopPropagation(); deleteAsset(a.id); }} className="p-2.5 text-muted hover:text-red-400 min-w-[44px] min-h-[44px] flex items-center justify-center"><Trash2 size={14} /></button>
+                    </div>
                   </div>
                 </div>
 
