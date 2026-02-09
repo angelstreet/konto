@@ -89,8 +89,8 @@ export default function CreditSimulator() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold">Simulation de crédit</h1>
-        {rateUpdated && <span className="text-xs text-muted">Taux mis à jour le {rateUpdated}</span>}
+        <h1 className="text-xl font-semibold">Simulateur de crédit</h1>
+        {rateUpdated && <span className="text-xs text-muted whitespace-nowrap">MAJ {rateUpdated.slice(0, 5)}</span>}
       </div>
 
       {/* Input sliders */}
@@ -129,22 +129,22 @@ export default function CreditSimulator() {
         </div>
       </div>
 
-      {/* Results */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-4">
+      {/* Results — 2x2 grid */}
+      <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-surface rounded-xl border border-border p-3 text-center">
           <p className="text-xs text-muted mb-1">Mensualité</p>
           <p className="text-lg font-bold text-accent-400">{formatCurrency(monthlyPayment)}</p>
-          <p className="text-[10px] text-muted">dont assurance {formatCurrency(insuranceMonthly)}</p>
+          <p className="text-[10px] text-muted">ass. {formatCurrency(insuranceMonthly)}</p>
         </div>
         <div className="bg-surface rounded-xl border border-border p-3 text-center">
-          <p className="text-xs text-muted mb-1">Coût du crédit</p>
+          <p className="text-xs text-muted mb-1">Coût crédit</p>
           <p className="text-lg font-bold text-orange-400">{formatCurrency0(totalCost)}</p>
         </div>
         <div className="bg-surface rounded-xl border border-border p-3 text-center">
           <p className="text-xs text-muted mb-1">Coût assurance</p>
           <p className="text-lg font-bold text-purple-400">{formatCurrency0(totalInsurance)}</p>
         </div>
-        <div className="bg-surface rounded-xl border border-border p-3 text-center col-span-2 sm:col-span-3">
+        <div className="bg-surface rounded-xl border border-border p-3 text-center">
           <p className="text-xs text-muted mb-1">Total remboursé</p>
           <p className="text-lg font-bold">{formatCurrency0(totalRepaid)}</p>
         </div>
