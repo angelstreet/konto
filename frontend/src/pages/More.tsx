@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Banknote,
   Home,
-  Wallet,
   FileBarChart,
   BarChart3,
   Wrench,
