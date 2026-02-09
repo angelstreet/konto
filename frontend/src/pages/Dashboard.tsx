@@ -56,6 +56,7 @@ export default function Dashboard() {
   const { formatCurrency, convertToDisplay } = usePreferences();
   const { data, loading } = useApi<DashboardData>(appendScope(`${API}/dashboard`));
   const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
+  const [showNet, setShowNet] = useState(() => localStorage.getItem('kompta_show_net') !== 'false');
   const [donutOpen, setDonutOpen] = useState(true);
   const [speaking, setSpeaking] = useState(false);
   const fc = (n: number) => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
@@ -98,7 +99,7 @@ export default function Dashboard() {
     { icon: Landmark, label: t('summary_cash'), value: cashTotal, color: 'text-white' },
     { icon: TrendingUp, label: t('summary_stocks'), value: investments, color: 'text-purple-400' },
     { icon: Home, label: t('immobilier'), value: immoValue, color: 'text-green-400' },
-    { icon: CreditCard, label: t('total_loans'), value: loans, color: 'text-orange-400' },
+    ...(showNet ? [{ icon: CreditCard, label: t('total_loans'), value: loans, color: 'text-orange-400' }] : []),
   ].filter(b => b.value !== 0) : [];
 
   // Donut data
@@ -129,6 +130,12 @@ export default function Dashboard() {
           >
             {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
+          <button
+            onClick={() => setShowNet(v => { const n = !v; localStorage.setItem('kompta_show_net', String(n)); return n; })}
+            className="text-xs px-2 py-1 rounded-md font-medium transition-colors text-muted hover:text-white hover:bg-surface-hover flex-shrink-0"
+          >
+            {showNet ? 'Net' : 'Brut'}
+          </button>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <ScopeSelect />
@@ -146,13 +153,10 @@ export default function Dashboard() {
         <div className="text-center text-muted py-8">Loading...</div>
       ) : data ? (
         <>
-          {/* Net Worth hero */}
+          {/* Patrimoine hero */}
           <div className="bg-surface rounded-xl border border-border p-3 sm:p-4 mb-2 text-center">
-            <p className="text-xs text-muted tracking-wider mb-1">{t('net_worth')}</p>
-            <p className="text-2xl sm:text-3xl font-bold text-accent-400">{fc(netTotal)}</p>
-            {brutTotal !== netTotal && (
-              <p className="text-xs text-muted mt-1">{t('balance_brut')}: {fc(brutTotal)}</p>
-            )}
+            <p className="text-xs text-muted tracking-wider mb-1">{showNet ? t('net_worth') : t('balance_brut')}</p>
+            <p className="text-2xl sm:text-3xl font-bold text-accent-400">{fc(showNet ? netTotal : brutTotal)}</p>
           </div>
 
           {/* Summary blocks */}
