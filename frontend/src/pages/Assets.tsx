@@ -40,6 +40,11 @@ interface Asset {
 interface BankAccount { id: number; name: string; custom_name: string | null; type: string; balance: number; }
 
 const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+const fmtCompact = (n: number) => {
+  if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace('.0', '')}M€`;
+  if (Math.abs(n) >= 1_000) return `${Math.round(n / 1_000)}k€`;
+  return `${Math.round(n)}€`;
+};
 const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
 export default function Assets() {
@@ -261,6 +266,9 @@ export default function Assets() {
   // Totals
   const totalValue = assetList.reduce((s, a) => s + (a.current_value || a.purchase_price || 0), 0);
   const totalPnl = assetList.reduce((s, a) => s + (a.pnl || 0), 0);
+  const totalAcquisition = assetList.reduce((s, a) => s + (a.purchase_price || 0), 0);
+  const totalTravaux = assetList.reduce((s, a) => s + (a.travaux || 0), 0);
+  const totalPnlPct = totalAcquisition > 0 ? (totalPnl / totalAcquisition) * 100 : 0;
 
   return (
     <div>
@@ -282,21 +290,21 @@ export default function Assets() {
           </button>
         </div>
       </div>
-      {assetList.length > 0 ? (
-        <p className="text-sm text-muted mb-2">
-          {t('total_value')}: <span className="text-accent-400 font-semibold">{f(totalValue)}</span>
-          {totalPnl !== 0 && (
-            <span className={`ml-2 ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-              ({totalPnl >= 0 ? '+' : ''}{f(totalPnl)})
-            </span>
-          )}
-          {dashboardData?.totals?.brut && dashboardData.totals.brut > 0 && (
-            <span className="ml-2 text-muted">
-              — {Math.round((totalValue / dashboardData.totals.brut) * 100)}% du patrimoine
-            </span>
-          )}
-        </p>
-      ) : null}
+      {assetList.length > 0 && (
+        <div className="text-sm text-muted mb-3 flex items-center gap-1 flex-wrap">
+          <span>Acquis. <span className="text-white font-medium">{hideAmounts ? <span className="amount-masked">{fmtCompact(totalAcquisition)}</span> : fmtCompact(totalAcquisition)}</span></span>
+          <span className="text-border">|</span>
+          <span>Trav. <span className="text-white font-medium">{hideAmounts ? <span className="amount-masked">{fmtCompact(totalTravaux)}</span> : fmtCompact(totalTravaux)}</span></span>
+          <span className="text-border">|</span>
+          <span className={`font-medium ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            {hideAmounts ? (
+              <span className="amount-masked">{totalPnl >= 0 ? '+' : ''}{fmtCompact(totalPnl)} ({fmtPct(totalPnlPct)})</span>
+            ) : (
+              <>{totalPnl >= 0 ? '+' : ''}{fmtCompact(totalPnl)} ({fmtPct(totalPnlPct)})</>
+            )}
+          </span>
+        </div>
+      )}
 
       {/* Mobile: Filtrer ▾ button */}
       <div className="md:hidden mb-3">
