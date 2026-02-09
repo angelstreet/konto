@@ -6,7 +6,7 @@ import {
   Wallet,
   FileBarChart,
   BarChart3,
-  Calculator,
+  Wrench,
   GitCompareArrows,
   FileSpreadsheet,
   Settings,
@@ -28,7 +28,7 @@ const menuItems: MenuItem[] = [
   { path: '/bilan', icon: FileBarChart, labelKey: 'nav_bilan' },
   { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
   { path: '/reconciliation', icon: GitCompareArrows, labelKey: 'nav_reconciliation' },
-  { path: '/simulators', icon: Calculator, labelKey: 'nav_simulators' },
+  { path: '/outils', icon: Wrench, labelKey: 'nav_outils' },
   { path: '/settings', icon: Settings, labelKey: 'settings' },
 ];
 

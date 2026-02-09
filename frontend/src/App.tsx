@@ -19,6 +19,7 @@ import Analytics from './pages/Analytics';
 import Invoices from './pages/Invoices';
 import Bilan from './pages/Bilan';
 import More from './pages/More';
+import Outils from './pages/Outils';
 import Onboarding from './pages/Onboarding';
 import { FilterProvider } from './FilterContext';
 import { PreferencesProvider, usePreferences } from './PreferencesContext';
@@ -47,6 +48,7 @@ function AppRoutes() {
       <Route path="/invoices" element={<Invoices />} />
       <Route path="/bilan" element={<Bilan />} />
       <Route path="/simulators" element={<CreditSimulator />} />
+      <Route path="/outils" element={<Outils />} />
       <Route path="/more" element={<More />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
