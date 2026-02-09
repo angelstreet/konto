@@ -76,6 +76,15 @@ function classifyAccountType(powensType: string | undefined, name: string): stri
   return 'checking';
 }
 
+function classifyAccountSubtype(type: string, provider: string | undefined, name: string): string | null {
+  if (type !== 'investment') return null;
+  if (provider === 'blockchain' || provider === 'coinbase') return 'crypto';
+  const lower = (name || '').toLowerCase();
+  if (lower.includes('pea') || lower.includes('action') || lower.includes('bourse') || lower.includes('trading') || lower.includes('stock')) return 'stocks';
+  if (lower.includes('or ') || lower.includes('gold') || lower.includes('métaux') || lower.includes('metaux')) return 'gold';
+  return 'other';
+}
+
 function classifyAccountUsage(powensUsage: string | undefined | null, companyId: number | null): string {
   if (powensUsage === 'professional') return 'professional';
   if (powensUsage === 'private') return 'personal';
@@ -234,8 +243,8 @@ app.get('/api/bank-callback', async (c) => {
         const existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE provider_account_id = ?', args: [String(acc.id)] });
         if (existing.rows.length === 0) {
           await db.execute({
-            sql: 'INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, type, usage, last_sync) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            args: [userId, null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, null), new Date().toISOString()]
+            sql: 'INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, type, usage, subtype, last_sync) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [userId, null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, null), classifyAccountSubtype(classifyAccountType(acc.type, acc.name || acc.original_name || ''), 'powens', acc.name || acc.original_name || ''), new Date().toISOString()]
           });
         }
       }
@@ -288,8 +297,8 @@ app.post('/api/bank/sync', async (c) => {
           });
         } else {
           await db.execute({
-            sql: 'INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, last_sync, type, usage) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            args: [userId, null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, new Date().toISOString(), classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, null)]
+            sql: 'INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, last_sync, type, usage, subtype) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+            args: [userId, null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, new Date().toISOString(), classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, null), classifyAccountSubtype(classifyAccountType(acc.type, acc.name || acc.original_name || ''), 'powens', acc.name || acc.original_name || '')]
           });
         }
         totalSynced++;
@@ -854,7 +863,7 @@ app.post('/api/accounts/blockchain', async (c) => {
   }
 
   const result = await db.execute({
-    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, balance, type, usage, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, ?, 'blockchain', ?, ?, ?, 'investment', 'personal', ?, ?, ?, ?)`,
+    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, balance, type, usage, subtype, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, ?, 'blockchain', ?, ?, ?, 'investment', 'personal', 'crypto', ?, ?, ?, ?)`,
     args: [userId, body.company_id || null, body.name || `${currency} Wallet`, body.custom_name || null, balance, body.address, network, currency, new Date().toISOString()]
   });
   const account = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ?', args: [Number(result.lastInsertRowid)] });
@@ -1034,7 +1043,7 @@ app.get('/api/coinbase-callback', async (c) => {
         const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
         if (existing.rows.length === 0) {
           await db.execute({
-            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', ?, ?)`,
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
             args: [userId, null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()]
           });
         }
@@ -1096,7 +1105,7 @@ app.post('/api/coinbase/sync', async (c) => {
           await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), existing.rows[0].id as number] });
         } else if (balance !== 0) {
           await db.execute({
-            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', ?, ?)`,
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
             args: [userId, null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()]
           });
         }

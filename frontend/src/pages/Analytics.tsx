@@ -76,25 +76,24 @@ export default function Analytics() {
   const savingsColor = d.savingsRate >= 20 ? 'text-green-400' : d.savingsRate >= 0 ? 'text-yellow-400' : 'text-red-400';
 
   return (
-    <div className="space-y-3 max-w-6xl">
+    <div className="space-y-3 max-w-6xl overflow-x-hidden">
       {/* Header */}
       <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_analysis')}</h1>
         <div className="flex items-center gap-1 flex-shrink-0">
           <ScopeSelect />
-          <button onClick={prev} className="p-2.5 rounded-lg bg-surface hover:bg-surface-hover text-muted min-w-[44px] min-h-[44px] flex items-center justify-center"><ChevronLeft size={16} /></button>
-          <span className="text-white font-medium min-w-[140px] text-center">{moisFr[month - 1]} {year}</span>
-          <button onClick={next} className="p-2.5 rounded-lg bg-surface hover:bg-surface-hover text-muted min-w-[44px] min-h-[44px] flex items-center justify-center"><ChevronRight size={16} /></button>
-          <button onClick={handleRefresh} disabled={refreshing} className="p-2.5 rounded-lg bg-accent-500/10 text-accent-400 hover:bg-accent-500/20 disabled:opacity-50 ml-2 min-w-[44px] min-h-[44px] flex items-center justify-center">
-            <RefreshCw size={16} className={refreshing ? 'animate-spin' : ''} />
+          <button onClick={handleRefresh} disabled={refreshing} className="p-2 rounded-lg text-muted hover:text-accent-400 hover:bg-surface-hover disabled:opacity-50">
+            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
           </button>
         </div>
       </div>
 
-      {/* Updated at */}
-      {d.computed_at && (
-        <p className="text-xs text-muted">Dernière mise à jour : {new Date(d.computed_at).toLocaleString('fr-FR')}</p>
-      )}
+      {/* Month navigation */}
+      <div className="flex items-center justify-center gap-3">
+        <button onClick={prev} className="p-2 rounded-lg text-muted hover:text-white hover:bg-surface-hover"><ChevronLeft size={16} /></button>
+        <span className="text-sm text-white font-medium min-w-[120px] text-center">{moisFr[month - 1]} {year}</span>
+        <button onClick={next} className="p-2 rounded-lg text-muted hover:text-white hover:bg-surface-hover"><ChevronRight size={16} /></button>
+      </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
