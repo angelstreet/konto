@@ -309,9 +309,9 @@ export default function CompanyPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2 h-10">
-        <div className="flex items-center gap-3 min-w-0">
-          <h1 className="text-xl font-semibold">{t('nav_companies')}</h1>
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <div className="flex items-center gap-2 min-w-0">
+          <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_companies')}</h1>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <button
