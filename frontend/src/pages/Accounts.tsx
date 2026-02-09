@@ -409,7 +409,7 @@ export default function Accounts() {
               className="text-muted hover:text-white transition-colors p-1 sm:p-2"
               title={allBalancesHidden ? t('show_all_balances') : t('hide_all_balances')}
             >
-              {allBalancesHidden ? <EyeOff size={16} /> : <Eye size={16} />}
+              {allBalancesHidden ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           )}
           <span className="hidden md:block"><ScopeSelect /></span>

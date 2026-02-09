@@ -52,14 +52,14 @@ export default function Bilan() {
   return (
     <div className="space-y-3">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <div className="flex items-center gap-2 min-w-0">
           <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
             <ArrowLeft size={20} />
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap">Bilan Annuel</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-shrink-0">
           <button onClick={() => setYear(y => y - 1)} className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ChevronLeft size={18} />
           </button>
