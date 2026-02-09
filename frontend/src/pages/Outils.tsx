@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  Calculator, FileSearch, CloudUpload, Download, Upload, Settings,
+  Calculator, FileSearch, CloudUpload, Download, Upload, Settings, ArrowLeft,
 } from 'lucide-react';
 import TaxEstimation from '../components/TaxEstimation';
 import BorrowingCapacity from '../components/BorrowingCapacity';
@@ -28,7 +28,12 @@ export default function Outils() {
 
   return (
     <div className="space-y-6 max-w-5xl">
-      <h1 className="text-xl font-semibold">{t('nav_outils') || 'Outils'}</h1>
+      <div className="flex items-center gap-2 mb-2 h-10">
+        <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
+          <ArrowLeft size={20} />
+        </button>
+        <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_outils')}</h1>
+      </div>
 
       {/* Tax Estimation */}
       <TaxEstimation defaultOpen={false} />

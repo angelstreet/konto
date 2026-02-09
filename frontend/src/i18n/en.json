@@ -92,6 +92,7 @@
   "nav_group_budget": "Budget",
   "nav_budget": "Monthly budget",
   "nav_group_outils": "Tools",
+  "nav_outils": "Tools",
   "nav_import": "Import CSV / FEC",
   "nav_reconciliation": "Reconciliation",
   "nav_simulators": "Simulators",
@@ -268,6 +269,5 @@
   "new_files_scanned": "new files",
   "matched": "Matched",
   "unmatched": "Unmatched",
-  "all": "All",
   "no_invoices": "No receipts found. Run a scan to get started."
 }

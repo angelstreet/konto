@@ -310,8 +310,10 @@ export default function CompanyPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-2 h-10">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
           <h1 className="text-xl font-semibold">{t('nav_companies')}</h1>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
           <button
             onClick={() => setAllAmountsHidden(h => !h)}
             className="text-muted hover:text-white transition-colors p-1"
@@ -319,14 +321,14 @@ export default function CompanyPage() {
           >
             {allAmountsHidden ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
+          <button
+            onClick={startCreate}
+            className="flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black px-2.5 py-2.5 md:px-4 md:py-2"
+          >
+            <Plus size={16} />
+            <span className="hidden md:inline">{t('add_company')}</span>
+          </button>
         </div>
-        <button
-          onClick={startCreate}
-          className="flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black px-2.5 py-2.5 md:px-4 md:py-2"
-        >
-          <Plus size={16} />
-          <span className="hidden md:inline">{t('add_company')}</span>
-        </button>
       </div>
 
       {/* Company form */}

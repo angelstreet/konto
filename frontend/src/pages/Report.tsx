@@ -1,6 +1,7 @@
 import { API } from '../config';
 import { useState, useRef } from 'react';
-import { Download, FileText, Check } from 'lucide-react';
+import { Download, FileText, Check, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
 import { useFilter } from '../FilterContext';
 
@@ -22,6 +23,7 @@ interface ReportSection {
 }
 
 export default function Report() {
+  const navigate = useNavigate();
   const authFetch = useAuthFetch();
   const { companies } = useFilter();
   const [selected, setSelected] = useState<Set<string>>(new Set(['bank', 'immobilier', 'crypto', 'stocks']));
@@ -116,11 +118,16 @@ export default function Report() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold flex items-center gap-2">
-          <FileText size={20} />
-          Rapport de patrimoine
-        </h1>
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <div className="flex items-center gap-2 min-w-0">
+          <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-semibold flex items-center gap-2 whitespace-nowrap">
+            <FileText size={20} />
+            Rapport de patrimoine
+          </h1>
+        </div>
       </div>
 
       {/* Category selection */}

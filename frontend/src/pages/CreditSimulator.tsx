@@ -1,6 +1,8 @@
 import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
 
 interface Rate { duration: number; best_rate: number; avg_rate: number; updated_at: string }
@@ -18,6 +20,7 @@ function formatMobile(v: number) {
 }
 
 export default function CreditSimulator() {
+  const navigate = useNavigate();
   const authFetch = useAuthFetch();
   const [amount, setAmount] = useState(200000);
   const [duration, setDuration] = useState(20);
@@ -88,9 +91,14 @@ export default function CreditSimulator() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-semibold">Simulateur de crédit</h1>
-        {rateUpdated && <span className="text-xs text-muted whitespace-nowrap">MAJ {rateUpdated.slice(0, 5)}</span>}
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <div className="flex items-center gap-2 min-w-0">
+          <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-semibold whitespace-nowrap">Simulateur de crédit</h1>
+        </div>
+        {rateUpdated && <span className="text-xs text-muted whitespace-nowrap flex-shrink-0">MAJ {rateUpdated.slice(0, 5)}</span>}
       </div>
 
       {/* Input sliders */}

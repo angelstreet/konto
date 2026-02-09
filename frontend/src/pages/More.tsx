@@ -37,7 +37,9 @@ export default function More() {
 
   return (
     <div>
-      <h1 className="text-xl font-semibold mb-4">{t('more') || 'Plus'}</h1>
+      <div className="flex items-center gap-2 mb-2 h-10">
+        <h1 className="text-xl font-semibold whitespace-nowrap">{t('more') || 'Plus'}</h1>
+      </div>
       <div className="bg-surface rounded-xl border border-border divide-y divide-border">
         {menuItems.map(({ path, icon: Icon, labelKey }) => {
           const active = pathname === path;

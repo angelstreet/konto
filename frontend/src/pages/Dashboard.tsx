@@ -119,17 +119,10 @@ export default function Dashboard() {
 
   return (
     <div>
-      {/* Title row: Title+Eye LEFT, actions RIGHT */}
+      {/* Title row: Title LEFT, Eye+actions RIGHT */}
       <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <div className="flex items-center gap-1 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_dashboard')}</h1>
-          <button
-            onClick={() => setHideAmounts(h => { const v = !h; localStorage.setItem('kompta_hide_amounts', String(!v)); return v; })}
-            className="text-muted hover:text-white transition-colors p-2 flex-shrink-0"
-            title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
-          >
-            {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
-          </button>
           <button
             onClick={() => setShowNet(v => { const n = !v; localStorage.setItem('kompta_show_net', String(n)); return n; })}
             className="text-xs px-2 py-1 rounded-md font-medium transition-colors text-muted hover:text-white hover:bg-surface-hover flex-shrink-0"
@@ -138,6 +131,13 @@ export default function Dashboard() {
           </button>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
+          <button
+            onClick={() => setHideAmounts(h => { const v = !h; localStorage.setItem('kompta_hide_amounts', String(!v)); return v; })}
+            className="text-muted hover:text-white transition-colors p-2 flex-shrink-0"
+            title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
+          >
+            {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
+          </button>
           <ScopeSelect />
           <button
             onClick={() => window.open(API + '/report/patrimoine?categories=all', '_blank')}

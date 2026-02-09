@@ -2,6 +2,8 @@ import { API } from '../config';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
@@ -40,6 +42,7 @@ interface CashflowData {
 }
 
 export default function Budget() {
+  const navigate = useNavigate();
   const { t } = useTranslation();
   const authFetch = useAuthFetch();
   const { scope, appendScope } = useFilter();
@@ -67,8 +70,13 @@ export default function Budget() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-2 h-10">
-        <h1 className="text-xl font-semibold">{t('nav_budget') || 'Budget'}</h1>
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <div className="flex items-center gap-2 min-w-0">
+          <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_budget') || 'Budget'}</h1>
+        </div>
         <div className="flex items-center gap-2">
           <ScopeSelect />
           <div className="flex gap-1">

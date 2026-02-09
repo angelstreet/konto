@@ -1,7 +1,8 @@
 import { API } from '../config';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { FileBarChart, ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Receipt, Building2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Receipt, Building2, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
 
 interface BilanData {
@@ -25,6 +26,7 @@ const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep
 
 export default function Bilan() {
   const { t: _t } = useTranslation();
+  const navigate = useNavigate();
   const authFetch = useAuthFetch();
   const [year, setYear] = useState(new Date().getFullYear());
   const [data, setData] = useState<BilanData | null>(null);
@@ -51,9 +53,12 @@ export default function Bilan() {
     <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-semibold flex items-center gap-2">
-          <FileBarChart size={22} /> Bilan Annuel
-        </h1>
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-semibold whitespace-nowrap">Bilan Annuel</h1>
+        </div>
         <div className="flex items-center gap-3">
           <button onClick={() => setYear(y => y - 1)} className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ChevronLeft size={18} />

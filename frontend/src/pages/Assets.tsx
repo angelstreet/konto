@@ -2,8 +2,9 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, Eye, EyeOff,
+  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, Eye, EyeOff, ArrowLeft,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 
 import ConfirmDialog from '../components/ConfirmDialog';
 import ScopeSelect from '../components/ScopeSelect';
@@ -49,6 +50,7 @@ const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
 export default function Assets() {
   const { t } = useTranslation();
+  const navigate = useNavigate();
   const authFetch = useAuthFetch();
   const [hideAmounts, setHideAmounts] = useState(() => localStorage.getItem('kompta_hide_amounts') !== 'false');
   const f = (n: number): React.ReactNode => hideAmounts ? <span className="amount-masked">{fmt(n)}</span> : fmt(n);
@@ -270,6 +272,12 @@ export default function Assets() {
     <div>
       <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <div className="flex items-center gap-2 min-w-0">
+          <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_assets')}</h1>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
           {assetList.length > 0 && (
             <button
               onClick={() => setHideAmounts(h => !h)}
@@ -279,9 +287,6 @@ export default function Assets() {
               {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           )}
-          <h1 className="text-lg sm:text-xl font-semibold whitespace-nowrap truncate">{t('nav_assets')}</h1>
-        </div>
-        <div className="flex items-center gap-1 flex-shrink-0">
           <span className="hidden md:block"><ScopeSelect /></span>
           <button
             onClick={() => setMobileFiltersOpen(o => !o)}
