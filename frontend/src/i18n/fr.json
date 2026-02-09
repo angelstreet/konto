@@ -199,6 +199,8 @@
   "scope_personal": "Personnel",
   "scope_pro": "Pro",
   "details": "Détails",
+  "nav_scope_perso": "Perso",
+  "nav_scope_pro": "Pro",
   "nav_group_revenus": "Revenus",
   "nav_income": "Salaires",
   "income_tracking": "Suivi des revenus",

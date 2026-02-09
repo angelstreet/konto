@@ -199,6 +199,8 @@
   "scope_personal": "Personal",
   "scope_pro": "Pro",
   "details": "Details",
+  "nav_scope_perso": "Personal",
+  "nav_scope_pro": "Professional",
   "nav_group_revenus": "Income",
   "nav_income": "Income & Career",
   "income_tracking": "Income tracking",

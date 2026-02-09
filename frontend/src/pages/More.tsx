@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -5,17 +6,19 @@ import {
   Home,
   FileBarChart,
   BarChart3,
-  LineChart,
   BookOpen,
   Receipt,
-  FileText,
-  FileSpreadsheet,
+  Calculator,
   Wallet,
+  FileSpreadsheet,
   Upload,
   GitCompareArrows,
-  Calculator,
   Settings,
   LucideIcon,
+  ChevronDown,
+  User,
+  Briefcase,
+  Lock,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -25,39 +28,41 @@ interface MenuItem {
   disabled?: boolean;
 }
 
+interface MenuSubGroup {
+  labelKey: string;
+  icon: LucideIcon;
+  items: MenuItem[];
+}
+
 interface MenuGroup {
   labelKey: string;
-  items: MenuItem[];
+  items?: MenuItem[];
+  subGroups?: MenuSubGroup[];
 }
 
 const menuGroups: MenuGroup[] = [
   {
     labelKey: 'nav_group_analyse',
-    items: [
-      { path: '/analysis', icon: BarChart3, labelKey: 'nav_analysis' },
-      { path: '/cashflow', icon: LineChart, labelKey: 'nav_cashflow', disabled: true },
-    ],
-  },
-  {
-    labelKey: 'nav_group_revenus',
-    items: [
-      { path: '/income', icon: Banknote, labelKey: 'nav_income' },
-    ],
-  },
-  {
-    labelKey: 'nav_group_budget',
-    items: [
-      { path: '/budget', icon: Wallet, labelKey: 'nav_budget' },
-    ],
-  },
-  {
-    labelKey: 'nav_group_comptabilite',
-    items: [
-      { path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
-      { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
-      { path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
-      { path: '/fec-export', icon: FileText, labelKey: 'nav_fec_export', disabled: true },
-      { path: '/bilan', icon: FileBarChart, labelKey: 'nav_bilan' },
+    subGroups: [
+      {
+        labelKey: 'nav_scope_perso',
+        icon: User,
+        items: [
+          { path: '/income', icon: Banknote, labelKey: 'nav_income' },
+          { path: '/budget', icon: Wallet, labelKey: 'nav_budget' },
+          { path: '/bilan', icon: FileBarChart, labelKey: 'nav_bilan' },
+        ],
+      },
+      {
+        labelKey: 'nav_scope_pro',
+        icon: Briefcase,
+        items: [
+          { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
+          { path: '/analysis', icon: BarChart3, labelKey: 'nav_analysis' },
+          { path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
+          { path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
+        ],
+      },
     ],
   },
   {
@@ -86,6 +91,49 @@ export default function More() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { t } = useTranslation();
+  const [openSubs, setOpenSubs] = useState<Set<string>>(() => {
+    // Auto-open subgroups containing active path
+    const active = new Set<string>();
+    menuGroups.forEach((g, gi) => {
+      g.subGroups?.forEach((sg, si) => {
+        if (sg.items.some(i => pathname === i.path)) {
+          active.add(`${gi}-${si}`);
+        }
+      });
+    });
+    return active;
+  });
+
+  const toggleSub = (key: string) => {
+    setOpenSubs(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const renderItem = ({ path, icon: Icon, labelKey, disabled }: MenuItem) => {
+    const active = pathname === path;
+    return (
+      <button
+        key={path}
+        onClick={() => !disabled && navigate(path)}
+        disabled={disabled}
+        className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors ${
+          disabled
+            ? 'text-muted/30 cursor-not-allowed'
+            : active
+            ? 'text-accent-400 hover:bg-surface-hover'
+            : 'text-white hover:bg-surface-hover'
+        }`}
+      >
+        <Icon size={20} strokeWidth={1.5} className={disabled ? 'text-muted/30' : active ? 'text-accent-400' : 'text-muted'} />
+        <span className="text-sm font-medium flex-1">{t(labelKey)}</span>
+        {disabled && <Lock size={12} className="text-muted/30" />}
+      </button>
+    );
+  };
 
   return (
     <div>
@@ -100,28 +148,63 @@ export default function More() {
                 {t(group.labelKey)}
               </h2>
             )}
-            <div className="bg-surface rounded-xl border border-border divide-y divide-border">
-              {group.items.map(({ path, icon: Icon, labelKey, disabled }) => {
-                const active = pathname === path;
-                return (
-                  <button
-                    key={path}
-                    onClick={() => !disabled && navigate(path)}
-                    disabled={disabled}
-                    className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors ${
-                      disabled
-                        ? 'text-muted/30 cursor-not-allowed'
-                        : active
-                        ? 'text-accent-400 hover:bg-surface-hover'
-                        : 'text-white hover:bg-surface-hover'
-                    }`}
-                  >
-                    <Icon size={20} strokeWidth={1.5} className={disabled ? 'text-muted/30' : active ? 'text-accent-400' : 'text-muted'} />
-                    <span className="text-sm font-medium">{t(labelKey)}</span>
-                  </button>
-                );
-              })}
-            </div>
+
+            {/* Flat items */}
+            {group.items && (
+              <div className="bg-surface rounded-xl border border-border divide-y divide-border">
+                {group.items.map(renderItem)}
+              </div>
+            )}
+
+            {/* Nested subgroups */}
+            {group.subGroups && (
+              <div className="space-y-2">
+                {group.subGroups.map((sg, si) => {
+                  const key = `${gi}-${si}`;
+                  const isOpen = openSubs.has(key);
+                  const hasActive = sg.items.some(i => pathname === i.path);
+                  return (
+                    <div key={key} className="bg-surface rounded-xl border border-border overflow-hidden">
+                      <button
+                        onClick={() => toggleSub(key)}
+                        className={`w-full flex items-center gap-3 px-4 py-3.5 text-left transition-colors ${
+                          hasActive ? 'text-accent-400' : 'text-white hover:bg-surface-hover'
+                        }`}
+                      >
+                        <sg.icon size={20} strokeWidth={1.5} className={hasActive ? 'text-accent-400' : 'text-muted'} />
+                        <span className="text-sm font-medium flex-1">{t(sg.labelKey)}</span>
+                        <ChevronDown
+                          size={14}
+                          className={`text-muted transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
+                        />
+                      </button>
+                      {isOpen && (
+                        <div className="divide-y divide-border border-t border-border">
+                          {sg.items.map(item => (
+                            <button
+                              key={item.path}
+                              onClick={() => !item.disabled && navigate(item.path)}
+                              disabled={item.disabled}
+                              className={`w-full flex items-center gap-3 pl-8 pr-4 py-3 text-left transition-colors ${
+                                item.disabled
+                                  ? 'text-muted/30 cursor-not-allowed'
+                                  : pathname === item.path
+                                  ? 'text-accent-400 hover:bg-surface-hover'
+                                  : 'text-white hover:bg-surface-hover'
+                              }`}
+                            >
+                              <item.icon size={18} strokeWidth={1.5} className={item.disabled ? 'text-muted/30' : pathname === item.path ? 'text-accent-400' : 'text-muted'} />
+                              <span className="text-sm font-medium flex-1">{t(item.labelKey)}</span>
+                              {item.disabled && <Lock size={12} className="text-muted/30" />}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
         ))}
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { UserButton } from '@clerk/clerk-react';
@@ -11,14 +11,12 @@ import {
   Home,
   ArrowLeftRight,
   BarChart3,
-  LineChart,
   BookOpen,
   Receipt,
   Calculator,
   Wallet,
   Banknote,
   FileSpreadsheet,
-  FileText,
   FileBarChart,
   Upload,
   GitCompareArrows,
@@ -29,79 +27,111 @@ import {
   ChevronDown,
   LucideIcon,
   Lock,
+  User,
+  Briefcase,
 } from 'lucide-react';
 
-interface NavItem {
+/* ── Navigation data structure ──────────────────────────────────────── */
+
+interface NavLeaf {
+  kind: 'leaf';
   path: string;
   icon: LucideIcon;
   labelKey: string;
   disabled?: boolean;
 }
 
+interface NavSubGroup {
+  kind: 'subgroup';
+  labelKey: string;
+  icon: LucideIcon;
+  children: NavLeaf[];
+}
+
+type NavChild = NavLeaf | NavSubGroup;
+
 interface NavGroup {
   labelKey: string;
-  items: NavItem[];
+  children: NavChild[];
 }
 
 const navGroups: NavGroup[] = [
   {
     labelKey: '',
-    items: [
-      { path: '/', icon: LayoutDashboard, labelKey: 'nav_dashboard' },
+    children: [
+      { kind: 'leaf', path: '/', icon: LayoutDashboard, labelKey: 'nav_dashboard' },
     ],
   },
   {
     labelKey: 'nav_group_patrimoine',
-    items: [
-      { path: '/accounts', icon: Landmark, labelKey: 'nav_accounts' },
-      { path: '/companies', icon: Building2, labelKey: 'nav_companies' },
-      { path: '/assets', icon: Home, labelKey: 'nav_assets' },
+    children: [
+      { kind: 'leaf', path: '/accounts', icon: Landmark, labelKey: 'nav_accounts' },
+      { kind: 'leaf', path: '/companies', icon: Building2, labelKey: 'nav_companies' },
+      { kind: 'leaf', path: '/assets', icon: Home, labelKey: 'nav_assets' },
     ],
   },
   {
     labelKey: 'nav_group_transactions',
-    items: [
-      { path: '/transactions', icon: ArrowLeftRight, labelKey: 'nav_transactions' },
+    children: [
+      { kind: 'leaf', path: '/transactions', icon: ArrowLeftRight, labelKey: 'nav_transactions' },
     ],
   },
   {
     labelKey: 'nav_group_analyse',
-    items: [
-      { path: '/analysis', icon: BarChart3, labelKey: 'nav_analysis' },
-      { path: '/cashflow', icon: LineChart, labelKey: 'nav_cashflow', disabled: true },
-    ],
-  },
-  {
-    labelKey: 'nav_group_comptabilite',
-    items: [
-      { path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
-      { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
-      { path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
-      { path: '/fec-export', icon: FileText, labelKey: 'nav_fec_export', disabled: true },
-      { path: '/bilan', icon: FileBarChart, labelKey: 'nav_bilan' },
-    ],
-  },
-  {
-    labelKey: 'nav_group_revenus',
-    items: [
-      { path: '/income', icon: Banknote, labelKey: 'nav_income' },
-    ],
-  },
-  {
-    labelKey: 'nav_group_budget',
-    items: [
-      { path: '/budget', icon: Wallet, labelKey: 'nav_budget' },
+    children: [
+      {
+        kind: 'subgroup',
+        labelKey: 'nav_scope_perso',
+        icon: User,
+        children: [
+          { kind: 'leaf', path: '/income', icon: Banknote, labelKey: 'nav_income' },
+          { kind: 'leaf', path: '/budget', icon: Wallet, labelKey: 'nav_budget' },
+          { kind: 'leaf', path: '/bilan', icon: FileBarChart, labelKey: 'nav_bilan' },
+        ],
+      },
+      {
+        kind: 'subgroup',
+        labelKey: 'nav_scope_pro',
+        icon: Briefcase,
+        children: [
+          { kind: 'leaf', path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
+          { kind: 'leaf', path: '/analysis', icon: BarChart3, labelKey: 'nav_analysis' },
+          { kind: 'leaf', path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
+          { kind: 'leaf', path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
+        ],
+      },
     ],
   },
   {
     labelKey: 'nav_group_outils',
-    items: [
-      { path: '/import', icon: Upload, labelKey: 'nav_import', disabled: true },
-      { path: '/reconciliation', icon: GitCompareArrows, labelKey: 'nav_reconciliation' },
-      { path: '/simulators', icon: Calculator, labelKey: 'nav_simulators' },
+    children: [
+      { kind: 'leaf', path: '/import', icon: Upload, labelKey: 'nav_import', disabled: true },
+      { kind: 'leaf', path: '/reconciliation', icon: GitCompareArrows, labelKey: 'nav_reconciliation' },
+      { kind: 'leaf', path: '/simulators', icon: Calculator, labelKey: 'nav_simulators' },
     ],
   },
 ];
+
+/* ── Helpers ─────────────────────────────────────────────────────────── */
+
+function allPaths(children: NavChild[]): string[] {
+  const paths: string[] = [];
+  for (const c of children) {
+    if (c.kind === 'leaf') paths.push(c.path);
+    else paths.push(...c.children.map(l => l.path));
+  }
+  return paths;
+}
+
+function isActive(path: string, pathname: string) {
+  return pathname === path || (path !== '/' && pathname.startsWith(path));
+}
+
+function childContainsActive(children: NavChild[], pathname: string): boolean {
+  return allPaths(children).some(p => isActive(p, pathname));
+}
+
+/* ── Component ───────────────────────────────────────────────────────── */
 
 interface Props {
   onLogout: () => void;
@@ -116,41 +146,51 @@ export default function Sidebar({ onLogout }: Props) {
     return stored === null ? true : stored === 'true';
   });
 
-  // Track which group is currently active based on pathname
-  const getActiveGroup = useCallback(() => {
-    for (let gi = 0; gi < navGroups.length; gi++) {
-      for (const item of navGroups[gi].items) {
-        if (pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path))) {
-          return gi;
-        }
-      }
-    }
-    return 0;
-  }, [pathname]);
-
+  // Track open groups (lvl1) and subgroups (lvl2)
   const [openGroups, setOpenGroups] = useState<Set<number>>(() => {
-    // Only open the group containing the active page + the first (dashboard) group
     const active = new Set<number>([0]);
-    for (let gi = 0; gi < navGroups.length; gi++) {
-      for (const item of navGroups[gi].items) {
-        if (pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path))) {
-          active.add(gi);
-        }
-      }
-    }
+    navGroups.forEach((g, gi) => {
+      if (childContainsActive(g.children, pathname)) active.add(gi);
+    });
     return active;
   });
 
-  // Auto-open group when navigating to a page in it
-  useEffect(() => {
-    const ag = getActiveGroup();
-    setOpenGroups(prev => {
-      if (prev.has(ag)) return prev;
-      const next = new Set(prev);
-      next.add(ag);
-      return next;
+  const [openSubGroups, setOpenSubGroups] = useState<Set<string>>(() => {
+    const active = new Set<string>();
+    navGroups.forEach((g, gi) => {
+      g.children.forEach((c, ci) => {
+        if (c.kind === 'subgroup' && childContainsActive(c.children, pathname)) {
+          active.add(`${gi}-${ci}`);
+        }
+      });
     });
-  }, [pathname, getActiveGroup]);
+    return active;
+  });
+
+  // Auto-open groups/subgroups when navigating
+  useEffect(() => {
+    navGroups.forEach((g, gi) => {
+      if (childContainsActive(g.children, pathname)) {
+        setOpenGroups(prev => {
+          if (prev.has(gi)) return prev;
+          const next = new Set(prev);
+          next.add(gi);
+          return next;
+        });
+      }
+      g.children.forEach((c, ci) => {
+        if (c.kind === 'subgroup' && childContainsActive(c.children, pathname)) {
+          const key = `${gi}-${ci}`;
+          setOpenSubGroups(prev => {
+            if (prev.has(key)) return prev;
+            const next = new Set(prev);
+            next.add(key);
+            return next;
+          });
+        }
+      });
+    });
+  }, [pathname]);
 
   const toggleGroup = (gi: number) => {
     setOpenGroups(prev => {
@@ -161,10 +201,86 @@ export default function Sidebar({ onLogout }: Props) {
     });
   };
 
+  const toggleSubGroup = (key: string) => {
+    setOpenSubGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
   useEffect(() => {
     localStorage.setItem('kompta_sidebar_collapsed', String(collapsed));
     window.dispatchEvent(new CustomEvent('sidebar-toggle', { detail: { collapsed } }));
   }, [collapsed]);
+
+  /* ── Render a leaf nav item ──────────────────────────────────────── */
+  const renderLeaf = (item: NavLeaf, indent: number = 0) => {
+    const active = isActive(item.path, pathname);
+    const pl = collapsed ? 'px-0 justify-center' : indent === 0 ? 'px-2.5' : indent === 1 ? 'pl-5 pr-2.5' : 'pl-9 pr-2.5';
+    return (
+      <button
+        key={item.path}
+        onClick={() => !item.disabled && navigate(item.path)}
+        disabled={item.disabled}
+        title={collapsed ? t(item.labelKey) : undefined}
+        className={`w-full flex items-center gap-2.5 rounded-lg text-sm font-medium transition-colors py-2 ${pl} ${
+          item.disabled
+            ? 'text-muted/30 cursor-not-allowed'
+            : active
+            ? 'bg-accent-500/10 text-accent-400'
+            : 'text-muted hover:text-white hover:bg-surface-hover'
+        }`}
+      >
+        <item.icon size={18} strokeWidth={active ? 2.5 : 1.5} />
+        {!collapsed && (
+          <span className="flex-1 text-left truncate">{t(item.labelKey)}</span>
+        )}
+        {!collapsed && item.disabled && <Lock size={12} className="text-muted/30" />}
+      </button>
+    );
+  };
+
+  /* ── Render a subgroup (lvl2) ────────────────────────────────────── */
+  const renderSubGroup = (sg: NavSubGroup, gi: number, ci: number) => {
+    const key = `${gi}-${ci}`;
+    const isOpen = openSubGroups.has(key);
+    const hasActive = childContainsActive(sg.children, pathname);
+
+    if (collapsed) {
+      // In collapsed mode, show children directly with a divider
+      return (
+        <div key={key}>
+          <div className="border-t border-border/30 mx-3 my-0.5" />
+          {sg.children.map(leaf => renderLeaf(leaf, 0))}
+        </div>
+      );
+    }
+
+    return (
+      <div key={key}>
+        <button
+          onClick={() => toggleSubGroup(key)}
+          className={`w-full flex items-center gap-2.5 rounded-lg text-sm font-medium transition-colors py-2 pl-5 pr-2.5 ${
+            hasActive ? 'text-accent-400/80' : 'text-muted/70 hover:text-white hover:bg-surface-hover'
+          }`}
+        >
+          <sg.icon size={16} strokeWidth={hasActive ? 2 : 1.5} />
+          <span className="flex-1 text-left truncate">{t(sg.labelKey)}</span>
+          <ChevronDown
+            size={12}
+            className={`transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
+          />
+        </button>
+        {isOpen && (
+          <div className="space-y-0.5">
+            {sg.children.map(leaf => renderLeaf(leaf, 2))}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <aside
@@ -190,13 +306,11 @@ export default function Sidebar({ onLogout }: Props) {
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1 scrollbar-thin">
         {navGroups.map((group, gi) => {
           const isOpen = openGroups.has(gi);
-          const hasActiveItem = group.items.some(
-            item => pathname === item.path || (item.path !== '/' && pathname.startsWith(item.path))
-          );
+          const hasActiveItem = childContainsActive(group.children, pathname);
 
           return (
             <div key={gi}>
-              {/* Group header — clickable to toggle */}
+              {/* Group header */}
               {group.labelKey && !collapsed && (
                 <button
                   onClick={() => toggleGroup(gi)}
@@ -215,35 +329,14 @@ export default function Sidebar({ onLogout }: Props) {
                 <div className="border-t border-border/50 mx-2 my-1" />
               )}
 
-              {/* Group items — show if no labelKey (dashboard), or if open, or if collapsed sidebar */}
+              {/* Group children */}
               {(!group.labelKey || isOpen || collapsed) && (
                 <div className="space-y-0.5">
-                  {group.items.map(({ path, icon: Icon, labelKey, disabled }) => {
-                    const active = pathname === path || (path !== '/' && pathname.startsWith(path));
-                    return (
-                      <button
-                        key={path}
-                        onClick={() => !disabled && navigate(path)}
-                        disabled={disabled}
-                        title={collapsed ? t(labelKey) : undefined}
-                        className={`w-full flex items-center gap-2.5 rounded-lg text-sm font-medium transition-colors ${
-                          collapsed ? 'justify-center px-0 py-2.5' : 'px-2.5 py-2'
-                        } ${
-                          disabled
-                            ? 'text-muted/30 cursor-not-allowed'
-                            : active
-                            ? 'bg-accent-500/10 text-accent-400'
-                            : 'text-muted hover:text-white hover:bg-surface-hover'
-                        }`}
-                      >
-                        <Icon size={18} strokeWidth={active ? 2.5 : 1.5} />
-                        {!collapsed && (
-                          <span className="flex-1 text-left truncate">{t(labelKey)}</span>
-                        )}
-                        {!collapsed && disabled && <Lock size={12} className="text-muted/30" />}
-                      </button>
-                    );
-                  })}
+                  {group.children.map((child, ci) =>
+                    child.kind === 'leaf'
+                      ? renderLeaf(child, 0)
+                      : renderSubGroup(child, gi, ci)
+                  )}
                 </div>
               )}
             </div>
