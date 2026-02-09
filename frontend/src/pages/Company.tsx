@@ -755,7 +755,7 @@ export default function CompanyPage() {
                   {linkingCompanyId === c.id && unlinkedAccounts.length === 0 && (
                     <p className="text-xs text-muted italic mt-2">{t('all_accounts_linked')}</p>
                   )}
-                </div>{/* end expanded/collapsible section */}
+                </div>
               </div>
             );
           })}
