@@ -23,7 +23,6 @@ interface MenuItem {
 const menuItems: MenuItem[] = [
   { path: '/assets', icon: Home, labelKey: 'nav_assets' },
   { path: '/income', icon: Banknote, labelKey: 'nav_income' },
-  { path: '/budget', icon: Wallet, labelKey: 'nav_budget' },
   { path: '/analysis', icon: BarChart3, labelKey: 'nav_analysis' },
   { path: '/bilan', icon: FileBarChart, labelKey: 'nav_bilan' },
   { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },

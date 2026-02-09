@@ -4,6 +4,8 @@ import { useTranslation } from 'react-i18next';
 import { useApi, useAuthFetch } from '../useApi';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { RefreshCw, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { useFilter } from '../FilterContext';
+import ScopeSelect from '../components/ScopeSelect';
 
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#22c55e', '#ec4899', '#6b7280'];
@@ -39,7 +41,8 @@ export default function Analytics() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const period = `${year}-${String(month).padStart(2, '0')}`;
 
-  const { data, loading, refetch } = useApi<AnalyticsData>(`${API}/analytics?period=${period}`);
+  const { appendScope } = useFilter();
+  const { data, loading, refetch } = useApi<AnalyticsData>(appendScope(`${API}/analytics?period=${period}`));
   const [refreshing, setRefreshing] = useState(false);
 
   const prev = () => {
@@ -73,11 +76,12 @@ export default function Analytics() {
   const savingsColor = d.savingsRate >= 20 ? 'text-green-400' : d.savingsRate >= 0 ? 'text-yellow-400' : 'text-red-400';
 
   return (
-    <div className="p-3 md:p-4 space-y-3 max-w-6xl">
+    <div className="space-y-3 max-w-6xl">
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <h1 className="text-xl font-bold text-white">{t('nav_analysis')}</h1>
-        <div className="flex items-center gap-2">
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_analysis')}</h1>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <ScopeSelect />
           <button onClick={prev} className="p-2.5 rounded-lg bg-surface hover:bg-surface-hover text-muted min-w-[44px] min-h-[44px] flex items-center justify-center"><ChevronLeft size={16} /></button>
           <span className="text-white font-medium min-w-[140px] text-center">{moisFr[month - 1]} {year}</span>
           <button onClick={next} className="p-2.5 rounded-lg bg-surface hover:bg-surface-hover text-muted min-w-[44px] min-h-[44px] flex items-center justify-center"><ChevronRight size={16} /></button>

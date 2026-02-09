@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Plus, Trash2, Edit3, X, Check, Briefcase, TrendingUp, Calculator, CreditCard, ChevronDown } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Check, Briefcase, TrendingUp, ChevronDown } from 'lucide-react';
 import { useAuthFetch } from '../useApi';
 
 interface Company {
@@ -24,25 +24,6 @@ interface IncomeEntry {
   company_name: string | null;
 }
 
-interface TaxResult {
-  gross_annual: number;
-  tax: number;
-  netIncome: number;
-  effectiveRate: number;
-  brackets: { rate: number; amount: number }[];
-  country: string;
-  parts: number;
-}
-
-interface BorrowingResult {
-  net_monthly: number;
-  max_payment: number;
-  available_payment: number;
-  max_loan: number;
-  rate: number;
-  duration_years: number;
-}
-
 function fmt(v: number, currency = 'EUR') {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(v);
 }
@@ -61,18 +42,8 @@ export default function Income() {
   const [form, setForm] = useState({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' });
   const [expandedEntryId, setExpandedEntryId] = useState<number | null>(null); // year on mobile, entry id on desktop
 
-  // Tax estimation state
-  const [taxInput, setTaxInput] = useState({ gross_annual: '', country: 'FR', canton: 'ZH', situation: 'single', children: 0 });
-  const [taxResult, setTaxResult] = useState<TaxResult | null>(null);
-
-  // Borrowing capacity state
-  const [borrowInput, setBorrowInput] = useState({ net_monthly: '', existing_payments: '', rate: '3.35', duration_years: '20' });
-  const [borrowResult, setBorrowResult] = useState<BorrowingResult | null>(null);
-
   // Collapsible sections
   const [incomeOpen, setIncomeOpen] = useState(true);
-  const [taxOpen, setTaxOpen] = useState(false);
-  const [borrowOpen, setBorrowOpen] = useState(false);
 
   useEffect(() => { fetchEntries(); fetchCompanies(); }, []);
 
@@ -121,25 +92,6 @@ export default function Income() {
     setShowForm(true);
   };
 
-  const estimateTax = async () => {
-    const body = { ...taxInput, gross_annual: parseFloat(taxInput.gross_annual) || 0 };
-    if (!body.gross_annual) return;
-    const res = await authFetch(`${API}/tax/estimate`, { method: 'POST', body: JSON.stringify(body) });
-    setTaxResult(await res.json());
-  };
-
-  const estimateBorrowing = async () => {
-    const body = {
-      net_monthly: parseFloat(borrowInput.net_monthly) || 0,
-      existing_payments: parseFloat(borrowInput.existing_payments) || 0,
-      rate: parseFloat(borrowInput.rate) || 3.35,
-      duration_years: parseInt(borrowInput.duration_years) || 20,
-    };
-    if (!body.net_monthly) return;
-    const res = await authFetch(`${API}/borrowing-capacity`, { method: 'POST', body: JSON.stringify(body) });
-    setBorrowResult(await res.json());
-  };
-
   // Chart data: salary progression by year
   const chartData = useMemo(() => {
     const byYear: Record<number, number> = {};
@@ -152,11 +104,6 @@ export default function Income() {
     { value: 'CH', label: '🇨🇭 Suisse' },
     { value: 'OTHER', label: '🌍 Autre' },
   ];
-
-  const cantons = ['ZH', 'GE', 'VD', 'BE', 'BS', 'LU', 'AG', 'SG', 'TI', 'VS'];
-
-  const isCHF = taxInput.country === 'CH';
-  const fmtTax = isCHF ? fmtCHF : fmt;
 
   return (
     <div className="space-y-8 max-w-5xl">
@@ -422,141 +369,7 @@ export default function Income() {
         </>)}
       </section>
 
-      {/* ===== SECTION 2: Tax Estimation ===== */}
-      <section className="bg-surface rounded-xl border border-border p-4 space-y-2.5">
-        <h2 className="text-lg font-semibold flex items-center gap-2 cursor-pointer select-none" onClick={() => setTaxOpen(!taxOpen)}>
-          <Calculator size={20} /> {t('tax_estimation')}
-          <ChevronDown size={16} className={`text-muted transition-transform ${taxOpen ? '' : '-rotate-90'}`} />
-        </h2>
-
-        {taxOpen && (<>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-          <div>
-            <label className="text-xs text-muted mb-1 block">{t('gross_annual')}</label>
-            <input type="number" value={taxInput.gross_annual} onChange={e => setTaxInput({ ...taxInput, gross_annual: e.target.value })}
-              placeholder="55000" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs text-muted mb-1 block">{t('country')}</label>
-            <select value={taxInput.country} onChange={e => setTaxInput({ ...taxInput, country: e.target.value })}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm">
-              <option value="FR">🇫🇷 France</option>
-              <option value="CH">🇨🇭 Suisse</option>
-            </select>
-          </div>
-          {taxInput.country === 'CH' && (
-            <div>
-              <label className="text-xs text-muted mb-1 block">{t('canton')}</label>
-              <select value={taxInput.canton} onChange={e => setTaxInput({ ...taxInput, canton: e.target.value })}
-                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm">
-                {cantons.map(c => <option key={c} value={c}>{c}</option>)}
-              </select>
-            </div>
-          )}
-          <div>
-            <label className="text-xs text-muted mb-1 block">{t('situation')}</label>
-            <select value={taxInput.situation} onChange={e => setTaxInput({ ...taxInput, situation: e.target.value })}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm">
-              <option value="single">{t('single')}</option>
-              <option value="married">{t('married')}</option>
-            </select>
-          </div>
-          <div>
-            <label className="text-xs text-muted mb-1 block">{t('children')}</label>
-            <input type="number" min={0} max={10} value={taxInput.children} onChange={e => setTaxInput({ ...taxInput, children: parseInt(e.target.value) || 0 })}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-          </div>
-        </div>
-
-        <button onClick={estimateTax}
-          className="px-4 py-2 bg-accent-500 text-white rounded-lg text-sm font-medium hover:bg-accent-600 transition-colors">
-          {t('estimate')}
-        </button>
-
-        {taxResult && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mt-2">
-            <div className="bg-background rounded-lg p-2.5 text-center">
-              <p className="text-xs text-muted mb-1">{t('gross_annual')}</p>
-              <p className="text-lg font-bold text-white">{fmtTax(taxResult.gross_annual)}</p>
-            </div>
-            <div className="bg-background rounded-lg p-2.5 text-center">
-              <p className="text-xs text-muted mb-1">{t('estimated_tax')}</p>
-              <p className="text-lg font-bold text-red-400">{fmtTax(taxResult.tax)}</p>
-            </div>
-            <div className="bg-background rounded-lg p-2.5 text-center">
-              <p className="text-xs text-muted mb-1">{t('net_income')}</p>
-              <p className="text-lg font-bold text-green-400">{fmtTax(taxResult.netIncome)}</p>
-            </div>
-            <div className="bg-background rounded-lg p-2.5 text-center">
-              <p className="text-xs text-muted mb-1">{t('effective_rate')}</p>
-              <p className="text-lg font-bold text-yellow-400">{taxResult.effectiveRate}%</p>
-            </div>
-          </div>
-        )}
-        </>)}
-      </section>
-
-      {/* ===== SECTION 3: Borrowing Capacity ===== */}
-      <section className="bg-surface rounded-xl border border-border p-4 space-y-2.5">
-        <h2 className="text-lg font-semibold flex items-center gap-2 cursor-pointer select-none" onClick={() => setBorrowOpen(!borrowOpen)}>
-          <CreditCard size={20} /> {t('borrowing_capacity')}
-          <ChevronDown size={16} className={`text-muted transition-transform ${borrowOpen ? '' : '-rotate-90'}`} />
-        </h2>
-
-        {borrowOpen && (<>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div>
-            <label className="text-xs text-muted mb-1 block">{t('net_monthly_income')}</label>
-            <input type="number" value={borrowInput.net_monthly} onChange={e => setBorrowInput({ ...borrowInput, net_monthly: e.target.value })}
-              placeholder="3500" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs text-muted mb-1 block">{t('existing_payments')}</label>
-            <input type="number" value={borrowInput.existing_payments} onChange={e => setBorrowInput({ ...borrowInput, existing_payments: e.target.value })}
-              placeholder="0" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs text-muted mb-1 block">{t('interest_rate')} (%)</label>
-            <input type="number" step="0.05" value={borrowInput.rate} onChange={e => setBorrowInput({ ...borrowInput, rate: e.target.value })}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-          </div>
-          <div>
-            <label className="text-xs text-muted mb-1 block">{t('duration_years')}</label>
-            <input type="number" value={borrowInput.duration_years} onChange={e => setBorrowInput({ ...borrowInput, duration_years: e.target.value })}
-              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-          </div>
-        </div>
-
-        <button onClick={estimateBorrowing}
-          className="px-4 py-2 bg-accent-500 text-white rounded-lg text-sm font-medium hover:bg-accent-600 transition-colors">
-          {t('estimate')}
-        </button>
-
-        {borrowResult && (
-          <div className="bg-background rounded-lg p-5 space-y-3 mt-2">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
-              <div>
-                <p className="text-xs text-muted mb-1">{t('max_monthly_payment')}</p>
-                <p className="text-lg font-bold text-white">{fmt(borrowResult.max_payment)}</p>
-                <p className="text-xs text-muted">33% × {fmt(borrowResult.net_monthly)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted mb-1">{t('available_payment')}</p>
-                <p className="text-lg font-bold text-yellow-400">{fmt(borrowResult.available_payment)}</p>
-              </div>
-              <div>
-                <p className="text-xs text-muted mb-1">{t('max_borrowing')}</p>
-                <p className="text-2xl font-bold text-green-400">{fmt(borrowResult.max_loan)}</p>
-                <p className="text-xs text-muted">{t('over')} {borrowResult.duration_years} {t('years_at')} {borrowResult.rate}%</p>
-              </div>
-            </div>
-            <p className="text-xs text-muted text-center mt-2">
-              {t('borrowing_note')}
-            </p>
-          </div>
-        )}
-        </>)}
-      </section>
+      {/* Tax Estimation and Borrowing Capacity moved to Outils page */}
     </div>
   );
 }
