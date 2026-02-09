@@ -253,5 +253,17 @@
   "patrimoine_evolution": "Évolution du patrimoine",
   "patrimoine_distribution": "Répartition du patrimoine",
   "filters": "Filtres",
-  "clear_filters": "Effacer les filtres"
+  "clear_filters": "Effacer les filtres",
+  "justificatifs": "Justificatifs",
+  "scan_invoices": "Scanner mes factures",
+  "scan_invoices_short": "Scanner",
+  "scanning": "Scan en cours...",
+  "drive_not_connected": "Drive non connecté",
+  "link_drive": "Lier Drive",
+  "scan_done": "Scan terminé",
+  "new_files_scanned": "nouveaux fichiers",
+  "matched": "rapprochés",
+  "unmatched": "Non rapprochés",
+  "all": "Tous",
+  "no_invoices": "Aucun justificatif trouvé. Lancez un scan pour commencer."
 }

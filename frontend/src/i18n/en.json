@@ -253,5 +253,17 @@
   "patrimoine_evolution": "Patrimoine Evolution",
   "patrimoine_distribution": "Patrimoine Distribution",
   "filters": "Filters",
-  "clear_filters": "Clear filters"
+  "clear_filters": "Clear filters",
+  "justificatifs": "Receipts",
+  "scan_invoices": "Scan invoices",
+  "scan_invoices_short": "Scan",
+  "scanning": "Scanning...",
+  "drive_not_connected": "Drive not connected",
+  "link_drive": "Link Drive",
+  "scan_done": "Scan complete",
+  "new_files_scanned": "new files",
+  "matched": "Matched",
+  "unmatched": "Unmatched",
+  "all": "All",
+  "no_invoices": "No receipts found. Run a scan to get started."
 }
