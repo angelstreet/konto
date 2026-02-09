@@ -668,34 +668,50 @@ export default function CompanyPage() {
                       const isAccExpanded = expandedAccounts.has(acc.id);
                       return (
                         <div key={acc.id}>
-                          <button
-                            onClick={() => toggleAccount(acc.id)}
-                            className="w-full flex items-center justify-between py-2 px-2 rounded hover:bg-white/5 transition-colors"
-                          >
-                            <span className="text-sm truncate min-w-0">{shortName}</span>
-                            <span className="text-sm font-medium text-accent-400 flex-shrink-0 ml-2">{allAmountsHidden ? <span className="amount-masked">{formatBalance(acc.balance)}</span> : formatBalance(acc.balance)}</span>
-                          </button>
-                          {isAccExpanded && (
-                            <div className="px-2 pb-2 flex flex-col gap-1.5">
+                          {/* Desktop: single line with all details */}
+                          <div className="hidden md:flex items-center justify-between py-1.5 px-2 rounded hover:bg-white/5 transition-colors">
+                            <div className="flex items-center gap-1 text-sm truncate min-w-0">
+                              <span className="truncate">{shortName}</span>
                               {acc.account_number && (
-                                <div className="flex items-center gap-2 text-xs text-muted">
-                                  <span>N° compte:</span>
-                                  <span className="font-mono">{acc.account_number}</span>
-                                </div>
+                                <span className="text-xs text-muted"> — N° {acc.account_number}</span>
                               )}
                               {acc.iban && (
-                                <div className="flex items-center gap-2 text-xs text-muted">
-                                  <span>IBAN:</span>
-                                  <span className="font-mono">{acc.iban}</span>
-                                </div>
+                                <span className="text-xs text-muted"> — IBAN: <span className="font-mono">{acc.iban}</span></span>
                               )}
-                              <div className="flex items-center gap-2 mt-1">
-                                <button className="text-xs text-muted hover:text-white flex items-center gap-1 transition-colors">
-                                  <RefreshCw size={12} /> Sync
-                                </button>
-                              </div>
                             </div>
-                          )}
+                            <span className="text-sm font-medium text-accent-400 flex-shrink-0 ml-2">{allAmountsHidden ? <span className="amount-masked">{formatBalance(acc.balance)}</span> : formatBalance(acc.balance)}</span>
+                          </div>
+                          {/* Mobile: expandable */}
+                          <div className="md:hidden">
+                            <button
+                              onClick={() => toggleAccount(acc.id)}
+                              className="w-full flex items-center justify-between py-2 px-2 rounded hover:bg-white/5 transition-colors"
+                            >
+                              <span className="text-sm truncate min-w-0">{shortName}</span>
+                              <span className="text-sm font-medium text-accent-400 flex-shrink-0 ml-2">{allAmountsHidden ? <span className="amount-masked">{formatBalance(acc.balance)}</span> : formatBalance(acc.balance)}</span>
+                            </button>
+                            {isAccExpanded && (
+                              <div className="px-2 pb-2 flex flex-col gap-1.5">
+                                {acc.account_number && (
+                                  <div className="flex items-center gap-2 text-xs text-muted">
+                                    <span>N° compte:</span>
+                                    <span className="font-mono">{acc.account_number}</span>
+                                  </div>
+                                )}
+                                {acc.iban && (
+                                  <div className="flex items-center gap-2 text-xs text-muted">
+                                    <span>IBAN:</span>
+                                    <span className="font-mono">{acc.iban}</span>
+                                  </div>
+                                )}
+                                <div className="flex items-center gap-2 mt-1">
+                                  <button className="text-xs text-muted hover:text-white flex items-center gap-1 transition-colors">
+                                    <RefreshCw size={12} /> Sync
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                          </div>
                         </div>
                       );
                     })}
