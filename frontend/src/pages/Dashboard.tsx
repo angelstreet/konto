@@ -146,7 +146,7 @@ export default function Dashboard() {
         <>
           {/* Net Worth hero */}
           <div className="bg-surface rounded-xl border border-border p-3 sm:p-4 mb-2 text-center">
-            <p className="text-xs text-muted uppercase tracking-wider mb-1">{t('net_worth')}</p>
+            <p className="text-xs text-muted tracking-wider mb-1">{t('net_worth')}</p>
             <p className="text-2xl sm:text-3xl font-bold text-accent-400">{fc(netTotal)}</p>
             {brutTotal !== netTotal && (
               <p className="text-xs text-muted mt-1">{t('balance_brut')}: {fc(brutTotal)}</p>
@@ -171,7 +171,10 @@ export default function Dashboard() {
             })}
           </div>
 
-          {/* Patrimoine details — single collapsible section */}
+          {/* Patrimoine evolution chart — separate section, self-hides when empty */}
+          <PatrimoineChart />
+
+          {/* Patrimoine distribution — collapsible donut */}
           {donutData.length > 0 && (
             <div className="mb-3">
               <button
@@ -187,16 +190,13 @@ export default function Dashboard() {
                 />
               </button>
               {donutOpen && (
-                <div className="space-y-2.5">
-                  <DistributionDonut data={donutData} total={posTotal} hideAmounts={hideAmounts} />
-                  <PatrimoineChart />
-                </div>
+                <DistributionDonut data={donutData} total={posTotal} hideAmounts={hideAmounts} />
               )}
             </div>
           )}
 
-          {/* Daily quote */}
-          <div className="mt-6 text-center">
+          {/* Daily quote — hidden on mobile */}
+          <div className="mt-6 text-center hidden sm:block">
             <p className={`italic text-muted ${sizeClasses[quoteSize] || 'text-base'}`}>
               {quoteText}
             </p>

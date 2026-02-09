@@ -269,18 +269,20 @@ export default function Assets() {
   return (
     <div>
       <div className="flex items-center justify-between gap-2 mb-3">
-        <h1 className="text-lg sm:text-xl font-semibold whitespace-nowrap truncate">{t('nav_assets')}</h1>
-        <div className="flex items-center gap-1 flex-shrink-0">
-          <span className="hidden md:block"><ScopeSelect /></span>
+        <div className="flex items-center gap-2 min-w-0">
           {assetList.length > 0 && (
             <button
               onClick={() => setHideAmounts(h => !h)}
-              className="text-muted hover:text-white transition-colors p-2"
+              className="text-muted hover:text-white transition-colors p-1 flex-shrink-0"
               title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
             >
               {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
             </button>
           )}
+          <h1 className="text-lg sm:text-xl font-semibold whitespace-nowrap truncate">{t('nav_assets')}</h1>
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <span className="hidden md:block"><ScopeSelect /></span>
           <button onClick={() => startCreate()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black">
             <Plus size={16} /> <span className="hidden sm:inline">{t('add_asset')}</span>
           </button>
@@ -609,39 +611,44 @@ export default function Assets() {
             const netCashflow = a.monthly_revenues - a.monthly_costs;
             return (
               <div key={a.id} className="bg-surface rounded-xl border border-border overflow-hidden">
-                {/* Main card — 3 lines max on mobile, tap to expand */}
+                {/* Main card — 2 lines on mobile, 3 on desktop, tap to expand */}
                 <div className="px-4 py-3 cursor-pointer hover:bg-surface-hover transition-colors"
                   onClick={() => setExpandedId(expanded ? null : a.id)}>
-                  {/* Line 1: Name */}
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-accent-500/10 flex items-center justify-center flex-shrink-0">
+                  {/* Line 1: Name + tag + chevron */}
+                  <div className="flex items-center gap-2">
+                    {/* Desktop only: icon */}
+                    <div className="hidden md:flex w-10 h-10 rounded-lg bg-accent-500/10 items-center justify-center flex-shrink-0">
                       <Icon size={18} className="text-accent-400" />
                     </div>
                     <p className="text-sm font-medium text-white truncate flex-1 min-w-0">{a.name}</p>
-                    <ChevronDown size={14} className={`text-muted flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
-                  </div>
-                  {/* Line 2: Value + PnL */}
-                  <div className="ml-11 sm:ml-[52px] mt-1">
-                    <span className="text-sm font-semibold text-accent-400">
-                      {f(a.current_value || a.purchase_price || 0)}
-                    </span>
-                    {a.pnl != null && (
-                      <span className={`text-xs font-medium ml-2 ${a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                        {a.pnl >= 0 ? '+' : ''}{f(a.pnl)} ({fmtPct(a.pnl_percent!)})
-                      </span>
-                    )}
-                  </div>
-                  {/* Line 3: Usage badge + rent/loan */}
-                  <div className="ml-11 sm:ml-[52px] mt-1 flex items-center gap-1.5 text-xs text-muted">
                     {a.usage === 'professional' && a.company_id ? (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-purple-500/20 text-purple-400 flex-shrink-0 whitespace-nowrap">
                         {companies.find(c => c.id === a.company_id)?.name || t('scope_pro')}
                       </span>
                     ) : (
-                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-muted">
+                      <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/5 text-muted flex-shrink-0">
                         {t('scope_personal')}
                       </span>
                     )}
+                    <ChevronDown size={14} className={`text-muted flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
+                  </div>
+                  {/* Line 2: Acquisition + gain + gain% */}
+                  <div className="md:ml-[52px] mt-1 flex items-center gap-2">
+                    <span className="text-sm font-semibold text-accent-400">
+                      {hideAmounts ? <span className="amount-masked">{fmtCompact(a.purchase_price || a.current_value || 0)}</span> : fmtCompact(a.purchase_price || a.current_value || 0)}
+                    </span>
+                    {a.pnl != null && (
+                      <span className={`text-xs font-medium ${a.pnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {hideAmounts ? (
+                          <span className="amount-masked">{a.pnl >= 0 ? '+' : ''}{fmtCompact(a.pnl)} ({fmtPct(a.pnl_percent!)})</span>
+                        ) : (
+                          <>{a.pnl >= 0 ? '+' : ''}{fmtCompact(a.pnl)} ({fmtPct(a.pnl_percent!)})</>
+                        )}
+                      </span>
+                    )}
+                  </div>
+                  {/* Line 3: Desktop only — rent/loan/cashflow */}
+                  <div className="hidden md:flex md:ml-[52px] mt-1 items-center gap-1.5 text-xs text-muted">
                     {a.type === 'real_estate' && a.property_usage && (
                       <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${
                         a.property_usage === 'principal' ? 'bg-blue-500/20 text-blue-400' :

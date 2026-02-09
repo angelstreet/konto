@@ -35,7 +35,7 @@ export default function PatrimoineChart() {
     <div className="bg-surface rounded-xl border border-border p-4 mb-4">
       <div className="flex items-center justify-between mb-3">
         <div>
-          <h3 className="text-sm font-medium text-muted uppercase tracking-wide">{t('patrimoine_evolution') || 'Évolution du patrimoine'}</h3>
+          <h3 className="text-sm font-medium text-muted tracking-wide">{t('patrimoine_evolution') || 'Évolution du patrimoine'}</h3>
           {data.length > 0 && (
             <div className="flex items-baseline gap-2 mt-1">
               <span className="text-lg font-bold text-accent-400">{formatCurrency(latestValue)}</span>
