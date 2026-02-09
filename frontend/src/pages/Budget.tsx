@@ -3,6 +3,8 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { useAuthFetch } from '../useApi';
+import { useFilter } from '../FilterContext';
+import ScopeSelect from '../components/ScopeSelect';
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Alimentation': '#22c55e',
@@ -40,6 +42,7 @@ interface CashflowData {
 export default function Budget() {
   const { t } = useTranslation();
   const authFetch = useAuthFetch();
+  const { scope, appendScope } = useFilter();
   const [range, setRange] = useState('3m');
   const [data, setData] = useState<CashflowData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,11 +52,11 @@ export default function Budget() {
     const days = RANGES.find(r => r.key === range)?.days || 90;
     const from = new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
     const to = new Date().toISOString().split('T')[0];
-    authFetch(`${API}/budget/cashflow?from=${from}&to=${to}`)
+    authFetch(appendScope(`${API}/budget/cashflow?from=${from}&to=${to}`))
       .then(r => r.json())
       .then(d => setData(d))
       .finally(() => setLoading(false));
-  }, [range]);
+  }, [range, scope, appendScope]);
 
   const expenseCategories = data
     ? Object.entries(data.byCategory)
@@ -64,9 +67,11 @@ export default function Budget() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-2">
         <h1 className="text-xl font-semibold">{t('nav_budget') || 'Budget'}</h1>
-        <div className="flex gap-1">
+        <div className="flex items-center gap-2">
+          <ScopeSelect />
+          <div className="flex gap-1">
           {RANGES.map(r => (
             <button
               key={r.key}
@@ -78,6 +83,7 @@ export default function Budget() {
               {r.label}
             </button>
           ))}
+          </div>
         </div>
       </div>
 
@@ -91,7 +97,7 @@ export default function Budget() {
       ) : (
         <>
           {/* Summary cards */}
-          <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="grid grid-cols-3 gap-3 mb-2">
             <div className="bg-surface rounded-xl border border-border p-3 text-center">
               <p className="text-xs text-muted mb-1">Entrées</p>
               <p className="text-lg font-bold text-green-400">{formatCurrency(data.totalIncome)}</p>
@@ -110,7 +116,7 @@ export default function Budget() {
 
           {/* Monthly cashflow bar chart */}
           {data.byMonth.length > 0 && (
-            <div className="bg-surface rounded-xl border border-border p-4 mb-4">
+            <div className="bg-surface rounded-xl border border-border p-3 mb-2">
               <h3 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">Cashflow mensuel</h3>
               <ResponsiveContainer width="100%" height={220}>
                 <BarChart data={data.byMonth} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
@@ -144,7 +150,7 @@ export default function Budget() {
 
           {/* Expense distribution donut */}
           {expenseCategories.length > 0 && (
-            <div className="bg-surface rounded-xl border border-border p-4 mb-4">
+            <div className="bg-surface rounded-xl border border-border p-3 mb-2">
               <h3 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">Répartition des dépenses</h3>
               <div className="flex items-center gap-4">
                 <div className="w-40 h-40 relative">
@@ -199,7 +205,7 @@ export default function Budget() {
           <div className="bg-surface rounded-xl border border-border divide-y divide-border">
             <div className="px-4 py-2 flex items-center justify-between text-xs text-muted font-medium uppercase">
               <span>Catégorie</span>
-              <div className="flex gap-6">
+              <div className="flex gap-3">
                 <span className="w-20 text-right">Entrées</span>
                 <span className="w-20 text-right">Sorties</span>
               </div>
@@ -213,7 +219,7 @@ export default function Budget() {
                     <span className="text-sm">{cat}</span>
                     <span className="text-xs text-muted">({vals.count})</span>
                   </div>
-                  <div className="flex gap-6">
+                  <div className="flex gap-3">
                     <span className="w-20 text-right text-sm text-green-400">
                       {vals.income > 0 ? formatCurrency(vals.income) : '–'}
                     </span>

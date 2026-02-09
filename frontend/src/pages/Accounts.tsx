@@ -364,7 +364,7 @@ export default function Accounts() {
   return (
     <div>
       {/* Header — single line on mobile */}
-      <div className="flex items-center justify-between gap-2 mb-4 sm:mb-6">
+      <div className="flex items-center justify-between gap-2 mb-2 sm:mb-3">
         <div className="flex items-center gap-2 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('accounts')}</h1>
           {allAccounts.length > 0 && (
@@ -403,7 +403,7 @@ export default function Accounts() {
             {/* Choose mode */}
             {addMode === 'choose' && (
               <>
-                <h2 className="text-lg font-semibold mb-4">{t('add_account')}</h2>
+                <h2 className="text-lg font-semibold mb-2">{t('add_account')}</h2>
                 <div className="space-y-3">
                   <button onClick={connectBank} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
                     <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center"><Building2 size={20} className="text-green-400" /></div>
@@ -459,7 +459,7 @@ export default function Accounts() {
             {/* Manual account form */}
             {addMode === 'manual' && (
               <>
-                <h2 className="text-lg font-semibold mb-4">{t('add_manual')}</h2>
+                <h2 className="text-lg font-semibold mb-2">{t('add_manual')}</h2>
                 <div className="space-y-3">
                   <div>
                     <label className="text-xs text-muted mb-1 block">{t('account_name')} *</label>
@@ -539,7 +539,7 @@ export default function Accounts() {
             {/* MetaMask scanning */}
             {addMode === 'metamask-scanning' && (
               <div className="text-center py-8">
-                <div className="text-4xl mb-4">🦊</div>
+                <div className="text-4xl mb-2">🦊</div>
                 <div className="animate-pulse text-sm text-muted">{metamaskStatus}</div>
               </div>
             )}
@@ -547,7 +547,7 @@ export default function Accounts() {
             {/* Blockchain wallet form */}
             {addMode === 'blockchain' && (
               <>
-                <h2 className="text-lg font-semibold mb-4">{t('add_blockchain')}</h2>
+                <h2 className="text-lg font-semibold mb-2">{t('add_blockchain')}</h2>
                 <div className="space-y-3">
                   <div>
                     <label className="text-xs text-muted mb-1 block">{t('select_network')}</label>
@@ -611,7 +611,7 @@ export default function Accounts() {
       {updatingBalanceId !== null && (
         <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setUpdatingBalanceId(null)}>
           <div className="bg-surface border border-border rounded-2xl w-full max-w-sm p-6" onClick={e => e.stopPropagation()}>
-            <h2 className="text-lg font-semibold mb-4">{t('update_balance')}</h2>
+            <h2 className="text-lg font-semibold mb-2">{t('update_balance')}</h2>
             <div>
               <label className="text-xs text-muted mb-1 block">{t('new_balance')}</label>
               <input
@@ -705,7 +705,7 @@ export default function Accounts() {
           </div>
 
           {/* Desktop: pills */}
-          <div className="hidden md:flex flex-wrap gap-2 mb-4">
+          <div className="hidden md:flex flex-wrap gap-2 mb-2">
             {uniqueBanks.length > 1 && (
               <>
                 <button
@@ -755,7 +755,7 @@ export default function Accounts() {
       ) : allAccounts.length === 0 && (connections || []).length === 0 ? (
         <div className="bg-surface rounded-xl border border-border p-8 text-center">
           <Landmark className="mx-auto text-muted mb-3" size={32} />
-          <p className="text-muted text-sm mb-4">{t('no_accounts')}</p>
+          <p className="text-muted text-sm mb-2">{t('no_accounts')}</p>
           <button
             onClick={() => setAddMode('choose')}
             className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg transition-colors bg-accent-500 text-black"

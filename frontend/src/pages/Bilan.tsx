@@ -48,7 +48,7 @@ export default function Bilan() {
   const isProfit = cr.resultat_net >= 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       {/* Header */}
       <div className="flex items-center justify-between">
         <h1 className="text-xl font-semibold flex items-center gap-2">
@@ -66,21 +66,21 @@ export default function Bilan() {
       </div>
 
       {/* Résultat net hero */}
-      <div className={`rounded-xl p-6 text-center border ${isProfit ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+      <div className={`rounded-xl p-4 text-center border ${isProfit ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
         <div className="text-sm text-muted mb-1">Résultat Net</div>
         <div className={`text-3xl font-bold ${isProfit ? 'text-green-400' : 'text-red-400'}`}>
           {fmt(cr.resultat_net)}
         </div>
-        <div className="flex justify-center gap-6 mt-3 text-sm">
+        <div className="flex justify-center gap-3 mt-3 text-sm">
           <span className="text-green-400 flex items-center gap-1"><TrendingUp size={14} /> CA: {fmt(cr.chiffre_affaires)}</span>
           <span className="text-red-400 flex items-center gap-1"><TrendingDown size={14} /> Charges: {fmt(cr.charges.total)}</span>
         </div>
       </div>
 
       {/* TVA */}
-      <div className="bg-surface rounded-xl border border-border p-4">
+      <div className="bg-surface rounded-xl border border-border p-3">
         <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><Receipt size={16} /> TVA</h2>
-        <div className="grid grid-cols-3 gap-4 text-center">
+        <div className="grid grid-cols-3 gap-2.5 text-center">
           <div>
             <div className="text-xs text-muted">Collectée</div>
             <div className="text-sm font-medium">{fmt(data.tva.collectee)}</div>
@@ -104,7 +104,7 @@ export default function Bilan() {
       </div>
 
       {/* Charges breakdown */}
-      <div className="bg-surface rounded-xl border border-border p-4">
+      <div className="bg-surface rounded-xl border border-border p-3">
         <h2 className="text-sm font-semibold mb-3">Charges par catégorie</h2>
         {cr.charges.details.length === 0 ? (
           <p className="text-xs text-muted">Aucune charge enregistrée</p>
@@ -129,7 +129,7 @@ export default function Bilan() {
       </div>
 
       {/* Monthly chart (simple bar representation) */}
-      <div className="bg-surface rounded-xl border border-border p-4">
+      <div className="bg-surface rounded-xl border border-border p-3">
         <h2 className="text-sm font-semibold mb-3">Évolution mensuelle</h2>
         <div className="grid grid-cols-12 gap-1 items-end" style={{ height: 120 }}>
           {data.monthly_breakdown.map((m, i) => {
@@ -154,9 +154,9 @@ export default function Bilan() {
       </div>
 
       {/* Bilan simplifié */}
-      <div className="bg-surface rounded-xl border border-border p-4">
+      <div className="bg-surface rounded-xl border border-border p-3">
         <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><Building2 size={16} /> Bilan simplifié</h2>
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-2 gap-2.5">
           <div>
             <div className="text-xs text-muted mb-2 font-medium">ACTIF</div>
             {data.bilan.actif.items.length === 0 ? (
@@ -199,7 +199,7 @@ export default function Bilan() {
 
       {/* Justificatifs status */}
       {data.justificatifs.total > 0 && (
-        <div className="bg-surface rounded-xl border border-border p-4">
+        <div className="bg-surface rounded-xl border border-border p-3">
           <h2 className="text-sm font-semibold mb-2">📎 Justificatifs</h2>
           <div className="text-xs text-muted">
             {data.justificatifs.matched}/{data.justificatifs.total} rapprochés

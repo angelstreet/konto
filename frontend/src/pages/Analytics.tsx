@@ -73,7 +73,7 @@ export default function Analytics() {
   const savingsColor = d.savingsRate >= 20 ? 'text-green-400' : d.savingsRate >= 0 ? 'text-yellow-400' : 'text-red-400';
 
   return (
-    <div className="p-4 md:p-6 space-y-6 max-w-6xl">
+    <div className="p-3 md:p-4 space-y-3 max-w-6xl">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-white">{t('nav_analysis')}</h1>
@@ -103,7 +103,7 @@ export default function Analytics() {
       {/* YoY comparison */}
       {(d.yoy.income > 0 || d.yoy.expenses > 0) && (
         <div className="grid grid-cols-2 gap-3">
-          <div className="bg-surface rounded-xl p-4 border border-border">
+          <div className="bg-surface rounded-xl p-3 border border-border">
             <p className="text-xs text-muted mb-1">Revenus vs même mois N-1</p>
             <div className="flex items-center gap-2">
               <span className="text-lg font-bold text-white">{fmt(d.yoy.income)} €</span>
@@ -115,7 +115,7 @@ export default function Analytics() {
               )}
             </div>
           </div>
-          <div className="bg-surface rounded-xl p-4 border border-border">
+          <div className="bg-surface rounded-xl p-3 border border-border">
             <p className="text-xs text-muted mb-1">Dépenses vs même mois N-1</p>
             <div className="flex items-center gap-2">
               <span className="text-lg font-bold text-white">{fmt(d.yoy.expenses)} €</span>
@@ -131,9 +131,9 @@ export default function Analytics() {
       )}
 
       {/* Charts row */}
-      <div className="grid lg:grid-cols-2 gap-4">
+      <div className="grid lg:grid-cols-2 gap-2.5">
         {/* Spending trends bar chart */}
-        <div className="bg-surface rounded-xl p-4 border border-border">
+        <div className="bg-surface rounded-xl p-3 border border-border">
           <h3 className="text-sm font-semibold text-white mb-3">Tendances (6 mois)</h3>
           {d.trends.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
@@ -151,7 +151,7 @@ export default function Analytics() {
         </div>
 
         {/* Top categories donut */}
-        <div className="bg-surface rounded-xl p-4 border border-border">
+        <div className="bg-surface rounded-xl p-3 border border-border">
           <h3 className="text-sm font-semibold text-white mb-3">Top catégories de dépenses</h3>
           {d.topCategories.length > 0 ? (
             <div className="flex items-center gap-4">
@@ -180,7 +180,7 @@ export default function Analytics() {
       </div>
 
       {/* Savings rate gauge */}
-      <div className="bg-surface rounded-xl p-4 border border-border">
+      <div className="bg-surface rounded-xl p-3 border border-border">
         <h3 className="text-sm font-semibold text-white mb-3">Taux d'épargne</h3>
         <div className="flex items-center gap-4">
           <div className="flex-1">
@@ -202,7 +202,7 @@ export default function Analytics() {
 
       {/* Recurring expenses */}
       {d.recurring.length > 0 && (
-        <div className="bg-surface rounded-xl p-4 border border-border">
+        <div className="bg-surface rounded-xl p-3 border border-border">
           <h3 className="text-sm font-semibold text-white mb-3">Dépenses récurrentes détectées</h3>
           <div className="space-y-2">
             {d.recurring.map((r, i) => (
@@ -220,7 +220,7 @@ export default function Analytics() {
 
 function Card({ label, value, icon, color, sub }: { label: string; value: string; icon: React.ReactNode; color: string; sub?: string }) {
   return (
-    <div className="bg-surface rounded-xl p-4 border border-border">
+    <div className="bg-surface rounded-xl p-3 border border-border">
       <div className="flex items-center gap-2 mb-1">
         <span className={color}>{icon}</span>
         <span className="text-xs text-muted">{label}</span>

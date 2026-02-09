@@ -105,7 +105,7 @@ export default function Transactions() {
 
   return (
     <div>
-      <div className="flex items-center justify-between gap-2 mb-4">
+      <div className="flex items-center justify-between gap-2 mb-2">
         <div className="flex items-center gap-2 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_transactions')}</h1>
           <button
@@ -179,7 +179,7 @@ export default function Transactions() {
       )}
 
       {/* Desktop filters */}
-      <div className="hidden md:flex flex-row gap-3 mb-4">
+      <div className="hidden md:flex flex-row gap-3 mb-2">
         <form onSubmit={handleSearch} className="flex-1">
           <div className="relative">
             <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-muted" />

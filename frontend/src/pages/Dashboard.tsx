@@ -119,7 +119,7 @@ export default function Dashboard() {
   return (
     <div>
       {/* Title row — all on one line */}
-      <div className="flex items-center justify-between gap-2 mb-4">
+      <div className="flex items-center justify-between gap-2 mb-2">
         <h1 className="text-xl font-semibold whitespace-nowrap truncate">{t('dashboard')}</h1>
         <div className="flex items-center gap-1 flex-shrink-0">
           <ScopeSelect />
@@ -145,7 +145,7 @@ export default function Dashboard() {
       ) : data ? (
         <>
           {/* Net Worth hero */}
-          <div className="bg-surface rounded-xl border border-border p-4 sm:p-6 mb-4 text-center">
+          <div className="bg-surface rounded-xl border border-border p-3 sm:p-4 mb-2 text-center">
             <p className="text-xs text-muted uppercase tracking-wider mb-1">{t('net_worth')}</p>
             <p className="text-2xl sm:text-3xl font-bold text-accent-400">{fc(netTotal)}</p>
             {brutTotal !== netTotal && (
@@ -154,7 +154,7 @@ export default function Dashboard() {
           </div>
 
           {/* Summary blocks */}
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-4">
+          <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-2">
             {summaryBlocks.map((block) => {
               const Icon = block.icon;
               return (
@@ -187,7 +187,7 @@ export default function Dashboard() {
                 />
               </button>
               {donutOpen && (
-                <div className="space-y-4">
+                <div className="space-y-2.5">
                   <DistributionDonut data={donutData} total={posTotal} hideAmounts={hideAmounts} />
                   <PatrimoineChart />
                 </div>

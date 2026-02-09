@@ -259,7 +259,7 @@ export default function CompanyPage() {
 
   return (
     <div>
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-3">
           <h1 className="text-xl font-semibold">{t('company_profile')}</h1>
           <button
@@ -281,8 +281,8 @@ export default function CompanyPage() {
 
       {/* Company form */}
       {showForm && (
-        <div className="bg-surface rounded-xl border border-border p-5 mb-6">
-          <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-4">
+        <div className="bg-surface rounded-xl border border-border p-3.5 mb-3">
+          <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-2">
             {editingId ? t('edit_company') : t('new_company')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -373,7 +373,7 @@ export default function CompanyPage() {
                 </div>
               </button>
               {showDetails && (
-                <div className="px-4 pb-4">
+                <div className="px-4 pb-3">
                   {(() => {
                     const info = enrichedInfo || selectedCompanyInfo || {};
                     const sc = selectedCompanyInfo || {};
@@ -466,7 +466,7 @@ export default function CompanyPage() {
       {(companies || []).length === 0 && !showForm ? (
         <div className="bg-surface rounded-xl border border-border p-8 text-center">
           <Building2 className="mx-auto text-muted mb-3" size={32} />
-          <p className="text-muted text-sm mb-4">{t('no_companies')}</p>
+          <p className="text-muted text-sm mb-2">{t('no_companies')}</p>
           <button
             onClick={startCreate}
             className="inline-flex items-center gap-2 text-sm font-medium rounded-lg bg-accent-500 text-black px-2.5 py-2.5 md:px-4 md:py-2"
@@ -476,12 +476,12 @@ export default function CompanyPage() {
           </button>
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-2.5">
           {(companies || []).map(c => {
             const linked = linkedAccounts(c.id);
             const isExpanded = expandedCards.has(c.id);
             return (
-              <div key={c.id} className="bg-surface rounded-xl border border-border p-4 md:p-5">
+              <div key={c.id} className="bg-surface rounded-xl border border-border p-3 md:p-5">
                 {/* Compact header — always visible */}
                 <button
                   onClick={() => toggleCard(c.id)}

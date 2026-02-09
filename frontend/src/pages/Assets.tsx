@@ -283,7 +283,7 @@ export default function Assets() {
         </div>
       </div>
       {assetList.length > 0 ? (
-        <p className="text-sm text-muted mb-4">
+        <p className="text-sm text-muted mb-2">
           {t('total_value')}: <span className="text-accent-400 font-semibold">{f(totalValue)}</span>
           {totalPnl !== 0 && (
             <span className={`ml-2 ${totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -343,7 +343,7 @@ export default function Assets() {
       </div>
 
       {/* Desktop: Filter pills */}
-      <div className="hidden md:flex gap-2 mb-4 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
+      <div className="hidden md:flex gap-2 mb-2 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
         <button onClick={() => setFilter('')}
           className={`px-3 py-2.5 rounded-full text-xs font-medium min-h-[44px] transition-colors whitespace-nowrap flex-shrink-0 ${!filter ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
           {t('all')}
@@ -358,8 +358,8 @@ export default function Assets() {
 
       {/* Asset form */}
       {showForm && (
-        <div className="bg-surface rounded-xl border border-border p-5 mb-6">
-          <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-4">
+        <div className="bg-surface rounded-xl border border-border p-3.5 mb-3">
+          <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-2">
             {editingId ? t('edit_asset') : t('new_asset')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -660,7 +660,7 @@ export default function Assets() {
 
                 {/* Expanded details */}
                 {expanded && (
-                  <div className="px-4 pb-4 border-t border-border/50 pt-3">
+                  <div className="px-4 pb-3 border-t border-border/50 pt-3">
                     {/* Action buttons */}
                     <div className="flex gap-2 mb-3">
                       <button onClick={e => { e.stopPropagation(); startEdit(a); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-white bg-white/5 hover:bg-white/10 transition-colors"><Pencil size={12} /> {t('edit')}</button>
