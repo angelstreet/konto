@@ -320,48 +320,83 @@ export default function Income() {
                 });
               })()}
             </div>
-            {/* Desktop table */}
-            <div className="hidden sm:block overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-muted text-xs border-b border-border">
-                    <th className="text-left py-2 px-2">{t('year')}</th>
-                    <th className="text-left py-2 px-2">{t('period')}</th>
-                    <th className="text-left py-2 px-2">{t('employer')}</th>
-                    <th className="text-left py-2 px-2">{t('job_title')}</th>
-                    <th className="text-left py-2 px-2">{t('country')}</th>
-                    <th className="text-right py-2 px-2">{t('gross_annual')}</th>
-                    <th className="text-right py-2 px-2">{t('net_annual')}</th>
-                    <th className="text-right py-2 px-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {entries.map(e => {
-                    const fmtE = e.country === 'CH' ? fmtCHF : fmt;
-                    const period = e.start_date
-                      ? `${e.start_date.slice(5)}${e.end_date ? ' → ' + e.end_date.slice(5) : ' → …'}`
-                      : '—';
-                    return (
-                      <tr key={e.id} className="border-b border-border/50 hover:bg-surface-hover transition-colors">
-                        <td className="py-2 px-2 font-medium">{e.year}</td>
-                        <td className="py-2 px-2 text-xs text-muted">{period}</td>
-                        <td className="py-2 px-2">
-                          {e.employer}
-                          {e.company_name && <span className="text-xs text-accent-400 ml-1">({e.company_name})</span>}
-                        </td>
-                        <td className="py-2 px-2 text-muted">{e.job_title || '—'}</td>
-                        <td className="py-2 px-2">{countries.find(c => c.value === e.country)?.label || e.country}</td>
-                        <td className="py-2 px-2 text-right font-mono font-medium text-green-400">{fmtE(e.gross_annual)}</td>
-                        <td className="py-2 px-2 text-right font-mono text-emerald-300">{e.net_annual ? fmtE(e.net_annual) : '—'}</td>
-                        <td className="py-2 px-2 text-right">
-                          <button onClick={() => startEdit(e)} className="p-1 text-muted hover:text-white"><Edit3 size={14} /></button>
-                          <button onClick={() => handleDelete(e.id)} className="p-1 text-muted hover:text-red-400 ml-1"><Trash2 size={14} /></button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            {/* Desktop: group by year, current year expanded by default */}
+            <div className="hidden sm:block space-y-1">
+              {(() => {
+                const byYear = new Map<number, IncomeEntry[]>();
+                entries.forEach(e => {
+                  if (!byYear.has(e.year)) byYear.set(e.year, []);
+                  byYear.get(e.year)!.push(e);
+                });
+                const years = [...byYear.keys()].sort((a, b) => b - a);
+                const currentYear = new Date().getFullYear();
+                return years.map(year => {
+                  const yearEntries = byYear.get(year)!;
+                  const totalGross = yearEntries.reduce((s, e) => s + e.gross_annual, 0);
+                  const isExpanded = expandedEntryId === year || (expandedEntryId === null && year === currentYear);
+                  const mainCurrency = yearEntries[0]?.country === 'CH' ? 'CHF' : 'EUR';
+                  const fmtYear = mainCurrency === 'CHF' ? fmtCHF : fmt;
+                  return (
+                    <div key={year} className="bg-surface-hover rounded-lg overflow-hidden">
+                      <div
+                        className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-white/5 transition-colors"
+                        onClick={() => setExpandedEntryId(isExpanded ? -1 : year)}
+                      >
+                        <div className="flex items-center gap-4 min-w-0">
+                          <span className="text-base font-bold text-white">{year}</span>
+                          <span className="text-base font-mono font-medium text-green-400">{fmtYear(totalGross)}</span>
+                        </div>
+                        <div className="flex items-center gap-3 flex-shrink-0">
+                          <span className="text-xs text-muted">{yearEntries.length} {yearEntries.length > 1 ? 'employeurs' : 'employeur'}</span>
+                          <ChevronDown size={16} className={`text-muted transition-transform ${isExpanded ? '' : '-rotate-90'}`} />
+                        </div>
+                      </div>
+                      {isExpanded && (
+                        <div className="px-4 pb-3">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="text-muted text-xs border-b border-border/50">
+                                <th className="text-left py-1.5 px-2">{t('period')}</th>
+                                <th className="text-left py-1.5 px-2">{t('employer')}</th>
+                                <th className="text-left py-1.5 px-2">{t('job_title')}</th>
+                                <th className="text-left py-1.5 px-2">{t('country')}</th>
+                                <th className="text-right py-1.5 px-2">{t('gross_annual')}</th>
+                                <th className="text-right py-1.5 px-2">{t('net_annual')}</th>
+                                <th className="text-right py-1.5 px-2"></th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {yearEntries.map(e => {
+                                const fmtE = e.country === 'CH' ? fmtCHF : fmt;
+                                const period = e.start_date
+                                  ? `${e.start_date.slice(5)}${e.end_date ? ' → ' + e.end_date.slice(5) : ' → …'}`
+                                  : '—';
+                                return (
+                                  <tr key={e.id} className="border-b border-border/30 hover:bg-white/5 transition-colors">
+                                    <td className="py-2 px-2 text-xs text-muted">{period}</td>
+                                    <td className="py-2 px-2">
+                                      {e.employer}
+                                      {e.company_name && <span className="text-xs text-accent-400 ml-1">({e.company_name})</span>}
+                                    </td>
+                                    <td className="py-2 px-2 text-muted">{e.job_title || '—'}</td>
+                                    <td className="py-2 px-2">{countries.find(c => c.value === e.country)?.label || e.country}</td>
+                                    <td className="py-2 px-2 text-right font-mono font-medium text-green-400">{fmtE(e.gross_annual)}</td>
+                                    <td className="py-2 px-2 text-right font-mono text-emerald-300">{e.net_annual ? fmtE(e.net_annual) : '—'}</td>
+                                    <td className="py-2 px-2 text-right">
+                                      <button onClick={() => startEdit(e)} className="p-1 text-muted hover:text-white"><Edit3 size={14} /></button>
+                                      <button onClick={() => handleDelete(e.id)} className="p-1 text-muted hover:text-red-400 ml-1"><Trash2 size={14} /></button>
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </>
         
