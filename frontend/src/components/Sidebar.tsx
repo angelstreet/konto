@@ -244,8 +244,11 @@ export default function Sidebar({ onLogout }: Props) {
   /* ── Render a subgroup (lvl2) ────────────────────────────────────── */
   const renderSubGroup = (sg: NavSubGroup, gi: number, ci: number) => {
     const key = `${gi}-${ci}`;
-    const isOpen = openSubGroups.has(key);
     const hasActive = childContainsActive(sg.children, pathname);
+    // Analyse subgroups (Perso/Pro) are always expanded — no collapse toggle
+    const parentGroup = navGroups[gi];
+    const alwaysOpen = parentGroup.labelKey === 'nav_group_analyse';
+    const isOpen = alwaysOpen || openSubGroups.has(key);
 
     if (collapsed) {
       // In collapsed mode, show children directly with a divider
@@ -259,19 +262,23 @@ export default function Sidebar({ onLogout }: Props) {
 
     return (
       <div key={key}>
-        <button
-          onClick={() => toggleSubGroup(key)}
+        <div
+          onClick={alwaysOpen ? undefined : () => toggleSubGroup(key)}
           className={`w-full flex items-center gap-2.5 rounded-lg text-sm font-medium transition-colors py-2 pl-5 pr-2.5 ${
+            alwaysOpen ? 'cursor-default' : 'cursor-pointer'
+          } ${
             hasActive ? 'text-accent-400/80' : 'text-muted/70 hover:text-white hover:bg-surface-hover'
           }`}
         >
           <sg.icon size={16} strokeWidth={hasActive ? 2 : 1.5} />
           <span className="flex-1 text-left truncate">{t(sg.labelKey)}</span>
-          <ChevronDown
-            size={12}
-            className={`transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
-          />
-        </button>
+          {!alwaysOpen && (
+            <ChevronDown
+              size={12}
+              className={`transition-transform duration-200 ${isOpen ? '' : '-rotate-90'}`}
+            />
+          )}
+        </div>
         {isOpen && (
           <div className="space-y-0.5">
             {sg.children.map(leaf => renderLeaf(leaf, 2))}
