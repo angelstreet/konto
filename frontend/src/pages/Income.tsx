@@ -371,7 +371,7 @@ export default function Income() {
               <BarChart data={chartData}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="year" tick={{ fill: '#888', fontSize: 12 }} />
-                <YAxis tick={{ fill: '#888', fontSize: 12 }} tickFormatter={v => hideAmounts ? '***' : `${Math.round(v / 1000)}k`} />
+                <YAxis tick={{ fill: '#888', fontSize: 12 }} tickFormatter={v => hideAmounts ? '' : `${Math.round(v / 1000)}k`} />
                 <Tooltip formatter={(v: any) => mask(fmt(v))} contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8 }} />
                 <Bar dataKey="total" fill="#6366f1" radius={[4, 4, 0, 0]} name="Salaire brut" />
               </BarChart>

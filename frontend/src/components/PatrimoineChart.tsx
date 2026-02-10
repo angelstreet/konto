@@ -82,14 +82,14 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
               tickLine={false}
             />
             <YAxis
-              tickFormatter={(v: number) => hideAmounts ? '***' : `${(v / 1000).toFixed(0)}k`}
+              tickFormatter={(v: number) => hideAmounts ? '' : `${(v / 1000).toFixed(0)}k`}
               tick={{ fontSize: 10, fill: '#888' }}
               axisLine={false}
               tickLine={false}
               width={45}
             />
             <Tooltip
-              formatter={(value: any) => [hideAmounts ? '••••' : formatCurrency(value as number), 'Patrimoine']}
+              formatter={(value: any) => [hideAmounts ? <span className="amount-masked">{formatCurrency(value as number)}</span> : formatCurrency(value as number), 'Patrimoine']}
               labelFormatter={(l: any) => new Date(String(l)).toLocaleDateString('fr-FR')}
               contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
             />
