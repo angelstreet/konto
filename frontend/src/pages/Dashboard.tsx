@@ -125,6 +125,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <div className="flex items-center gap-1 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_dashboard')}</h1>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           <button
             onClick={() => setShowNet(v => { const n = !v; localStorage.setItem('kompta_show_net', String(n)); return n; })}
             className="text-xs px-2 py-1 rounded-md font-medium transition-colors text-muted hover:text-white hover:bg-surface-hover flex-shrink-0"
@@ -133,7 +134,6 @@ export default function Dashboard() {
           </button>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           <ScopeSelect />
           <button
             onClick={() => window.open(API + '/report/patrimoine?categories=all', '_blank')}

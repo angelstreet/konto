@@ -31,7 +31,7 @@ export default function Bilan() {
   const navigate = useNavigate();
   const authFetch = useAuthFetch();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
-  const mask = (v: string) => hideAmounts ? '••••' : v;
+  const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
   const [year, setYear] = useState(new Date().getFullYear());
   const [data, setData] = useState<BilanData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -62,9 +62,9 @@ export default function Bilan() {
             <ArrowLeft size={20} />
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap">Bilan Annuel</h1>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} size={16} />
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} size={16} />
           <button onClick={() => setYear(y => y - 1)} className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ChevronLeft size={18} />
           </button>

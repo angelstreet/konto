@@ -2,10 +2,11 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, Eye, EyeOff, ArrowLeft,
+  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, ArrowLeft,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
+import EyeToggle from '../components/EyeToggle';
 import ConfirmDialog from '../components/ConfirmDialog';
 import ScopeSelect from '../components/ScopeSelect';
 import { usePreferences } from '../PreferencesContext';
@@ -277,17 +278,11 @@ export default function Assets() {
             <ArrowLeft size={20} />
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_assets')}</h1>
+          {assetList.length > 0 && (
+            <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
+          )}
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          {assetList.length > 0 && (
-            <button
-              onClick={toggleHideAmounts}
-              className="text-muted hover:text-white transition-colors p-1 flex-shrink-0"
-              title={hideAmounts ? t('show_all_balances') : t('hide_all_balances')}
-            >
-              {hideAmounts ? <EyeOff size={18} /> : <Eye size={18} />}
-            </button>
-          )}
           <span className="hidden md:block"><ScopeSelect /></span>
           <button
             onClick={() => setMobileFiltersOpen(o => !o)}

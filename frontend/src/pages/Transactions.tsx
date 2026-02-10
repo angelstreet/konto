@@ -110,10 +110,10 @@ export default function Transactions() {
       <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <div className="flex items-center gap-2 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_transactions')}</h1>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           <span className="text-sm text-muted whitespace-nowrap">{total}</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           {/* Mobile: single Filtrer ▾ button */}
           <div className="md:hidden">
             <button

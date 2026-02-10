@@ -397,6 +397,9 @@ export default function Accounts() {
       <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <div className="flex items-center gap-2 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('accounts')}</h1>
+          {allAccounts.length > 0 && (
+            <EyeToggle hidden={allBalancesHidden} onToggle={toggleAllBalancesHidden} />
+          )}
           {!loading && filteredAccounts.length > 0 && (
             <span className="text-sm font-semibold text-accent-400 truncate">
               {allBalancesHidden ? <span className="amount-masked">{formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}</span> : formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}
@@ -405,9 +408,6 @@ export default function Accounts() {
           )}
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
-          {allAccounts.length > 0 && (
-            <EyeToggle hidden={allBalancesHidden} onToggle={toggleAllBalancesHidden} />
-          )}
           <span className="hidden md:block"><ScopeSelect /></span>
           <button
             onClick={() => setAddMode('choose')}
@@ -910,12 +910,12 @@ export default function Accounts() {
                     )}
                     {!acc.blockchain_address && acc.account_number && (
                       <span className="hidden sm:inline text-[10px] text-muted font-mono">
-                        {acc.hidden || allBalancesHidden ? '••••••••' : maskNumber(acc.account_number)}
+                        {acc.hidden || allBalancesHidden ? <span className="amount-masked">{maskNumber(acc.account_number)}</span> : maskNumber(acc.account_number)}
                       </span>
                     )}
                     {!acc.blockchain_address && !acc.account_number && acc.iban && (
                       <span className="hidden sm:inline text-[10px] text-muted font-mono">
-                        {acc.hidden || allBalancesHidden ? '••••••••' : maskNumber(acc.iban)}
+                        {acc.hidden || allBalancesHidden ? <span className="amount-masked">{maskNumber(acc.iban)}</span> : maskNumber(acc.iban)}
                       </span>
                     )}
                     <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${isStale ? 'bg-red-500' : 'bg-green-500'}`} />

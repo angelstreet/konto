@@ -314,9 +314,9 @@ export default function CompanyPage() {
       <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <div className="flex items-center gap-2 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_companies')}</h1>
+          <EyeToggle hidden={allAmountsHidden} onToggle={toggleAllAmountsHidden} />
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <EyeToggle hidden={allAmountsHidden} onToggle={toggleAllAmountsHidden} />
           <button
             onClick={startCreate}
             className="flex items-center justify-center gap-2 rounded-lg text-sm font-medium transition-colors bg-accent-500 text-black px-2.5 py-2.5 md:px-4 md:py-2"
@@ -551,7 +551,7 @@ export default function CompanyPage() {
                       {[
                         c.legal_form && abbreviateLegalForm(c.legal_form),
                         c.siren && `SIREN: ${c.siren}`,
-                        c.capital && `Capital: ${allAmountsHidden ? '••••' : formatBalance(c.capital)}`,
+                        c.capital && `Capital: ${formatBalance(c.capital)}`,
                         c.address,
                       ].filter(Boolean).join(' - ')}
                     </p>

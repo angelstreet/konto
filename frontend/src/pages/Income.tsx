@@ -38,7 +38,7 @@ export default function Income() {
   const navigate = useNavigate();
   const authFetch = useAuthFetch();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
-  const mask = (v: string) => hideAmounts ? '••••' : v;
+  const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
 
   // Income tracking state
   const [entries, setEntries] = useState<IncomeEntry[]>([]);
@@ -119,8 +119,8 @@ export default function Income() {
             <ArrowLeft size={20} />
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_income')}</h1>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
-        <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
       </div>
 
       {/* ===== SECTION 1: Income Tracking ===== */}
