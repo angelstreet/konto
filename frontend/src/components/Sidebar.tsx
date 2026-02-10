@@ -27,6 +27,7 @@ import {
   Lock,
   User,
   Briefcase,
+  TrendingUp,
 } from 'lucide-react';
 
 /* ── Navigation data structure ──────────────────────────────────────── */
@@ -85,6 +86,7 @@ const navGroups: NavGroup[] = [
           { kind: 'leaf', path: '/income', icon: Banknote, labelKey: 'nav_income' },
           { kind: 'leaf', path: '/budget', icon: BarChart3, labelKey: 'nav_budget' },
           { kind: 'leaf', path: '/bilan', icon: FileBarChart, labelKey: 'nav_bilan' },
+          { kind: 'leaf', path: '/trends', icon: TrendingUp, labelKey: 'nav_trends' },
         ],
       },
       {
@@ -93,6 +95,7 @@ const navGroups: NavGroup[] = [
         icon: Briefcase,
         children: [
           { kind: 'leaf', path: '/analysis', icon: BarChart3, labelKey: 'nav_budget' },
+          { kind: 'leaf', path: '/trends-pro', icon: TrendingUp, labelKey: 'nav_trends' },
           { kind: 'leaf', path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
           { kind: 'leaf', path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
         ],

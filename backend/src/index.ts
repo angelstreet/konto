@@ -2079,6 +2079,107 @@ app.get('/api/kozy/properties', async (c) => {
   }
 });
 
+// ========== TRENDS — Universal Category Mapping + Anomaly Detection ==========
+
+const CATEGORY_MAP: Record<string, string[]> = {
+  'Énergie': ['edf', 'engie', 'electricite', 'électricité', 'gaz', 'gasoil', 'fioul', 'total energies', 'totalenergies', 'direct energie'],
+  'Alimentation': ['carrefour', 'leclerc', 'auchan', 'lidl', 'aldi', 'intermarche', 'monoprix', 'picard', 'franprix', 'casino', 'super u', 'match', 'cora', 'spar', 'biocoop', 'naturalia', 'boulangerie', 'patisserie', 'restaurant', 'mcdo', 'burger', 'kebab', 'sushi', 'pizza', 'uber eats', 'deliveroo', 'just eat'],
+  'Eau': ['eau', 'veolia', 'suez', 'lyonnaise des eaux', 'saur'],
+  'Transport': ['essence', 'shell', 'bp ', 'sncf', 'ratp', 'navigo', 'uber', 'bolt', 'taxi', 'parking', 'stationnement', 'peage', 'péage', 'autoroute', 'vinci autoroute'],
+  'Impôts & Taxes': ['impot', 'impôt', 'dgfip', 'tresor public', 'trésor public', 'taxe', 'prelevement a la source', 'urssaf', 'direction generale'],
+  'Assurances': ['axa', 'maif', 'macif', 'matmut', 'groupama', 'allianz', 'generali', 'assurance', 'mutuelle', 'harmonie', 'mgen'],
+  'Internet & Mobile': ['bouygues telecom', 'orange', 'sfr', 'free ', 'free mobile', 'sosh', 'red by sfr', 'b&you'],
+  'Habillement': ['zara', 'h&m', 'kiabi', 'decathlon', 'nike', 'adidas', 'primark', 'uniqlo', 'celio', 'jules'],
+  'Loisirs': ['netflix', 'spotify', 'disney', 'canal+', 'amazon prime', 'cinema', 'cinéma', 'fnac', 'cultura', 'jeux', 'playstation', 'xbox', 'steam', 'apple.com/bill'],
+  'Loyers & Charges': ['loyer', 'copropriete', 'copropriété', 'syndic', 'foncia', 'nexity', 'credit immobilier', 'crédit immobilier', 'pret immobilier', 'prêt immobilier', 'emprunt', 'mortgage'],
+};
+
+function classifyTransaction(label: string): string {
+  const lower = (label || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+  const lowerOrig = (label || '').toLowerCase();
+  for (const [cat, keywords] of Object.entries(CATEGORY_MAP)) {
+    for (const kw of keywords) {
+      if (lowerOrig.includes(kw) || lower.includes(kw.normalize('NFD').replace(/[\u0300-\u036f]/g, ''))) {
+        return cat;
+      }
+    }
+  }
+  return 'Autre';
+}
+
+app.get('/api/trends', async (c) => {
+  const months = parseInt(c.req.query('months') || '6');
+  const scope = c.req.query('usage') || c.req.query('scope') || 'personal'; // personal or professional
+  const userId = await getUserId(c);
+
+  // Get date range
+  const now = new Date();
+  const fromDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
+  const fromStr = fromDate.toISOString().split('T')[0];
+
+  const result = await db.execute({
+    sql: `SELECT t.date, t.amount, t.label, ba.usage
+          FROM transactions t
+          LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+          WHERE t.date >= ? AND ba.usage = ? AND t.amount < 0 AND ba.user_id = ?
+          ORDER BY t.date`,
+    args: [fromStr, scope, userId]
+  });
+
+  // Group by category + month
+  const grouped: Record<string, Record<string, number>> = {};
+  for (const tx of result.rows as any[]) {
+    const cat = classifyTransaction(tx.label);
+    const month = tx.date?.substring(0, 7);
+    if (!month) continue;
+    if (!grouped[cat]) grouped[cat] = {};
+    if (!grouped[cat][month]) grouped[cat][month] = 0;
+    grouped[cat][month] += Math.abs(tx.amount);
+  }
+
+  // Build result with anomaly detection
+  const allMonths: string[] = [];
+  for (let i = 0; i < months; i++) {
+    const d = new Date(now.getFullYear(), now.getMonth() - months + 1 + i, 1);
+    allMonths.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  }
+
+  const categories: {
+    category: string;
+    totalSpend: number;
+    months: { month: string; amount: number; avgLast3: number | null; changePercent: number | null }[];
+  }[] = [];
+
+  for (const [cat, monthData] of Object.entries(grouped)) {
+    let totalSpend = 0;
+    const monthEntries = allMonths.map((m, idx) => {
+      const amount = monthData[m] || 0;
+      totalSpend += amount;
+
+      // Rolling 3-month average (from previous months)
+      let avgLast3: number | null = null;
+      let changePercent: number | null = null;
+      if (idx >= 3) {
+        const prev3 = [allMonths[idx - 1], allMonths[idx - 2], allMonths[idx - 3]];
+        const avg = prev3.reduce((s, pm) => s + (monthData[pm] || 0), 0) / 3;
+        avgLast3 = Math.round(avg * 100) / 100;
+        if (avg > 0) {
+          changePercent = Math.round(((amount - avg) / avg) * 100);
+        }
+      }
+
+      return { month: m, amount: Math.round(amount * 100) / 100, avgLast3, changePercent };
+    });
+
+    categories.push({ category: cat, totalSpend: Math.round(totalSpend * 100) / 100, months: monthEntries });
+  }
+
+  // Sort by total spend descending, return top 6
+  categories.sort((a, b) => b.totalSpend - a.totalSpend);
+
+  return c.json({ categories: categories.slice(0, 6), allMonths, scope });
+});
+
 // ========== START SERVER ==========
 
 export { app };

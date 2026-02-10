@@ -13,6 +13,7 @@ import {
   Upload,
   GitCompareArrows,
   Settings,
+  TrendingUp,
   LucideIcon,
   ChevronDown,
   User,
@@ -49,6 +50,7 @@ const menuGroups: MenuGroup[] = [
         items: [
           { path: '/income', icon: Banknote, labelKey: 'nav_income' },
           { path: '/budget', icon: BarChart3, labelKey: 'nav_budget' },
+          { path: '/trends', icon: TrendingUp, labelKey: 'nav_trends' },
           { path: '/bilan', icon: FileBarChart, labelKey: 'nav_bilan' },
         ],
       },
@@ -58,6 +60,7 @@ const menuGroups: MenuGroup[] = [
         items: [
           { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
           { path: '/analysis', icon: BarChart3, labelKey: 'nav_budget' },
+          { path: '/trends-pro', icon: TrendingUp, labelKey: 'nav_trends' },
           { path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
           { path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
         ],
