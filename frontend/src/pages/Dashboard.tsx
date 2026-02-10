@@ -174,7 +174,7 @@ export default function Dashboard() {
           </div>
 
           {/* Patrimoine evolution chart — separate section, self-hides when empty */}
-          <PatrimoineChart showNet={showNet} />
+          <PatrimoineChart showNet={showNet} hideAmounts={hideAmounts} />
 
           {/* Patrimoine distribution — collapsible donut */}
           {donutData.length > 0 && (

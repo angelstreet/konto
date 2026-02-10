@@ -10,7 +10,7 @@ function formatCurrency(v: number) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 }
 
-export default function PatrimoineChart({ showNet = true }: { showNet?: boolean }) {
+export default function PatrimoineChart({ showNet = true, hideAmounts = false }: { showNet?: boolean; hideAmounts?: boolean }) {
   const { t } = useTranslation();
   const [range, setRange] = useState<string>('6m');
   const [data, setData] = useState<{ date: string; value: number }[]>([]);
@@ -38,9 +38,9 @@ export default function PatrimoineChart({ showNet = true }: { showNet?: boolean 
           <h3 className="text-sm font-medium text-muted tracking-wide">{t('patrimoine_evolution') || 'Évolution du patrimoine'}{!showNet ? ` (${t('balance_brut') || 'brut'})` : ''}</h3>
           {data.length > 0 && (
             <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-lg font-bold text-accent-400">{formatCurrency(latestValue)}</span>
+              <span className="text-lg font-bold text-accent-400">{hideAmounts ? <span className="amount-masked">{formatCurrency(latestValue)}</span> : formatCurrency(latestValue)}</span>
               <span className={`text-xs font-medium ${change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {change >= 0 ? '+' : ''}{formatCurrency(change)} ({changePct >= 0 ? '+' : ''}{changePct.toFixed(1)}%)
+                {hideAmounts ? <span className="amount-masked">{change >= 0 ? '+' : ''}{formatCurrency(change)} ({changePct >= 0 ? '+' : ''}{changePct.toFixed(1)}%)</span> : <>{change >= 0 ? '+' : ''}{formatCurrency(change)} ({changePct >= 0 ? '+' : ''}{changePct.toFixed(1)}%)</>}
               </span>
             </div>
           )}
@@ -82,14 +82,14 @@ export default function PatrimoineChart({ showNet = true }: { showNet?: boolean 
               tickLine={false}
             />
             <YAxis
-              tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`}
+              tickFormatter={(v: number) => hideAmounts ? '***' : `${(v / 1000).toFixed(0)}k`}
               tick={{ fontSize: 10, fill: '#888' }}
               axisLine={false}
               tickLine={false}
               width={45}
             />
             <Tooltip
-              formatter={(value: any) => [formatCurrency(value as number), 'Patrimoine']}
+              formatter={(value: any) => [hideAmounts ? '••••' : formatCurrency(value as number), 'Patrimoine']}
               labelFormatter={(l: any) => new Date(String(l)).toLocaleDateString('fr-FR')}
               contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
             />
