@@ -2079,6 +2079,142 @@ app.get('/api/kozy/properties', async (c) => {
   }
 });
 
+// ========== PROPERTY ROI — Smoobu Revenue vs Bank Costs ==========
+
+const SMOOBU_API = 'https://login.smoobu.com/api';
+const SMOOBU_API_KEY = process.env.SMOOBU_API_KEY || '';
+
+// Property cost matching patterns (label keywords → apartment ID)
+const PROPERTY_COST_PATTERNS: { apartmentId: number; patterns: string[] }[] = [
+  { apartmentId: 1981817, patterns: ['maison', '33854'] },
+  { apartmentId: 1981820, patterns: ['480589', 'balcon'] },
+  { apartmentId: 2105584, patterns: ['480570', 'jardin'] },
+];
+
+app.get('/api/properties/roi', async (c) => {
+  if (!SMOOBU_API_KEY) return c.json({ error: 'SMOOBU_API_KEY not configured' }, 500);
+
+  const monthsParam = parseInt(c.req.query('months') || '6');
+  const now = new Date();
+  const fromDate = new Date(now.getFullYear(), now.getMonth() - monthsParam + 1, 1);
+  const fromStr = fromDate.toISOString().split('T')[0];
+  const toStr = now.toISOString().split('T')[0];
+
+  // Fetch Smoobu apartments
+  const aptRes = await fetch(`${SMOOBU_API}/apartments`, { headers: { 'Api-Key': SMOOBU_API_KEY } });
+  const aptData = await aptRes.json() as any;
+  const apartments = aptData.apartments || [];
+
+  // Fetch all bookings (paginated)
+  let allBookings: any[] = [];
+  let page = 1;
+  let pageCount = 1;
+  while (page <= pageCount) {
+    const bkRes = await fetch(`${SMOOBU_API}/reservations?from=${fromStr}&to=${toStr}&pageSize=100&page=${page}`, {
+      headers: { 'Api-Key': SMOOBU_API_KEY }
+    });
+    const bkData = await bkRes.json() as any;
+    allBookings.push(...(bkData.bookings || []));
+    pageCount = bkData.page_count || 1;
+    page++;
+  }
+
+  // Calculate revenue per apartment per month
+  const revenueByApt: Record<number, { total: number; byMonth: Record<string, number>; nights: number; bookingCount: number }> = {};
+  for (const apt of apartments) {
+    revenueByApt[apt.id] = { total: 0, byMonth: {}, nights: 0, bookingCount: 0 };
+  }
+
+  for (const b of allBookings) {
+    if (b.type === 'cancellation') continue;
+    const aptId = b.apartment?.id;
+    if (!aptId || !revenueByApt[aptId]) continue;
+    const price = b.price || 0;
+    if (price <= 0) continue;
+    const arrival = b.arrival;
+    const departure = b.departure;
+    const month = arrival?.substring(0, 7);
+    if (!month) continue;
+    const nights = Math.max(1, Math.round((new Date(departure).getTime() - new Date(arrival).getTime()) / 86400000));
+    revenueByApt[aptId].total += price;
+    revenueByApt[aptId].byMonth[month] = (revenueByApt[aptId].byMonth[month] || 0) + price;
+    revenueByApt[aptId].nights += nights;
+    revenueByApt[aptId].bookingCount++;
+  }
+
+  // Fetch bank transactions for cost matching
+  const userId = await getUserId(c);
+  const txResult = await db.execute({
+    sql: `SELECT t.date, t.amount, t.label FROM transactions t
+          LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
+          WHERE t.date >= ? AND t.amount < 0 AND ba.user_id = ?`,
+    args: [fromStr, userId]
+  });
+
+  // Match costs to properties
+  const costsByApt: Record<number, { total: number; byMonth: Record<string, number>; matched: string[] }> = {};
+  for (const apt of apartments) {
+    costsByApt[apt.id] = { total: 0, byMonth: {}, matched: [] };
+  }
+
+  for (const tx of txResult.rows as any[]) {
+    const label = (tx.label || '').toLowerCase();
+    for (const pattern of PROPERTY_COST_PATTERNS) {
+      if (pattern.patterns.some(p => label.includes(p))) {
+        const month = tx.date?.substring(0, 7);
+        const amount = Math.abs(tx.amount);
+        costsByApt[pattern.apartmentId].total += amount;
+        if (month) costsByApt[pattern.apartmentId].byMonth[month] = (costsByApt[pattern.apartmentId].byMonth[month] || 0) + amount;
+        costsByApt[pattern.apartmentId].matched.push(tx.label);
+        break;
+      }
+    }
+  }
+
+  // Calculate occupancy rate (nights booked / total possible nights)
+  const totalDays = Math.round((now.getTime() - fromDate.getTime()) / 86400000);
+
+  // Build response
+  const properties = apartments.map((apt: any) => {
+    const rev = revenueByApt[apt.id] || { total: 0, byMonth: {}, nights: 0, bookingCount: 0 };
+    const costs = costsByApt[apt.id] || { total: 0, byMonth: {}, matched: [] };
+    const net = rev.total - costs.total;
+    const occupancyRate = totalDays > 0 ? Math.round((rev.nights / totalDays) * 100) : 0;
+    const monthlyRevenue = monthsParam > 0 ? Math.round(rev.total / monthsParam) : 0;
+    const monthlyCosts = monthsParam > 0 ? Math.round(costs.total / monthsParam) : 0;
+
+    return {
+      id: apt.id,
+      name: apt.name,
+      revenue: Math.round(rev.total * 100) / 100,
+      costs: Math.round(costs.total * 100) / 100,
+      net: Math.round(net * 100) / 100,
+      monthlyRevenue,
+      monthlyCosts,
+      monthlyNet: monthlyRevenue - monthlyCosts,
+      occupancyRate,
+      nights: rev.nights,
+      bookings: rev.bookingCount,
+      revenueByMonth: rev.byMonth,
+      costsByMonth: costs.byMonth,
+    };
+  });
+
+  const totalRevenue = properties.reduce((s: number, p: any) => s + p.revenue, 0);
+  const totalCosts = properties.reduce((s: number, p: any) => s + p.costs, 0);
+
+  return c.json({
+    properties,
+    summary: {
+      totalRevenue: Math.round(totalRevenue * 100) / 100,
+      totalCosts: Math.round(totalCosts * 100) / 100,
+      totalNet: Math.round((totalRevenue - totalCosts) * 100) / 100,
+      propertyCount: properties.length,
+    },
+    period: { from: fromStr, to: toStr, months: monthsParam },
+  });
+});
+
 // ========== TRENDS — Universal Category Mapping + Anomaly Detection ==========
 
 const CATEGORY_MAP: Record<string, string[]> = {

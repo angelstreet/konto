@@ -21,6 +21,7 @@ import More from './pages/More';
 import Outils from './pages/Outils';
 import Onboarding from './pages/Onboarding';
 import Trends from './pages/Trends';
+import PropertyROI from './pages/PropertyROI';
 import { FilterProvider } from './FilterContext';
 import { PreferencesProvider, usePreferences } from './PreferencesContext';
 import { AmountVisibilityProvider } from './AmountVisibilityContext';
@@ -51,6 +52,7 @@ function AppRoutes() {
       <Route path="/bilan" element={<Bilan />} />
       <Route path="/trends" element={<Trends />} />
       <Route path="/trends-pro" element={<Trends />} />
+      <Route path="/property-roi" element={<PropertyROI />} />
       <Route path="/simulators" element={<CreditSimulator />} />
       <Route path="/outils" element={<Outils />} />
       <Route path="/more" element={<More />} />

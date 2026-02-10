@@ -71,6 +71,7 @@ const menuGroups: MenuGroup[] = [
     labelKey: 'nav_group_patrimoine',
     items: [
       { path: '/assets', icon: Home, labelKey: 'nav_assets' },
+      { path: '/property-roi', icon: TrendingUp, labelKey: 'nav_property_roi' },
     ],
   },
   {
