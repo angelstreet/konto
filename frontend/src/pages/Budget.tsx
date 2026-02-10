@@ -147,14 +147,14 @@ export default function Budget() {
                     tickLine={false}
                   />
                   <YAxis
-                    tickFormatter={(v: number) => hideAmounts ? '***' : `${(v / 1000).toFixed(0)}k`}
+                    tickFormatter={(v: number) => hideAmounts ? '' : `${(v / 1000).toFixed(0)}k`}
                     tick={{ fontSize: 10, fill: '#888' }}
                     axisLine={false}
                     tickLine={false}
                     width={40}
                   />
                   <Tooltip
-                    formatter={(value: any, name: any) => [hideAmounts ? '••••' : formatCurrency(value as number), name === 'income' ? 'Entrées' : 'Sorties']}
+                    formatter={(value: any, name: any) => [hideAmounts ? <span className="amount-masked">{formatCurrency(value as number)}</span> : formatCurrency(value as number), name === 'income' ? 'Entrées' : 'Sorties']}
                     contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
                   />
                   <Bar dataKey="income" fill="#22c55e" radius={[4, 4, 0, 0]} />
@@ -187,7 +187,7 @@ export default function Budget() {
                         ))}
                       </Pie>
                       <Tooltip
-                        formatter={(value: any) => [hideAmounts ? '••••' : formatCurrency(value as number)]}
+                        formatter={(value: any) => [hideAmounts ? <span className="amount-masked">{formatCurrency(value as number)}</span> : formatCurrency(value as number)]}
                         contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
                       />
                     </PieChart>

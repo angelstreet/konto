@@ -190,7 +190,7 @@ export default function CreditSimulator() {
           <table className="w-full text-[11px] md:text-xs">
             <thead className="sticky top-0 bg-surface">
               <tr className="text-muted uppercase border-b border-border">
-                <th className="px-1 py-1 md:px-3 md:py-2 text-left">Mois</th>
+                <th className="px-1 py-1 md:px-3 md:py-2 text-left">Année</th>
                 <th className="px-1 py-1 md:px-3 md:py-2 text-right"><span className="md:hidden">Mens.</span><span className="hidden md:inline">Mensualité</span></th>
                 <th className="px-1 py-1 md:px-3 md:py-2 text-right"><span className="md:hidden">Cap.</span><span className="hidden md:inline">Capital</span></th>
                 <th className="px-1 py-1 md:px-3 md:py-2 text-right"><span className="md:hidden">Int.</span><span className="hidden md:inline">Intérêts</span></th>
@@ -200,7 +200,7 @@ export default function CreditSimulator() {
             <tbody>
               {schedule.filter((_, i) => i % 12 === 0 || i === schedule.length - 1).map(row => (
                 <tr key={row.month} className="border-b border-border/50 hover:bg-surface-hover">
-                  <td className="px-1 py-1 md:px-3 md:py-1.5">{row.month}</td>
+                  <td className="px-1 py-1 md:px-3 md:py-1.5">An {Math.ceil(row.month / 12)}</td>
                   <td className="px-1 py-1 md:px-3 md:py-1.5 text-right">{isMobile ? formatMobile(row.payment) : formatCurrency(row.payment)}</td>
                   <td className="px-1 py-1 md:px-3 md:py-1.5 text-right text-green-400">{isMobile ? formatMobile(row.capital) : formatCurrency(row.capital)}</td>
                   <td className="px-1 py-1 md:px-3 md:py-1.5 text-right text-orange-400">{isMobile ? formatMobile(row.interest) : formatCurrency(row.interest)}</td>
