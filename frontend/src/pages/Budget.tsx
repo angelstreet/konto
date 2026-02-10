@@ -50,7 +50,7 @@ export default function Budget() {
   const authFetch = useAuthFetch();
   const { scope, appendScope } = useFilter();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
-  const mask = (v: string) => hideAmounts ? '••••' : v;
+  const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
   const [range, setRange] = useState('3m');
   const [data, setData] = useState<CashflowData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -83,9 +83,9 @@ export default function Budget() {
             <ArrowLeft size={20} />
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_budget') || 'Budget'}</h1>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
         <div className="flex items-center gap-2">
-          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           <ScopeSelect />
           <div className="flex gap-1">
           {RANGES.map(r => (

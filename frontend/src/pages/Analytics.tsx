@@ -46,7 +46,7 @@ export default function Analytics() {
 
   const { appendScope } = useFilter();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
-  const mask = (v: string) => hideAmounts ? '••••' : v;
+  const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
   const { data, loading, refetch } = useApi<AnalyticsData>(appendScope(`${API}/analytics?period=${period}`));
   const [refreshing, setRefreshing] = useState(false);
 
@@ -89,9 +89,9 @@ export default function Analytics() {
             <ArrowLeft size={20} />
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap">Budget</h1>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           <ScopeSelect />
           <button onClick={handleRefresh} disabled={refreshing} className="hidden sm:block p-2 rounded-lg text-muted hover:text-accent-400 hover:bg-surface-hover disabled:opacity-50">
             <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
@@ -214,7 +214,7 @@ export default function Analytics() {
   );
 }
 
-function Card({ label, value, icon, color, sub }: { label: string; value: string; icon: React.ReactNode; color: string; sub?: string }) {
+function Card({ label, value, icon, color, sub }: { label: string; value: React.ReactNode; icon: React.ReactNode; color: string; sub?: string }) {
   return (
     <div className="bg-surface rounded-xl p-3 border border-border">
       <div className="flex items-center gap-2 mb-1">
