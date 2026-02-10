@@ -11,7 +11,6 @@ import Company from './pages/Company';
 import Settings from './pages/Settings';
 import Assets from './pages/Assets';
 import ComingSoon from './pages/ComingSoon';
-import Budget from './pages/Budget';
 import CreditSimulator from './pages/CreditSimulator';
 import Report from './pages/Report';
 import Income from './pages/Income';
@@ -43,7 +42,7 @@ function AppRoutes() {
       <Route path="/reports" element={<Navigate to="/rapport-patrimoine" replace />} />
       <Route path="/vat" element={<ComingSoon titleKey="nav_vat" />} />
       <Route path="/fec-export" element={<ComingSoon titleKey="nav_fec_export" />} />
-      <Route path="/budget" element={<Budget />} />
+      <Route path="/budget" element={<Analytics />} />
       <Route path="/income" element={<Income />} />
       <Route path="/import" element={<ComingSoon titleKey="nav_import" />} />
       <Route path="/reconciliation" element={<Invoices />} />

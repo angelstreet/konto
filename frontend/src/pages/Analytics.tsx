@@ -1,10 +1,11 @@
 import { API } from '../config';
 import { useState, useCallback } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useApi, useAuthFetch } from '../useApi';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { RefreshCw, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useAmountVisibility } from '../AmountVisibilityContext';
+import EyeToggle from '../components/EyeToggle';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
 
@@ -35,7 +36,7 @@ function monthLabel(period: string) {
 }
 
 export default function Analytics() {
-  const { t } = useTranslation();
+  
   const navigate = useNavigate();
   const authFetch = useAuthFetch();
   const now = new Date();
@@ -44,6 +45,8 @@ export default function Analytics() {
   const period = `${year}-${String(month).padStart(2, '0')}`;
 
   const { appendScope } = useFilter();
+  const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
+  const mask = (v: string) => hideAmounts ? '••••' : v;
   const { data, loading, refetch } = useApi<AnalyticsData>(appendScope(`${API}/analytics?period=${period}`));
   const [refreshing, setRefreshing] = useState(false);
 
@@ -85,9 +88,10 @@ export default function Analytics() {
           <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
             <ArrowLeft size={20} />
           </button>
-          <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_analysis')}</h1>
+          <h1 className="text-xl font-semibold whitespace-nowrap">Budget</h1>
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           <ScopeSelect />
           <button onClick={handleRefresh} disabled={refreshing} className="hidden sm:block p-2 rounded-lg text-muted hover:text-accent-400 hover:bg-surface-hover disabled:opacity-50">
             <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
@@ -104,9 +108,9 @@ export default function Analytics() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card label="Revenus" value={`${fmt(d.totalIncome)} €`} icon={<TrendingUp size={18} />} color="text-green-400" sub={d.mom.income !== 0 ? `${d.mom.income > 0 ? '+' : ''}${d.mom.income}% vs mois préc.` : undefined} />
-        <Card label="Dépenses" value={`${fmt(d.totalExpenses)} €`} icon={<TrendingDown size={18} />} color="text-red-400" sub={d.mom.expenses !== 0 ? `${d.mom.expenses > 0 ? '+' : ''}${d.mom.expenses}% vs mois préc.` : undefined} />
-        <Card label="Épargne" value={`${fmt(d.totalIncome - d.totalExpenses)} €`} icon={<TrendingUp size={18} />} color="text-blue-400" />
+        <Card label="Revenus" value={mask(`${fmt(d.totalIncome)} €`)} icon={<TrendingUp size={18} />} color="text-green-400" sub={d.mom.income !== 0 ? `${d.mom.income > 0 ? '+' : ''}${d.mom.income}% vs mois préc.` : undefined} />
+        <Card label="Dépenses" value={mask(`${fmt(d.totalExpenses)} €`)} icon={<TrendingDown size={18} />} color="text-red-400" sub={d.mom.expenses !== 0 ? `${d.mom.expenses > 0 ? '+' : ''}${d.mom.expenses}% vs mois préc.` : undefined} />
+        <Card label="Épargne" value={mask(`${fmt(d.totalIncome - d.totalExpenses)} €`)} icon={<TrendingUp size={18} />} color="text-blue-400" />
         <Card label="Taux d'épargne" value={`${d.savingsRate}%`} icon={<TrendingUp size={18} />} color={savingsColor} />
       </div>
 
@@ -116,7 +120,7 @@ export default function Analytics() {
           <div className="bg-surface rounded-xl p-3 border border-border">
             <p className="text-xs text-muted mb-1">Revenus vs même mois N-1</p>
             <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-white">{fmt(d.yoy.income)} €</span>
+              <span className="text-lg font-bold text-white">{mask(`${fmt(d.yoy.income)} €`)}</span>
               {d.yoy.incomeChange !== 0 && (
                 <span className={`text-xs flex items-center gap-0.5 ${d.yoy.incomeChange > 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {d.yoy.incomeChange > 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
@@ -128,7 +132,7 @@ export default function Analytics() {
           <div className="bg-surface rounded-xl p-3 border border-border">
             <p className="text-xs text-muted mb-1">Dépenses vs même mois N-1</p>
             <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-white">{fmt(d.yoy.expenses)} €</span>
+              <span className="text-lg font-bold text-white">{mask(`${fmt(d.yoy.expenses)} €`)}</span>
               {d.yoy.expensesChange !== 0 && (
                 <span className={`text-xs flex items-center gap-0.5 ${d.yoy.expensesChange < 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {d.yoy.expensesChange > 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
@@ -194,13 +198,13 @@ export default function Analytics() {
         <div className="bg-surface rounded-xl p-3 border border-border">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-white">Dépenses récurrentes</h3>
-            <span className="text-sm font-bold text-orange-400">{fmt(d.recurring.reduce((s, r) => s + r.avgAmount, 0))} € /mois</span>
+            <span className="text-sm font-bold text-orange-400">{mask(`${fmt(d.recurring.reduce((s, r) => s + r.avgAmount, 0))} € /mois`)}</span>
           </div>
           <div className="space-y-2">
             {d.recurring.map((r, i) => (
               <div key={i} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
                 <span className="text-sm text-muted truncate flex-1">{r.label}</span>
-                <span className="text-sm text-white font-medium">{fmt(r.avgAmount)} €</span>
+                <span className="text-sm text-white font-medium">{mask(`${fmt(r.avgAmount)} €`)}</span>
               </div>
             ))}
           </div>

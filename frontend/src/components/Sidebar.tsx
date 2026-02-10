@@ -13,7 +13,7 @@ import {
   BookOpen,
   Receipt,
   Calculator,
-  Wallet,
+  BarChart3,
   Banknote,
   FileSpreadsheet,
   FileBarChart,
@@ -84,7 +84,7 @@ const navGroups: NavGroup[] = [
         icon: User,
         children: [
           { kind: 'leaf', path: '/income', icon: Banknote, labelKey: 'nav_income' },
-          { kind: 'leaf', path: '/budget', icon: Wallet, labelKey: 'nav_budget' },
+          { kind: 'leaf', path: '/budget', icon: BarChart3, labelKey: 'nav_budget' },
           { kind: 'leaf', path: '/bilan', icon: FileBarChart, labelKey: 'nav_bilan' },
         ],
       },
@@ -93,7 +93,7 @@ const navGroups: NavGroup[] = [
         labelKey: 'nav_scope_pro',
         icon: Briefcase,
         children: [
-          { kind: 'leaf', path: '/analysis', icon: Wallet, labelKey: 'nav_analysis' },
+          { kind: 'leaf', path: '/analysis', icon: BarChart3, labelKey: 'nav_budget' },
           { kind: 'leaf', path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
           { kind: 'leaf', path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
         ],

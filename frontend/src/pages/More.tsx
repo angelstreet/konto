@@ -9,7 +9,6 @@ import {
   BookOpen,
   Receipt,
   Calculator,
-  Wallet,
   FileSpreadsheet,
   Upload,
   GitCompareArrows,
@@ -49,7 +48,7 @@ const menuGroups: MenuGroup[] = [
         icon: User,
         items: [
           { path: '/income', icon: Banknote, labelKey: 'nav_income' },
-          { path: '/budget', icon: Wallet, labelKey: 'nav_budget' },
+          { path: '/budget', icon: BarChart3, labelKey: 'nav_budget' },
           { path: '/bilan', icon: FileBarChart, labelKey: 'nav_bilan' },
         ],
       },
@@ -58,7 +57,7 @@ const menuGroups: MenuGroup[] = [
         icon: Briefcase,
         items: [
           { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
-          { path: '/analysis', icon: BarChart3, labelKey: 'nav_analysis' },
+          { path: '/analysis', icon: BarChart3, labelKey: 'nav_budget' },
           { path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
           { path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },
         ],
