@@ -1,9 +1,9 @@
 import { API } from '../config';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useApi, useAuthFetch } from '../useApi';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { RefreshCw, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, ArrowLeft } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
 import { useFilter } from '../FilterContext';
@@ -38,13 +38,48 @@ function monthLabel(period: string) {
 export default function Analytics() {
   
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const authFetch = useAuthFetch();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
   const period = `${year}-${String(month).padStart(2, '0')}`;
 
-  const { appendScope } = useFilter();
+  const isPerso = pathname === '/budget';
+  const isPro = pathname === '/analysis';
+
+  const { appendScope: globalAppendScope, setScope, companies } = useFilter();
+  const [selectedCompany, setSelectedCompany] = useState<number | 'pro'>('pro');
+
+  // Auto-scope based on menu context
+  useEffect(() => {
+    if (isPerso) setScope('personal');
+    else if (isPro) {
+      if (companies.length === 1) {
+        setScope(companies[0].id);
+        setSelectedCompany(companies[0].id);
+      } else {
+        setScope('pro');
+      }
+    }
+  }, [isPerso, isPro, companies]);
+
+  // Custom appendScope that enforces the menu context
+  const appendScope = (url: string): string => {
+    if (isPerso) {
+      const sep = url.includes('?') ? '&' : '?';
+      return `${url}${sep}usage=personal`;
+    }
+    if (isPro) {
+      if (typeof selectedCompany === 'number') {
+        const sep = url.includes('?') ? '&' : '?';
+        return `${url}${sep}company_id=${selectedCompany}`;
+      }
+      const sep = url.includes('?') ? '&' : '?';
+      return `${url}${sep}usage=professional`;
+    }
+    return globalAppendScope(url);
+  };
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
   const { data, loading, refetch } = useApi<AnalyticsData>(appendScope(`${API}/analytics?period=${period}`));
@@ -92,7 +127,24 @@ export default function Analytics() {
           <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
-          <ScopeSelect />
+          {isPro && companies.length > 1 && (
+            <select
+              value={String(selectedCompany)}
+              onChange={e => {
+                const v = e.target.value;
+                const val = v === 'pro' ? 'pro' as const : Number(v);
+                setSelectedCompany(val);
+                setScope(val);
+              }}
+              className="bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-accent-500 transition-colors max-w-[120px] truncate min-h-[36px]"
+            >
+              <option value="pro">Toutes</option>
+              {companies.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
+          {!isPerso && !isPro && <ScopeSelect />}
           <button onClick={handleRefresh} disabled={refreshing} className="hidden sm:block p-2 rounded-lg text-muted hover:text-accent-400 hover:bg-surface-hover disabled:opacity-50">
             <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
           </button>
