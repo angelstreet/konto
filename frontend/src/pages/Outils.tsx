@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  Calculator, FileSearch, CloudUpload, Download, Upload, Settings, ArrowLeft,
+  Calculator, FileSearch, CloudUpload, Upload, Settings, ArrowLeft,
 } from 'lucide-react';
 import TaxEstimation from '../components/TaxEstimation';
 import BorrowingCapacity from '../components/BorrowingCapacity';
@@ -18,7 +18,6 @@ const tools: Tool[] = [
   { icon: '🧮', lucideIcon: Calculator, labelKey: 'tool_credit_simulator', path: '/simulators' },
   { icon: '📄', lucideIcon: FileSearch, labelKey: 'tool_invoice_scanner', path: '/reconciliation' },
   { icon: '☁️', lucideIcon: CloudUpload, labelKey: 'tool_sync_drive', path: '/settings' },
-  { icon: '📥', lucideIcon: Download, labelKey: 'tool_import_data', path: '/import' },
   { icon: '📤', lucideIcon: Upload, labelKey: 'tool_export_data', path: '/rapport-patrimoine' },
   { icon: '⚙️', lucideIcon: Settings, labelKey: 'settings', path: '/settings' },
 ];
