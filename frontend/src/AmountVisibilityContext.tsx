@@ -17,14 +17,14 @@ export function useAmountVisibility() {
 export function AmountVisibilityProvider({ children }: { children: ReactNode }) {
   // Match legacy Dashboard behavior: hidden by default (null or 'true' → hidden, 'false' → visible)
   const [hideAmounts, setHideAmounts] = useState(
-    () => localStorage.getItem('kompta_hide_amounts') !== 'false'
+    () => localStorage.getItem('konto_hide_amounts') !== 'false'
   );
 
   const toggleHideAmounts = useCallback(() => {
     setHideAmounts(prev => {
       const next = !prev;
       // Store inverted to match legacy key: 'false' means hidden=false (visible)
-      localStorage.setItem('kompta_hide_amounts', String(!next));
+      localStorage.setItem('konto_hide_amounts', String(!next));
       return next;
     });
   }, []);

@@ -20,13 +20,13 @@ export default function Settings() {
   const [showThemes, setShowThemes] = useState(false);
   const [showQuoteSize, setShowQuoteSize] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(
-    () => localStorage.getItem('kompta_theme') || 'gold'
+    () => localStorage.getItem('konto_theme') || 'gold'
   );
   const [quoteSize, setQuoteSize] = useState(
-    () => localStorage.getItem('kompta_quote_size') || 'base'
+    () => localStorage.getItem('konto_quote_size') || 'base'
   );
   const [hideAmounts, setHideAmounts] = useState(
-    () => localStorage.getItem('kompta_hide_amounts') !== 'false'
+    () => localStorage.getItem('konto_hide_amounts') !== 'false'
   );
   const authFetch = useAuthFetch();
   const { prefs, update: updatePrefs } = usePreferences();
@@ -49,7 +49,7 @@ export default function Settings() {
   };
 
   const applyTheme = (themeId: string) => {
-    localStorage.setItem('kompta_theme', themeId);
+    localStorage.setItem('konto_theme', themeId);
     document.documentElement.setAttribute('data-theme', themeId);
     setCurrentTheme(themeId);
   };
@@ -61,7 +61,7 @@ export default function Settings() {
   ];
 
   const applyQuoteSize = (size: string) => {
-    localStorage.setItem('kompta_quote_size', size);
+    localStorage.setItem('konto_quote_size', size);
     setQuoteSize(size);
   };
 
@@ -243,7 +243,7 @@ export default function Settings() {
         <button
           onClick={() => {
             const next = !hideAmounts;
-            localStorage.setItem('kompta_hide_amounts', String(next));
+            localStorage.setItem('konto_hide_amounts', String(next));
             setHideAmounts(next);
           }}
           className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
@@ -266,7 +266,7 @@ export default function Settings() {
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `kompta-backup-${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `konto-backup-${new Date().toISOString().split('T')[0]}.json`;
             a.click();
             URL.revokeObjectURL(url);
           }}
@@ -325,7 +325,7 @@ export default function Settings() {
 
       <button
         onClick={() => {
-          localStorage.removeItem('kompta_auth');
+          localStorage.removeItem('konto_auth');
           window.location.reload();
         }}
         className="w-full mt-4 flex items-center gap-3 px-4 py-3.5 bg-surface rounded-xl border border-border text-red-400 hover:bg-surface-hover transition-colors"

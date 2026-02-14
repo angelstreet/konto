@@ -52,9 +52,9 @@ app.use('/api/*', async (c, next) => {
 // --- Config ---
 const POWENS_CLIENT_ID = process.env.POWENS_CLIENT_ID || '91825215';
 const POWENS_CLIENT_SECRET = process.env.POWENS_CLIENT_SECRET || '';
-const POWENS_DOMAIN = process.env.POWENS_DOMAIN || 'kompta-sandbox.biapi.pro';
+const POWENS_DOMAIN = process.env.POWENS_DOMAIN || 'konto-sandbox.biapi.pro';
 const POWENS_API = `https://${POWENS_DOMAIN}/2.0`;
-const REDIRECT_URI = process.env.POWENS_REDIRECT_URI || 'https://65.108.14.251:8080/kompta/api/bank-callback';
+const REDIRECT_URI = process.env.POWENS_REDIRECT_URI || 'https://65.108.14.251:8080/konto/api/bank-callback';
 
 // --- Account classification helpers ---
 const SAVINGS_TYPES = new Set(['savings', 'deposit', 'livreta', 'livretb', 'ldds', 'cel', 'pel']);
@@ -78,7 +78,7 @@ function classifyAccountType(powensType: string | undefined, name: string): stri
 
 function classifyAccountSubtype(type: string, provider: string | undefined, name: string): string | null {
   if (type !== 'investment') return null;
-  if (provider === 'blockchain' || provider === 'coinbase') return 'crypto';
+  if (provider === 'blockchain' || provider === 'coinbase' || provider === 'binance') return 'crypto';
   const lower = (name || '').toLowerCase();
   if (lower.includes('pea') || lower.includes('action') || lower.includes('bourse') || lower.includes('trading') || lower.includes('stock')) return 'stocks';
   if (lower.includes('or ') || lower.includes('gold') || lower.includes('métaux') || lower.includes('metaux')) return 'gold';
@@ -98,9 +98,9 @@ async function getUserId(c: any): Promise<number> {
     return ensureUser(clerkId);
   }
   // Legacy/API-token mode: use default user (id=1)
-  const result = await db.execute({ sql: 'SELECT id FROM users WHERE email = ?', args: ['jo@kompta.fr'] });
+  const result = await db.execute({ sql: 'SELECT id FROM users WHERE email = ?', args: ['jo@konto.fr'] });
   if (result.rows.length > 0) return result.rows[0].id as number;
-  const ins = await db.execute({ sql: 'INSERT INTO users (email, name, role) VALUES (?, ?, ?)', args: ['jo@kompta.fr', 'Jo', 'admin'] });
+  const ins = await db.execute({ sql: 'INSERT INTO users (email, name, role) VALUES (?, ?, ?)', args: ['jo@konto.fr', 'Jo', 'admin'] });
   return Number(ins.lastInsertRowid);
 }
 
@@ -206,12 +206,12 @@ app.get('/api/bank-callback', async (c) => {
   if (error) {
     return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">Connection failed</h1><p>${error}</p>
-      <a href="/kompta/accounts" style="color:#d4a812;">← Back to Kompta</a></body></html>`);
+      <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
   }
   if (!code) {
     return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">No code received</h1>
-      <a href="/kompta/accounts" style="color:#d4a812;">← Back to Kompta</a></body></html>`);
+      <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
   }
 
   try {
@@ -252,17 +252,17 @@ app.get('/api/bank-callback', async (c) => {
       console.error('Failed to fetch accounts:', e);
     }
 
-    return c.html(`<html><head><meta http-equiv="refresh" content="15;url=/kompta/accounts"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+    return c.html(`<html><head><meta http-equiv="refresh" content="15;url=/konto/accounts"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#d4a812;">✅ Bank connected!</h1><p>${accounts.length} account(s) synced.</p>
       <p style="color:#888;font-size:14px;">Redirecting in <span id="t">15</span>s...</p>
-      <a href="/kompta/accounts" style="color:#d4a812;font-size:18px;">← Back to Kompta</a>
+      <a href="/konto/accounts" style="color:#d4a812;font-size:18px;">← Back to Konto</a>
       <script>let s=15;setInterval(()=>{s--;if(s>=0)document.getElementById('t').textContent=s;},1000);</script>
     </body></html>`);
   } catch (err: any) {
     console.error('Powens callback error:', err);
     return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">Error</h1><p>${err.message}</p>
-      <a href="/kompta/accounts" style="color:#d4a812;">← Back to Kompta</a></body></html>`);
+      <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
   }
 });
 
@@ -995,7 +995,7 @@ app.get('/api/estimation/price', async (c) => {
 
 const COINBASE_CLIENT_ID = process.env.COINBASE_CLIENT_ID || '';
 const COINBASE_CLIENT_SECRET = process.env.COINBASE_CLIENT_SECRET || '';
-const COINBASE_REDIRECT_URI = process.env.COINBASE_REDIRECT_URI || 'https://65.108.14.251:8080/kompta/api/coinbase-callback';
+const COINBASE_REDIRECT_URI = process.env.COINBASE_REDIRECT_URI || 'https://65.108.14.251:8080/konto/api/coinbase-callback';
 const COINBASE_API = 'https://api.coinbase.com/v2';
 
 app.get('/api/coinbase/connect-url', (c) => {
@@ -1012,7 +1012,7 @@ app.get('/api/coinbase-callback', async (c) => {
   if (error || !code) {
     return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">Coinbase connection failed</h1><p>${error || 'No authorization code received'}</p>
-      <a href="/kompta/accounts" style="color:#d4a812;">← Back to Kompta</a></body></html>`);
+      <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
   }
 
   try {
@@ -1053,16 +1053,16 @@ app.get('/api/coinbase-callback', async (c) => {
       console.error('Failed to fetch Coinbase accounts:', e);
     }
 
-    return c.html(`<html><head><meta http-equiv="refresh" content="10;url=/kompta/accounts"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+    return c.html(`<html><head><meta http-equiv="refresh" content="10;url=/konto/accounts"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#d4a812;">✅ Coinbase connected!</h1><p>${accounts.length} wallet(s) synced.</p>
       <p style="color:#888;font-size:14px;">Redirecting in <span id="t">10</span>s...</p>
-      <a href="/kompta/accounts" style="color:#d4a812;font-size:18px;">← Back to Kompta</a>
+      <a href="/konto/accounts" style="color:#d4a812;font-size:18px;">← Back to Konto</a>
       <script>let s=10;setInterval(()=>{s--;if(s>=0)document.getElementById('t').textContent=s;},1000);</script>
     </body></html>`);
   } catch (err: any) {
     return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">Error</h1><p>${err.message}</p>
-      <a href="/kompta/accounts" style="color:#d4a812;">← Back to Kompta</a></body></html>`);
+      <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
   }
 });
 
@@ -1118,6 +1118,181 @@ app.post('/api/coinbase/sync', async (c) => {
   }
 
   return c.json({ synced: totalSynced });
+});
+
+// ========== BINANCE EXCHANGE INTEGRATION (Read-Only) ==========
+
+const BINANCE_API = 'https://api.binance.com';
+
+// Helper to create Binance signature
+function createBinanceSignature(queryString: string, apiSecret: string): string {
+  const crypto = require('crypto');
+  return crypto.createHmac('sha256', apiSecret).update(queryString).digest('hex');
+}
+
+// Get Binance account info using read-only API
+async function fetchBinanceAccount(apiKey: string, apiSecret: string) {
+  const timestamp = Date.now();
+  const queryString = `timestamp=${timestamp}`;
+  const signature = createBinanceSignature(queryString, apiSecret);
+  
+  const res = await fetch(`${BINANCE_API}/api/v3/account?${queryString}&signature=${signature}`, {
+    headers: { 'X-MBX-APIKEY': apiKey }
+  });
+  
+  if (!res.ok) {
+    const error = await res.json().catch(() => ({ msg: 'Unknown error' }));
+    throw new Error(error.msg || `Binance API error: ${res.status}`);
+  }
+  
+  return res.json();
+}
+
+// Get current prices for all symbols
+async function fetchBinancePrices(): Promise<Record<string, number>> {
+  const res = await fetch(`${BINANCE_API}/api/v3/ticker/price`);
+  if (!res.ok) throw new Error('Failed to fetch Binance prices');
+  const data = await res.json() as Array<{ symbol: string; price: string }>;
+  const prices: Record<string, number> = {};
+  for (const item of data) {
+    prices[item.symbol] = parseFloat(item.price);
+  }
+  return prices;
+}
+
+// POST /api/binance/connect - Save API keys (read-only)
+app.post('/api/binance/connect', async (c) => {
+  const userId = await getUserId(c);
+  const body = await c.req.json<any>();
+  
+  if (!body.apiKey || !body.apiSecret) {
+    return c.json({ error: 'API key and secret are required' }, 400);
+  }
+  
+  // Validate keys by making a test request
+  try {
+    await fetchBinanceAccount(body.apiKey, body.apiSecret);
+  } catch (e: any) {
+    return c.json({ error: `Invalid API keys: ${e.message}` }, 400);
+  }
+  
+  // Deactivate any existing connection
+  await db.execute({
+    sql: "UPDATE binance_connections SET status = 'inactive' WHERE user_id = ? AND status = 'active'",
+    args: [userId]
+  });
+  
+  // Save new connection
+  await db.execute({
+    sql: `INSERT INTO binance_connections (user_id, api_key, api_secret, account_name, status) VALUES (?, ?, ?, ?, 'active')`,
+    args: [userId, body.apiKey, body.apiSecret, body.accountName || 'Binance']
+  });
+  
+  return c.json({ success: true, message: 'Binance connected successfully' });
+});
+
+// GET /api/binance/status - Check connection status
+app.get('/api/binance/status', async (c) => {
+  const userId = await getUserId(c);
+  const connections = await db.execute({
+    sql: "SELECT id, account_name, status, last_sync, created_at FROM binance_connections WHERE user_id = ? AND status = 'active'",
+    args: [userId]
+  });
+  
+  return c.json({ 
+    connected: connections.rows.length > 0,
+    connections: connections.rows
+  });
+});
+
+// POST /api/binance/sync - Sync balances
+app.post('/api/binance/sync', async (c) => {
+  const userId = await getUserId(c);
+  
+  const connections = await db.execute({
+    sql: "SELECT * FROM binance_connections WHERE status = 'active' AND user_id = ?",
+    args: [userId]
+  });
+  
+  let totalSynced = 0;
+  const prices = await fetchBinancePrices();
+  
+  for (const conn of connections.rows as any[]) {
+    try {
+      const account = await fetchBinanceAccount(conn.api_key, conn.api_secret);
+      const balances = (account.balances || []).filter((b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0);
+      
+      for (const balance of balances) {
+        const asset = balance.asset;
+        const amount = parseFloat(balance.free) + parseFloat(balance.locked);
+        
+        // Calculate value in USD
+        let usdValue = 0;
+        if (asset === 'USDT' || asset === 'BUSD' || asset === 'USDC') {
+          usdValue = amount;
+        } else {
+          const priceSymbol = `${asset}USDT`;
+          const price = prices[priceSymbol] || prices[`${asset}BUSD`] || prices[`${asset}BTC`] * prices['BTCUSDT'] || 0;
+          usdValue = amount * price;
+        }
+        
+        // Check if account already exists
+        const accountId = `binance-${conn.id}-${asset}`;
+        const existing = await db.execute({
+          sql: "SELECT id FROM bank_accounts WHERE provider = 'binance' AND provider_account_id = ? AND user_id = ?",
+          args: [accountId, userId]
+        });
+        
+        if (existing.rows.length > 0) {
+          await db.execute({
+            sql: `UPDATE bank_accounts SET balance = ?, last_sync = ? WHERE id = ?`,
+            args: [usdValue, new Date().toISOString(), existing.rows[0].id]
+          });
+        } else {
+          await db.execute({
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'binance', ?, ?, ?, ?, 'investment', 'personal', 'crypto', 'USD', ?)`,
+            args: [userId, null, accountId, `${asset} Wallet`, conn.account_name || 'Binance', usdValue, new Date().toISOString()]
+          });
+        }
+        totalSynced++;
+      }
+      
+      // Update last_sync time
+      await db.execute({
+        sql: 'UPDATE binance_connections SET last_sync = ? WHERE id = ?',
+        args: [new Date().toISOString(), conn.id]
+      });
+      
+    } catch (e: any) {
+      console.error('Binance sync failed:', e.message);
+      // Mark connection as potentially invalid
+      await db.execute({
+        sql: "UPDATE binance_connections SET status = 'error' WHERE id = ?",
+        args: [conn.id]
+      });
+    }
+  }
+  
+  return c.json({ synced: totalSynced });
+});
+
+// DELETE /api/binance/disconnect - Remove connection
+app.delete('/api/binance/disconnect', async (c) => {
+  const userId = await getUserId(c);
+  
+  // Deactivate connection
+  await db.execute({
+    sql: "UPDATE binance_connections SET status = 'inactive' WHERE user_id = ? AND status = 'active'",
+    args: [userId]
+  });
+  
+  // Optionally delete associated accounts
+  await db.execute({
+    sql: "DELETE FROM bank_accounts WHERE provider = 'binance' AND user_id = ?",
+    args: [userId]
+  });
+  
+  return c.json({ success: true });
 });
 
 // ========== DASHBOARD HISTORY ==========
@@ -1255,7 +1430,7 @@ app.get('/api/report/patrimoine', async (c) => {
     if (items.length) sections.push({ title: 'Immobilier', items, total: items.reduce((s, i) => s + i.value, 0) });
   }
   if (wantedCategories.includes('crypto')) {
-    const items = accounts.filter(a => a.provider === 'blockchain' || a.provider === 'coinbase').map(a => ({ name: a.custom_name || a.name, value: a.balance || 0 }));
+    const items = accounts.filter(a => a.provider === 'blockchain' || a.provider === 'coinbase' || a.provider === 'binance').map(a => ({ name: a.custom_name || a.name, value: a.balance || 0 }));
     if (items.length) sections.push({ title: 'Crypto', items, total: items.reduce((s, i) => s + i.value, 0) });
   }
   if (wantedCategories.includes('stocks')) {
@@ -2029,7 +2204,20 @@ app.get('/api/bilan/:year', async (c) => {
 // ========== USER PREFERENCES ==========
 
 async function ensurePreferences(userId: number) {
-  await db.execute({ sql: 'INSERT OR IGNORE INTO user_preferences (user_id) VALUES (?)', args: [userId] });
+  // Check if this is the default demo user (jo@konto.fr)
+  const userCheck = await db.execute({ sql: 'SELECT email FROM users WHERE id = ?', args: [userId] });
+  const isDefaultUser = userCheck.rows[0]?.email === 'jo@konto.fr';
+
+  // For default user, set onboarded=1 to skip onboarding screen
+  if (isDefaultUser) {
+    await db.execute({
+      sql: 'INSERT OR IGNORE INTO user_preferences (user_id, onboarded) VALUES (?, ?)',
+      args: [userId, 1]
+    });
+  } else {
+    await db.execute({ sql: 'INSERT OR IGNORE INTO user_preferences (user_id) VALUES (?)', args: [userId] });
+  }
+
   const r = await db.execute({ sql: 'SELECT * FROM user_preferences WHERE user_id = ?', args: [userId] });
   return r.rows[0];
 }
@@ -2324,7 +2512,7 @@ async function main() {
   await initDatabase();
   await migrateDatabase();
   serve({ fetch: app.fetch, port: 3004 }, (info) => {
-    console.log(`🦎 Kompta API running on http://localhost:${info.port}`);
+    console.log(`🦎 Konto API running on http://localhost:${info.port}`);
   });
 }
 

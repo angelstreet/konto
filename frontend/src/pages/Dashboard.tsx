@@ -58,14 +58,14 @@ export default function Dashboard() {
   const { formatCurrency, convertToDisplay } = usePreferences();
   const { data, loading } = useApi<DashboardData>(appendScope(`${API}/dashboard`));
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
-  const [showNet, setShowNet] = useState(() => localStorage.getItem('kompta_show_net') !== 'false');
+  const [showNet, setShowNet] = useState(() => localStorage.getItem('konto_show_net') !== 'false');
   const [donutOpen, setDonutOpen] = useState(true);
   const [speaking, setSpeaking] = useState(false);
   const fc = (n: number) => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
 
   const quoteIndex = (Math.floor(Date.now() / 86400000) % QUOTE_COUNT) + 1;
   const quoteText = t(`quote_${quoteIndex}`);
-  const quoteSize = localStorage.getItem('kompta_quote_size') || 'base';
+  const quoteSize = localStorage.getItem('konto_quote_size') || 'base';
 
   const toggleSpeak = useCallback(() => {
     if (window.speechSynthesis.speaking) {
@@ -127,7 +127,7 @@ export default function Dashboard() {
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_dashboard')}</h1>
           <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           <button
-            onClick={() => setShowNet(v => { const n = !v; localStorage.setItem('kompta_show_net', String(n)); return n; })}
+            onClick={() => setShowNet(v => { const n = !v; localStorage.setItem('konto_show_net', String(n)); return n; })}
             className="text-xs px-2 py-1 rounded-md font-medium transition-colors text-muted hover:text-white hover:bg-surface-hover flex-shrink-0"
           >
             {showNet ? 'Net' : 'Brut'}

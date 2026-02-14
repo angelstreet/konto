@@ -29,7 +29,7 @@ export default function Login({ onLogin }: Props) {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
-        <h1 className="text-3xl font-bold text-center mb-2 text-accent-400">Kompta</h1>
+        <h1 className="text-3xl font-bold text-center mb-2 text-accent-400">Konto</h1>
         <p className="text-muted text-center mb-8 text-sm">Comptabilité simplifiée</p>
 
         <form onSubmit={handleSubmit} className="space-y-4">

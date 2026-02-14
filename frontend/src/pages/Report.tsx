@@ -88,7 +88,7 @@ export default function Report() {
     const w = window.open('', '_blank');
     if (!w) return;
     w.document.write(`
-      <html><head><title>Déclaration de patrimoine - Kompta</title>
+      <html><head><title>Déclaration de patrimoine - Konto</title>
       <style>
         body { font-family: -apple-system, sans-serif; padding: 40px; color: #111; }
         h1 { font-size: 22px; margin-bottom: 4px; }
@@ -101,7 +101,7 @@ export default function Report() {
         .grand-total { margin-top: 24px; font-size: 18px; font-weight: bold; text-align: right; }
       </style></head><body>
       <h1>Déclaration de patrimoine</h1>
-      <div class="date">Généré le ${new Date().toLocaleDateString('fr-FR')} par Kompta</div>
+      <div class="date">Généré le ${new Date().toLocaleDateString('fr-FR')} par Konto</div>
       ${report?.sections.map(s => `
         <h2>${s.title}</h2>
         <table>

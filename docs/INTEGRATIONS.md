@@ -1,4 +1,4 @@
-# Kompta — External Integrations Guide
+# Konto — External Integrations Guide
 
 ## Currently Working
 
@@ -6,7 +6,7 @@
 **Status:** ✅ Live
 - Covers: BNP, Crédit Mutuel/CIC, Société Générale, LCL, Caisse d'Épargne, La Banque Postale, etc.
 - NOT covered: Revolut, Yuh, eToro, Coinbase, crypto wallets
-- Sandbox: `kompta-sandbox.biapi.pro` (client_id: 91825215)
+- Sandbox: `konto-sandbox.biapi.pro` (client_id: 91825215)
 
 ### 2. Manual Accounts
 **Status:** ✅ Live
@@ -57,8 +57,8 @@ Supports 10 networks. **One-click MetaMask connect** — same address (e.g. Meta
 1. Go to https://www.coinbase.com/settings/api
 2. Click "New OAuth2 Application"
 3. Fill in:
-   - App name: `Kompta`
-   - Redirect URI: `https://65.108.14.251:8080/kompta/api/coinbase-callback`
+   - App name: `Konto`
+   - Redirect URI: `https://65.108.14.251:8080/konto/api/coinbase-callback`
    - Scopes: `wallet:accounts:read`, `wallet:transactions:read`, `wallet:user:read`
 4. Copy Client ID and Client Secret
 5. Add to `~/.openclaw/.env`:
@@ -66,7 +66,7 @@ Supports 10 networks. **One-click MetaMask connect** — same address (e.g. Meta
    COINBASE_CLIENT_ID=your_client_id
    COINBASE_CLIENT_SECRET=your_client_secret
    ```
-6. Restart: `pm2 restart kompta-backend`
+6. Restart: `pm2 restart konto-backend`
 
 **What it does:**
 - OAuth2 flow (same UX as Powens — redirects to Coinbase, comes back)

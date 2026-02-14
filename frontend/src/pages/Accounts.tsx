@@ -73,7 +73,7 @@ interface BankConnection {
   created_at: string;
 }
 
-type AddMode = null | 'choose' | 'manual' | 'blockchain' | 'metamask-scanning';
+type AddMode = null | 'choose' | 'manual' | 'blockchain' | 'metamask-scanning' | 'binance';
 
 export default function Accounts() {
   const { t } = useTranslation();
@@ -106,6 +106,8 @@ export default function Accounts() {
   const [addMode, setAddMode] = useState<AddMode>(null);
   const [manualForm, setManualForm] = useState({ name: '', provider_name: '', balance: '', type: 'checking', currency: 'EUR' });
   const [blockchainForm, setBlockchainForm] = useState({ address: '', network: 'bitcoin', name: '' });
+  const [binanceForm, setBinanceForm] = useState({ apiKey: '', apiSecret: '', accountName: 'Binance' });
+  const [binanceLoading, setBinanceLoading] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
 
   // Balance update state
@@ -154,6 +156,8 @@ export default function Accounts() {
         }
       } else if (acc?.provider === 'coinbase') {
         await authFetch(`${API}/coinbase/sync`, { method: 'POST' });
+      } else if (acc?.provider === 'binance') {
+        await authFetch(`${API}/binance/sync`, { method: 'POST' });
       } else {
         await authFetch(`${API}/bank/accounts/${id}/sync`, { method: 'POST' });
       }
@@ -161,6 +165,40 @@ export default function Accounts() {
       setSyncingId(null);
     }
     refetchAll();
+  };
+
+  const connectBinance = async () => {
+    if (!binanceForm.apiKey || !binanceForm.apiSecret) {
+      alert('Please enter both API Key and API Secret');
+      return;
+    }
+    setBinanceLoading(true);
+    try {
+      const res = await authFetch(`${API}/binance/connect`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          apiKey: binanceForm.apiKey,
+          apiSecret: binanceForm.apiSecret,
+          accountName: binanceForm.accountName
+        })
+      });
+      const data = await res.json();
+      if (data.error) {
+        alert(data.error);
+        return;
+      }
+      alert('Binance connected successfully!');
+      setAddMode(null);
+      setBinanceForm({ apiKey: '', apiSecret: '', accountName: 'Binance' });
+      // Trigger sync
+      await authFetch(`${API}/binance/sync`, { method: 'POST' });
+      refetchAll();
+    } catch (e) {
+      alert('Failed to connect Binance. Please check your API keys.');
+    } finally {
+      setBinanceLoading(false);
+    }
   };
 
   const toggleHidden = async (acc: BankAccount) => {
@@ -472,6 +510,13 @@ export default function Accounts() {
                           <p className="text-xs text-muted">OAuth2 — {t('add_blockchain_desc')}</p>
                         </div>
                       </button>
+                      <button onClick={() => setAddMode('binance')} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
+                        <div className="w-10 h-10 rounded-full bg-yellow-500/20 flex items-center justify-center"><span className="text-yellow-400 text-lg">₿</span></div>
+                        <div>
+                          <p className="font-medium">{t('add_binance') || 'Connect Binance'}</p>
+                          <p className="text-xs text-muted">Read-only API — {t('add_blockchain_desc')}</p>
+                        </div>
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -622,6 +667,59 @@ export default function Accounts() {
                     className="flex-1 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black disabled:opacity-50"
                   >
                     {addLoading ? '...' : t('create')}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {/* Binance connection form */}
+            {addMode === 'binance' && (
+              <>
+                <h2 className="text-lg font-semibold mb-2">{t('add_binance') || 'Connect Binance'}</h2>
+                <div className="space-y-3">
+                  <div className="p-3 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
+                    <p className="text-xs text-yellow-400">
+                      Use read-only API keys for security. Create keys at: <a href="https://www.binance.com/en/my/settings/api-management" target="_blank" rel="noopener" className="underline">Binance API Management</a>
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted mb-1 block">Account Name</label>
+                    <input
+                      value={binanceForm.accountName}
+                      onChange={e => setBinanceForm(f => ({ ...f, accountName: e.target.value }))}
+                      className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm"
+                      placeholder="ex: My Binance Account"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted mb-1 block">API Key *</label>
+                    <input
+                      value={binanceForm.apiKey}
+                      onChange={e => setBinanceForm(f => ({ ...f, apiKey: e.target.value }))}
+                      className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm font-mono text-xs"
+                      placeholder="Enter your Binance API Key"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted mb-1 block">API Secret *</label>
+                    <input
+                      type="password"
+                      value={binanceForm.apiSecret}
+                      onChange={e => setBinanceForm(f => ({ ...f, apiSecret: e.target.value }))}
+                      className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm font-mono text-xs"
+                      placeholder="Enter your Binance API Secret"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-5">
+                  <button onClick={() => setAddMode('choose')} className="flex-1 py-2 rounded-lg text-sm border border-border text-muted hover:text-white">{t('cancel')}</button>
+                  <button
+                    onClick={connectBinance}
+                    disabled={!binanceForm.apiKey.trim() || !binanceForm.apiSecret.trim() || binanceLoading}
+                    className="flex-1 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black disabled:opacity-50"
+                  >
+                    {binanceLoading ? '...' : t('create')}
                   </button>
                 </div>
               </>

@@ -77,7 +77,7 @@ function ClerkApp() {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center px-4">
         <div className="w-full max-w-sm text-center">
-          <h1 className="text-3xl font-bold mb-2 text-accent-400">Kompta</h1>
+          <h1 className="text-3xl font-bold mb-2 text-accent-400">Konto</h1>
           <p className="text-muted text-sm mb-8">Comptabilité simplifiée</p>
           <SignIn
             routing="hash"
@@ -150,16 +150,17 @@ function ClerkAppInner({ onLogout }: { onLogout: () => void }) {
 
 function LegacyApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(
-    () => localStorage.getItem('kompta_auth') === 'true'
+    () => localStorage.getItem('konto_auth') === 'true'
   );
 
   const login = () => {
-    localStorage.setItem('kompta_auth', 'true');
+    localStorage.setItem('konto_auth', 'true');
     setIsAuthenticated(true);
   };
 
   const logout = () => {
-    localStorage.removeItem('kompta_auth');
+    localStorage.removeItem('konto_auth');
+    localStorage.removeItem('konto_sidebar_collapsed');
     setIsAuthenticated(false);
   };
 

@@ -1,14 +1,14 @@
-# Kompta — Architecture
+# Konto — Architecture
 
 ## Overview
 
-Kompta is a monorepo with two workspaces: `frontend` (React SPA) and `backend` (Hono API). The frontend communicates with the backend via REST API. Data is stored in Turso (libSQL/SQLite).
+Konto is a monorepo with two workspaces: `frontend` (React SPA) and `backend` (Hono API). The frontend communicates with the backend via REST API. Data is stored in Turso (libSQL/SQLite).
 
 ## Frontend
 
 ### Pages & Routes
 
-All routes are under the `/kompta` base path.
+All routes are under the `/konto` base path.
 
 | Route | Component | Description |
 |-------|-----------|-------------|
@@ -45,7 +45,7 @@ All routes are under the `/kompta` base path.
 
 ### Auth (Current)
 
-Simple localStorage flag (`kompta_auth`). Login page with hardcoded access. Will be replaced by Clerk.
+Simple localStorage flag (`konto_auth`). Login page with hardcoded access. Will be replaced by Clerk.
 
 ## Backend
 

@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 
-const API = '/kompta/api';
+const API = '/konto/api';
 
 export interface UserPreferences {
   onboarded: number;

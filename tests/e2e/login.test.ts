@@ -21,7 +21,7 @@ describe('Login page', () => {
     await dualScreenshot(page, 'login-page');
 
     const heading = await page.$eval('h1', (el) => el.textContent);
-    expect(heading).toContain('Kompta');
+    expect(heading).toContain('Konto');
 
     const inputs = await page.$$('input');
     expect(inputs.length).toBeGreaterThanOrEqual(2);
@@ -64,6 +64,6 @@ describe('Login page', () => {
     await dualScreenshot(page, 'login-success');
 
     const currentUrl = page.url();
-    expect(currentUrl).toContain('/kompta');
+    expect(currentUrl).toContain('/konto');
   });
 });

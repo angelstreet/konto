@@ -1,8 +1,8 @@
-# Kompta 🦎
+# Konto 🦎
 
 > Personal accounting & patrimoine tracker for micro-entreprises and freelancers in France.
 
-Kompta aggregates all your financial accounts (banks, crypto, manual), tracks your patrimoine (real estate, vehicles, valuables), and provides budgeting, tax estimation, and credit simulation tools — all in one place.
+Konto aggregates all your financial accounts (banks, crypto, manual), tracks your patrimoine (real estate, vehicles, valuables), and provides budgeting, tax estimation, and credit simulation tools — all in one place.
 
 ## Tech Stack
 
@@ -26,7 +26,7 @@ npm install
 npm run dev
 
 # Or separately
-npm run dev:frontend   # → http://localhost:5173/kompta/
+npm run dev:frontend   # → http://localhost:5173/konto/
 npm run dev:backend    # → http://localhost:3004/api/
 ```
 
@@ -36,7 +36,7 @@ npm run dev:backend    # → http://localhost:3004/api/
 
 | Variable | Description | Required |
 |----------|-------------|----------|
-| `TURSO_DATABASE_URL` | Turso DB URL (default: `file:./db/kompta.db`) | No |
+| `TURSO_DATABASE_URL` | Turso DB URL (default: `file:./db/konto.db`) | No |
 | `TURSO_AUTH_TOKEN` | Turso auth token | Only for cloud DB |
 | `POWENS_CLIENT_ID` | Powens API client ID | For bank sync |
 | `POWENS_CLIENT_SECRET` | Powens API client secret | For bank sync |
@@ -79,11 +79,11 @@ npm run dev:backend    # → http://localhost:3004/api/
 ## Project Structure
 
 ```
-kompta/
+konto/
 ├── frontend/          # React SPA
 │   └── src/
 │       ├── App.tsx           # Router + auth gate
-│       ├── main.tsx          # Entry point (BrowserRouter /kompta)
+│       ├── main.tsx          # Entry point (BrowserRouter /konto)
 │       ├── pages/            # Route components
 │       ├── components/       # Shared UI
 │       ├── i18n/             # Translations
@@ -106,9 +106,9 @@ kompta/
 
 ## Development
 
-- Frontend: `http://localhost:5173/kompta/`
+- Frontend: `http://localhost:5173/konto/`
 - Backend API: `http://localhost:3004/api/`
-- PM2 processes: `kompta-frontend`, `kompta-backend`
+- PM2 processes: `konto-frontend`, `konto-backend`
 - **Never run `npm run build`** — all dev servers served through nginx
 
 ## License

@@ -1,7 +1,7 @@
 import { createClient, Client } from '@libsql/client';
 
 const db: Client = createClient({
-  url: process.env.TURSO_DATABASE_URL || 'file:./db/kompta.db',
+  url: process.env.TURSO_DATABASE_URL || 'file:./db/konto.db',
   authToken: process.env.TURSO_AUTH_TOKEN,
 });
 
@@ -152,6 +152,17 @@ export async function initDatabase() {
       refresh_token TEXT,
       expires_at TEXT,
       status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS binance_connections (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      api_key TEXT NOT NULL,
+      api_secret TEXT NOT NULL,
+      account_name TEXT NOT NULL DEFAULT 'Binance',
+      status TEXT NOT NULL DEFAULT 'active',
+      last_sync TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -314,7 +325,7 @@ export async function ensureUser(clerkId: string): Promise<number> {
   // Create new user
   const ins = await db.execute({
     sql: 'INSERT INTO users (email, name, role, clerk_id) VALUES (?, ?, ?, ?)',
-    args: [`user_${clerkId}@kompta.app`, 'User', 'user', clerkId]
+    args: [`user_${clerkId}@konto.app`, 'User', 'user', clerkId]
   });
   return Number(ins.lastInsertRowid);
 }

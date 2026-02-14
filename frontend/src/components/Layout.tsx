@@ -11,13 +11,13 @@ interface Props {
 export default function Layout({ children, onLogout }: Props) {
   const [collapsed, setCollapsed] = useState(
     () => {
-      const stored = localStorage.getItem('kompta_sidebar_collapsed');
+      const stored = localStorage.getItem('konto_sidebar_collapsed');
       return stored === null ? true : stored === 'true';
     }
   );
 
   useEffect(() => {
-    const theme = localStorage.getItem('kompta_theme') || 'gold';
+    const theme = localStorage.getItem('konto_theme') || 'gold';
     document.documentElement.setAttribute('data-theme', theme);
   }, []);
 

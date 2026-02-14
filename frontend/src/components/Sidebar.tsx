@@ -143,7 +143,7 @@ export default function Sidebar({ onLogout }: Props) {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const [collapsed, setCollapsed] = useState(() => {
-    const stored = localStorage.getItem('kompta_sidebar_collapsed');
+    const stored = localStorage.getItem('konto_sidebar_collapsed');
     return stored === null ? true : stored === 'true';
   });
 
@@ -212,7 +212,7 @@ export default function Sidebar({ onLogout }: Props) {
   };
 
   useEffect(() => {
-    localStorage.setItem('kompta_sidebar_collapsed', String(collapsed));
+    localStorage.setItem('konto_sidebar_collapsed', String(collapsed));
     window.dispatchEvent(new CustomEvent('sidebar-toggle', { detail: { collapsed } }));
   }, [collapsed]);
 
@@ -299,7 +299,7 @@ export default function Sidebar({ onLogout }: Props) {
       {/* Logo + collapse toggle */}
       <div className="px-3 py-4 border-b border-border flex items-center justify-between min-h-[56px]">
         {!collapsed && (
-          <h1 className="text-lg font-bold text-accent-400 tracking-tight">Kompta</h1>
+          <h1 className="text-lg font-bold text-accent-400 tracking-tight">Konto</h1>
         )}
         <button
           onClick={() => setCollapsed(!collapsed)}
@@ -357,7 +357,7 @@ export default function Sidebar({ onLogout }: Props) {
         {clerkEnabled && (
           <div className={`flex items-center ${collapsed ? 'justify-center py-2' : 'px-2.5 py-2 gap-2.5'}`}>
             <UserButton
-              afterSignOutUrl="/kompta/"
+              afterSignOutUrl="/konto/"
               appearance={{
                 elements: {
                   avatarBox: 'w-7 h-7',

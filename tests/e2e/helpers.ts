@@ -2,7 +2,7 @@ import puppeteer, { type Browser, type Page } from 'puppeteer';
 import path from 'node:path';
 
 const SCREENSHOT_DIR = path.resolve(import.meta.dirname, 'screenshots');
-const BASE = 'http://localhost:5176/kompta/';
+const BASE = 'http://localhost:5176/konto/';
 
 const VIEWPORTS = {
   desktop: { width: 1280, height: 800 },

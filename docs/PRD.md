@@ -1,4 +1,4 @@
-# Kompta — Product Requirements Document
+# Konto — Product Requirements Document
 
 > Accounting automation for micro-entreprises and freelancers in France.
 

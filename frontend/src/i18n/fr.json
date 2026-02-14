@@ -1,5 +1,5 @@
 {
-  "app_name": "Kompta",
+  "app_name": "Konto",
   "login": "Connexion",
   "username": "Identifiant",
   "password": "Mot de passe",
@@ -236,7 +236,7 @@
   "over": "sur",
   "years_at": "ans à",
   "borrowing_note": "Estimation basée sur la règle des 33% d'endettement. Consultez votre banque pour une simulation personnalisée.",
-  "welcome_kompta": "Bienvenue sur Kompta",
+  "welcome_konto": "Bienvenue sur Konto",
   "onboarding_subtitle": "Commencez par connecter votre banque pour suivre vos finances automatiquement.",
   "add_account_manually": "Ajouter un compte manuellement",
   "skip_for_now": "Passer pour le moment",

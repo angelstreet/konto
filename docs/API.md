@@ -1,4 +1,4 @@
-# Kompta — API Reference
+# Konto — API Reference
 
 Base URL: `http://localhost:3004/api`
 
@@ -120,7 +120,7 @@ Returns `{ url }` — redirect user to this URL to connect their bank.
 
 ### `GET /api/bank-callback`
 
-OAuth callback from Powens. Stores connection, syncs accounts, redirects to `/kompta/accounts`.
+OAuth callback from Powens. Stores connection, syncs accounts, redirects to `/konto/accounts`.
 
 ### `GET /api/bank/connections`
 

@@ -27,7 +27,7 @@ export function useFilter() {
 }
 
 function readScope(): Scope {
-  const stored = localStorage.getItem('kompta_scope');
+  const stored = localStorage.getItem('konto_scope');
   if (!stored || stored === 'all') return 'all';
   if (stored === 'personal') return 'personal';
   if (stored === 'pro') return 'pro';
@@ -37,7 +37,7 @@ function readScope(): Scope {
 
 export function FilterProvider({ children }: { children: ReactNode }) {
   const [scope, setScopeState] = useState<Scope>(readScope);
-  const { data: rawCompanies } = useApi<any[]>('/kompta/api/companies');
+  const { data: rawCompanies } = useApi<any[]>('/konto/api/companies');
 
   const companies = useMemo(() => {
     if (!rawCompanies) return [];
@@ -50,13 +50,13 @@ export function FilterProvider({ children }: { children: ReactNode }) {
       const current = readScope();
       if (typeof current === 'number' && !companies.some(c => c.id === current)) {
         setScopeState('all');
-        localStorage.setItem('kompta_scope', 'all');
+        localStorage.setItem('konto_scope', 'all');
       }
     }
   }, [companies]);
 
   const setScope = (s: Scope) => {
-    localStorage.setItem('kompta_scope', String(s));
+    localStorage.setItem('konto_scope', String(s));
     setScopeState(s);
   };
 

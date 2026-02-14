@@ -1,8 +1,8 @@
 // Sandbox mode — intercepts API calls and returns mock data
 // All edits stored in localStorage, never hits real backend
 
-const SANDBOX_KEY = 'kompta_sandbox';
-const SANDBOX_DATA_KEY = 'kompta_sandbox_data';
+const SANDBOX_KEY = 'konto_sandbox';
+const SANDBOX_DATA_KEY = 'konto_sandbox_data';
 
 export function isSandbox(): boolean {
   return localStorage.getItem(SANDBOX_KEY) === 'true';
@@ -10,7 +10,7 @@ export function isSandbox(): boolean {
 
 export function enableSandbox() {
   localStorage.setItem(SANDBOX_KEY, 'true');
-  localStorage.setItem('kompta_auth', 'true');
+  localStorage.setItem('konto_auth', 'true');
   // Initialize sandbox data if not exists
   if (!localStorage.getItem(SANDBOX_DATA_KEY)) {
     localStorage.setItem(SANDBOX_DATA_KEY, JSON.stringify(generateMockData()));
@@ -42,12 +42,12 @@ export function installSandboxInterceptor() {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     const method = init?.method?.toUpperCase() || 'GET';
 
-    // Only intercept /kompta/api calls
-    if (!url.includes('/kompta/api')) {
+    // Only intercept /konto/api calls
+    if (!url.includes('/konto/api')) {
       return originalFetch(input, init);
     }
 
-    const path = url.replace(/.*\/kompta\/api/, '');
+    const path = url.replace(/.*\/konto\/api/, '');
     const data = getSandboxData();
 
     // Route sandbox API calls

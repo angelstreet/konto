@@ -1,5 +1,5 @@
 {
-  "app_name": "Kompta",
+  "app_name": "Konto",
   "login": "Login",
   "username": "Username",
   "password": "Password",
@@ -236,7 +236,7 @@
   "over": "over",
   "years_at": "years at",
   "borrowing_note": "Estimate based on the 33% debt-to-income rule. Consult your bank for a personalized simulation.",
-  "welcome_kompta": "Welcome to Kompta",
+  "welcome_konto": "Welcome to Konto",
   "onboarding_subtitle": "Start by connecting your bank to automatically track your finances.",
   "add_account_manually": "Add an account manually",
   "skip_for_now": "Skip for now",

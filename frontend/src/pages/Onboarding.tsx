@@ -32,7 +32,7 @@ export default function Onboarding({ onComplete }: Props) {
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-md text-center">
         <div className="text-5xl mb-4">🦎</div>
-        <h1 className="text-3xl font-bold mb-2 text-accent-400">{t('welcome_kompta')}</h1>
+        <h1 className="text-3xl font-bold mb-2 text-accent-400">{t('welcome_konto')}</h1>
         <p className="text-muted text-sm mb-10">{t('onboarding_subtitle')}</p>
 
         <div className="space-y-3">
