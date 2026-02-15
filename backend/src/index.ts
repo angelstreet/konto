@@ -1902,27 +1902,99 @@ app.get('/api/drive/status', async (c) => {
   return c.json({ connected: conn.status === 'active', ...conn });
 });
 
-// Save drive connection (manual token input for now — OAuth flow later)
+// POST /api/drive/connect → generate Google OAuth URL
 app.post('/api/drive/connect', async (c) => {
-  const userId = await getUserId(c);
-  const body = await c.req.json();
-  const { access_token, refresh_token, folder_id, folder_path } = body;
+  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+  const DRIVE_REDIRECT_URI = process.env.GOOGLE_DRIVE_REDIRECT_URI || 'https://65.108.14.251:8080/konto/api/drive-callback';
 
-  // Upsert connection
-  await db.execute({
-    sql: `INSERT INTO drive_connections (user_id, access_token, refresh_token, folder_id, folder_path, status)
-          VALUES (?, ?, ?, ?, ?, 'active')
-          ON CONFLICT(id) DO UPDATE SET access_token=?, refresh_token=?, folder_id=?, folder_path=?, status='active'`,
-    args: [userId, access_token, refresh_token || null, folder_id || null, folder_path || null,
-           access_token, refresh_token || null, folder_id || null, folder_path || null]
+  if (!GOOGLE_CLIENT_ID) {
+    return c.json({ error: 'Google Drive not configured' }, 500);
+  }
+
+  const params = new URLSearchParams({
+    client_id: GOOGLE_CLIENT_ID,
+    redirect_uri: DRIVE_REDIRECT_URI,
+    scope: 'https://www.googleapis.com/auth/drive.readonly',
+    response_type: 'code',
+    access_type: 'offline',
+    prompt: 'consent',
   });
-  return c.json({ ok: true });
+
+  const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  return c.json({ url });
 });
 
 app.delete('/api/drive/disconnect', async (c) => {
   const userId = await getUserId(c);
   await db.execute({ sql: 'DELETE FROM drive_connections WHERE user_id = ?', args: [userId] });
   return c.json({ ok: true });
+});
+
+// GET /api/drive-callback?code=... → exchange code for tokens
+app.get('/api/drive-callback', async (c) => {
+  const code = c.req.query('code');
+  const error = c.req.query('error');
+
+  if (error) {
+    return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#ef4444;">Drive connection failed</h1><p>${error}</p>
+      <a href="/konto/invoices" style="color:#d4a812;">← Back to Invoices</a>
+    </body></html>`);
+  }
+  if (!code) {
+    return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#ef4444;">No code received</h1>
+      <a href="/konto/invoices" style="color:#d4a812;">← Back to Invoices</a>
+    </body></html>`);
+  }
+
+  const userId = await getUserId(c);
+  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+  const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+  const DRIVE_REDIRECT_URI = process.env.GOOGLE_DRIVE_REDIRECT_URI || 'https://65.108.14.251:8080/konto/api/drive-callback';
+
+  try {
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID!,
+        client_secret: GOOGLE_CLIENT_SECRET!,
+        code,
+        redirect_uri: DRIVE_REDIRECT_URI,
+        grant_type: 'authorization_code',
+      }).toString(),
+    });
+
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) throw new Error(tokenData.error_description || tokenData.error || 'Token exchange failed');
+
+    const { access_token, refresh_token, expires_in } = tokenData;
+    const expiry = expires_in ? new Date(Date.now() + expires_in * 1000).toISOString() : null;
+
+    await db.execute({
+      sql: `INSERT INTO drive_connections (user_id, access_token, refresh_token, token_expiry, status)
+            VALUES (?, ?, ?, ?, 'active')
+            ON CONFLICT(id) DO UPDATE SET 
+              access_token = excluded.access_token,
+              refresh_token = excluded.refresh_token,
+              token_expiry = excluded.token_expiry,
+              status = 'active'`,
+      args: [userId, access_token, refresh_token || null, expiry]
+    });
+
+    return c.html(`<html><head><meta http-equiv="refresh" content="3;url=/konto/invoices"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#10b981;">✅ Drive connected!</h1>
+      <p>Tokens saved. Redirecting to Invoices...</p>
+      <a href="/konto/invoices" style="color:#d4a812;">← Go to Invoices</a>
+    </body></html>`);
+  } catch (err: any) {
+    console.error('Drive callback error:', err);
+    return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#ef4444;">Error</h1><p>${err.message}</p>
+      <a href="/konto/invoices" style="color:#d4a812;">← Back to Invoices</a>
+    </body></html>`);
+  }
 });
 
 // Scan invoices from Drive folder (simulated — real OCR needs pdf-parse/tesseract)
