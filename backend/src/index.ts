@@ -8,6 +8,11 @@ import * as ecc from 'tiny-secp256k1';
 import { BIP32Factory } from 'bip32';
 import * as bitcoin from 'bitcoinjs-lib';
 
+// Import cron jobs - these will start automatically when imported
+import './jobs/createDailySnapshots.js';
+import './jobs/refreshStaleConnections.js';
+import { cronMonitor } from './jobs/cronMonitor.js';
+
 const bip32 = BIP32Factory(ecc);
 
 const app = new Hono();
@@ -160,6 +165,18 @@ async function refreshPowensToken(connectionId: number): Promise<string | null> 
 
 // --- Health ---
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
+
+// Cron jobs health check endpoint
+app.get('/api/health/cron', (c) => {
+  const jobs = cronMonitor.getAllJobs();
+  const healthy = cronMonitor.isHealthy();
+
+  return c.json({
+    status: healthy ? 'healthy' : 'unhealthy',
+    timestamp: new Date().toISOString(),
+    jobs,
+  });
+});
 
 // --- Users ---
 app.get('/api/users', async (c) => {
@@ -1429,9 +1446,14 @@ app.delete('/api/binance/disconnect', async (c) => {
 
 // ========== DASHBOARD HISTORY ==========
 
-app.post('/api/dashboard/snapshot', async (c) => {
-  const userId = await getUserId(c);
-  const today = new Date().toISOString().split('T')[0];
+/**
+ * Helper function to create patrimoine snapshot for a user on a specific date
+ * @param userId - The user ID
+ * @param date - ISO date string (YYYY-MM-DD), defaults to today
+ * @returns Object with snapshot data
+ */
+async function createPatrimoineSnapshot(userId: number, date?: string) {
+  const snapshotDate = date || new Date().toISOString().split('T')[0];
 
   const accountsResult = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE hidden = 0 AND user_id = ?', args: [userId] });
   const assetsResult = await db.execute({ sql: 'SELECT * FROM assets WHERE user_id = ?', args: [userId] });
@@ -1443,19 +1465,38 @@ app.post('/api/dashboard/snapshot', async (c) => {
   let total = 0;
   for (const [cat, val] of Object.entries(categories)) {
     if (val !== 0) {
-      await db.execute({ sql: 'INSERT OR REPLACE INTO patrimoine_snapshots (date, user_id, category, total_value) VALUES (?, ?, ?, ?)', args: [today, userId, cat, val] });
+      await db.execute({ sql: 'INSERT OR REPLACE INTO patrimoine_snapshots (date, user_id, category, total_value) VALUES (?, ?, ?, ?)', args: [snapshotDate, userId, cat, val] });
       total += val;
     }
   }
-  await db.execute({ sql: 'INSERT OR REPLACE INTO patrimoine_snapshots (date, user_id, category, total_value) VALUES (?, ?, ?, ?)', args: [today, userId, 'total', total] });
+  await db.execute({ sql: 'INSERT OR REPLACE INTO patrimoine_snapshots (date, user_id, category, total_value) VALUES (?, ?, ?, ?)', args: [snapshotDate, userId, 'total', total] });
 
-  return c.json({ ok: true, date: today, categories, total });
+  return { ok: true, date: snapshotDate, categories, total };
+}
+
+app.post('/api/dashboard/snapshot', async (c) => {
+  const userId = await getUserId(c);
+  const result = await createPatrimoineSnapshot(userId);
+  return c.json(result);
 });
 
 app.get('/api/dashboard/history', async (c) => {
   const userId = await getUserId(c);
   const range = c.req.query('range') || '6m';
   const category = c.req.query('category') || 'all';
+
+  // Auto-create snapshot for today if it doesn't exist
+  const today = new Date().toISOString().split('T')[0];
+  const existingSnapshot = await db.execute({
+    sql: 'SELECT 1 FROM patrimoine_snapshots WHERE user_id = ? AND date = ? LIMIT 1',
+    args: [userId, today]
+  });
+
+  if (existingSnapshot.rows.length === 0) {
+    // No snapshot exists for today, create one
+    await createPatrimoineSnapshot(userId, today);
+    console.log(`📸 Auto-created snapshot for user ${userId} on ${today}`);
+  }
 
   let daysBack = 180;
   if (range === '1m') daysBack = 30;
