@@ -94,7 +94,7 @@ export default function Assets() {
   const { data: assets, refetch: refetchAssets } = useApi<Asset[]>(assetsUrl);
   const { data: accountsRaw } = useApi<BankAccount[]>(accountsUrl);
   const { data: kozyData } = useApi<{ properties: any[] }>(kozyUrl);
-  const { data: driveStatus } = useApi(driveStatusUrl);
+  const { data: driveStatus } = useApi<{ connected: boolean }>(driveStatusUrl);
 
   const assetList = assets || [];
   const accounts = accountsRaw || [];
