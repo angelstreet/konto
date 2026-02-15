@@ -119,7 +119,18 @@ export default function Dashboard() {
   })() : [];
   const posTotal = donutData.filter(d => d.value > 0).reduce((s, d) => s + d.value, 0);
 
-  if (!data || data.accountCount === 0) {
+  // Show loading state while data is being fetched
+  if (loading && !data) {
+    return (
+      <div className="text-center py-20 px-4">
+        <div className="text-muted text-sm">Chargement...</div>
+      </div>
+    );
+  }
+
+  // Only show welcome screen if not loading and no accounts exist
+  // This prevents the flash when changing filters
+  if (!loading && (!data || data.accountCount === 0)) {
     const connectBank = async () => {
       const res = await fetch(appendScope(`${API}/bank/connect`), { credentials: "include" });
       const responseData = await res.json();
