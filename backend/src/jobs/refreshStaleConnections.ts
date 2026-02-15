@@ -1,7 +1,9 @@
 import cron from 'node-cron';
 import db from '../db.js';
 import 'dotenv/config';
+import { cronMonitor } from './cronMonitor.js';
 
+const JOB_NAME = 'refresh-stale-connections';
 const POWENS_DOMAIN = process.env.POWENS_DOMAIN || 'konto-sandbox.biapi.pro';
 const POWENS_API = `https://${POWENS_DOMAIN}/2.0`;
 
@@ -41,6 +43,7 @@ function classifyAccountUsage(powensUsage: string | undefined | null, companyId:
 }
 
 async function refreshStaleConnections() {
+  cronMonitor.startRun(JOB_NAME);
   console.log('🚀 Starting auto-refresh job...');
 
   // Count total stale accounts
@@ -184,11 +187,20 @@ async function refreshStaleConnections() {
     }
   }
 
-  console.log(`📊 Auto-refresh complete: ${X} stale accounts found, ${Y} connections refreshed, ${Z} errors`);
+  const summary = `${X} stale accounts found, ${Y} connections refreshed, ${Z} errors`;
+  console.log(`📊 Auto-refresh complete: ${summary}`);
+
+  if (Z === 0) {
+    cronMonitor.recordSuccess(JOB_NAME, summary);
+  } else {
+    cronMonitor.recordError(JOB_NAME, `Completed with ${Z} errors: ${summary}`);
+  }
 }
+
+// Register with monitor
+cronMonitor.registerJob(JOB_NAME, '0 */6 * * *');
 
 // Schedule every 6 hours
 cron.schedule('0 */6 * * *', refreshStaleConnections);
 
-// Init log
 console.log('⏰ Stale connections auto-refresh cron initialized (every 6 hours)');
