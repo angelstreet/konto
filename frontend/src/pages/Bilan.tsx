@@ -1,9 +1,9 @@
 import { API } from '../config';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Receipt, Building2, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthFetch } from '../useApi';
+import { useApi } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
 
@@ -29,21 +29,10 @@ const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep
 export default function Bilan() {
   const { t: _t } = useTranslation();
   const navigate = useNavigate();
-  const authFetch = useAuthFetch();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
   const [year, setYear] = useState(new Date().getFullYear());
-  const [data, setData] = useState<BilanData | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    setLoading(true);
-    authFetch(`${API}/bilan/${year}`)
-      .then(r => r.json())
-      .then(d => setData(d))
-      .catch(() => {})
-      .finally(() => setLoading(false));
-  }, [year]);
+  const { data, loading } = useApi<BilanData>(`${API}/bilan/${year}`);
 
   const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
 

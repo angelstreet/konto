@@ -2557,7 +2557,7 @@ app.get('/api/properties/roi', async (c) => {
         const amount = Math.abs(tx.amount);
         costsByApt[pattern.apartmentId].total += amount;
         if (month) costsByApt[pattern.apartmentId].byMonth[month] = (costsByApt[pattern.apartmentId].byMonth[month] || 0) + amount;
-        costsByApt[pattern.apartmentId].matched.push(tx.label);
+        costsByApt[pattern.apartmentId].matched.push({label: tx.label, amount, date: tx.date.substring(0,10)});
         break;
       }
     }
@@ -2589,6 +2589,7 @@ app.get('/api/properties/roi', async (c) => {
       bookings: rev.bookingCount,
       revenueByMonth: rev.byMonth,
       costsByMonth: costs.byMonth,
+      matchedCosts: costs.matched,
     };
   });
 

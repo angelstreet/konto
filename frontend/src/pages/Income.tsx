@@ -1,11 +1,11 @@
 import { API } from '../config';
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { Plus, Trash2, Edit3, X, Check, TrendingUp, ChevronDown, ArrowLeft } from 'lucide-react';
 import EyeToggle from '../components/EyeToggle';
 import { useNavigate } from 'react-router-dom';
-import { useAuthFetch } from '../useApi';
+import { useApi, useAuthFetch } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 
 interface Company {
@@ -40,9 +40,13 @@ export default function Income() {
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
 
-  // Income tracking state
-  const [entries, setEntries] = useState<IncomeEntry[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
+  // Income tracking state - using cache
+  const { data: incomeData, setData: setIncomeData } = useApi<{ entries: IncomeEntry[] }>(`${API}/income`);
+  const { data: companiesData } = useApi<Company[]>(`${API}/companies`);
+
+  const entries = incomeData?.entries || [];
+  const companies = Array.isArray(companiesData) ? companiesData : [];
+
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' });
@@ -50,16 +54,6 @@ export default function Income() {
 
   // Collapsible sections
   const [incomeOpen, setIncomeOpen] = useState(true);
-
-  useEffect(() => { fetchEntries(); fetchCompanies(); }, []);
-
-  const fetchEntries = () => {
-    authFetch(`${API}/income`).then(r => r.json()).then(d => setEntries(d.entries || []));
-  };
-
-  const fetchCompanies = () => {
-    authFetch(`${API}/companies`).then(r => r.json()).then(d => setCompanies(Array.isArray(d) ? d : []));
-  };
 
   const handleSave = async () => {
     const body = {
@@ -79,12 +73,16 @@ export default function Income() {
     setShowForm(false);
     setEditId(null);
     setForm({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' });
-    fetchEntries();
+    // Refetch to update cache
+    const updated = await authFetch(`${API}/income`).then(r => r.json());
+    setIncomeData(updated);
   };
 
   const handleDelete = async (id: number) => {
     await authFetch(`${API}/income/${id}`, { method: 'DELETE' });
-    fetchEntries();
+    // Refetch to update cache
+    const updated = await authFetch(`${API}/income`).then(r => r.json());
+    setIncomeData(updated);
   };
 
   const startEdit = (e: IncomeEntry) => {

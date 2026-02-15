@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, ArrowLeft,
+  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, ArrowLeft, CloudOff
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -88,11 +88,13 @@ export default function Assets() {
   }, [filter, scope]);
 
   const accountsUrl = useMemo(() => appendScope(`${API}/bank/accounts`), [scope, appendScope]);
+  const driveStatusUrl = `${API}/drive/status`;
   const kozyUrl = prefs?.kozy_enabled ? `${API}/kozy/properties` : '';
 
   const { data: assets, refetch: refetchAssets } = useApi<Asset[]>(assetsUrl);
   const { data: accountsRaw } = useApi<BankAccount[]>(accountsUrl);
   const { data: kozyData } = useApi<{ properties: any[] }>(kozyUrl);
+  const { data: driveStatus } = useApi(driveStatusUrl);
 
   const assetList = assets || [];
   const accounts = accountsRaw || [];
@@ -310,6 +312,26 @@ export default function Assets() {
               <>{totalPnl >= 0 ? '+' : ''}{fmtCompact(totalPnl)} ({fmtPct(totalPnlPct)})</>
             )}
           </span>
+        </div>
+      )}
+
+      {!driveStatus?.connected && (
+        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4 text-sm text-yellow-300 flex items-center justify-between gap-3">
+          <span className="flex items-center gap-2">
+            <CloudOff size={16} className="shrink-0" />
+            Drive non connecté
+          </span>
+          <button
+            onClick={async () => {
+              const res = await authFetch(`${API}/drive/connect`, { method: 'POST', body: '{}' });
+              const data = await res.json();
+              if (data.url) window.location.href = data.url;
+              else reload();
+            }}
+            className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-200 rounded-lg text-xs font-medium whitespace-nowrap transition-colors"
+          >
+            Lier Drive
+          </button>
         </div>
       )}
 

@@ -53,16 +53,17 @@ export default function Analytics() {
 
   // Auto-scope based on menu context
   useEffect(() => {
-    if (isPerso) setScope('personal');
-    else if (isPro) {
-      if (companies.length === 1) {
+    if (isPerso && scope !== 'personal') {
+      setScope('personal');
+    } else if (isPro) {
+      if (companies.length === 1 && scope !== companies[0].id) {
         setScope(companies[0].id);
         setSelectedCompany(companies[0].id);
-      } else {
+      } else if (companies.length > 1 && scope !== 'pro' && typeof scope !== 'number') {
         setScope('pro');
       }
     }
-  }, [isPerso, isPro, companies]);
+  }, [isPerso, isPro, companies, scope, setScope]);
 
   // Custom appendScope that enforces the menu context
   const appendScope = (url: string): string => {

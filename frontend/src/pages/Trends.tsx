@@ -3,12 +3,11 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { ArrowLeft, TrendingUp, AlertTriangle } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
-import { useAuthFetch } from '../useApi';
+import { useNavigate, useLocation } from 'react-router-dom';
+import { useApi } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
 import { useFilter } from '../FilterContext';
-import ScopeSelect from '../components/ScopeSelect';
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Énergie': '#f59e0b',
@@ -57,22 +56,48 @@ const MONTH_RANGES = [
 
 export default function Trends() {
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const { t } = useTranslation();
-  const authFetch = useAuthFetch();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
-  const { scope, appendScope } = useFilter();
-  const [data, setData] = useState<TrendsData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { scope, appendScope: globalAppendScope, setScope, companies } = useFilter();
   const [monthRange, setMonthRange] = useState(6);
+  const [selectedCompany, setSelectedCompany] = useState<number | 'pro'>('pro');
 
+  const isPerso = pathname === '/trends';
+  const isPro = pathname === '/trends-pro';
+
+  // Auto-scope based on route
   useEffect(() => {
-    setLoading(true);
-    const url = appendScope(`${API}/trends?months=${monthRange}`);
-    authFetch(url)
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
-  }, [monthRange, scope, appendScope]);
+    if (isPerso && scope !== 'personal') {
+      setScope('personal');
+    } else if (isPro) {
+      if (companies.length === 1 && scope !== companies[0].id) {
+        setScope(companies[0].id);
+        setSelectedCompany(companies[0].id);
+      } else if (companies.length > 1 && scope !== 'pro' && typeof scope !== 'number') {
+        setScope('pro');
+      }
+    }
+  }, [isPerso, isPro, companies, scope, setScope]);
+
+  // Custom appendScope that enforces the menu context
+  const appendScope = (url: string): string => {
+    if (isPerso) {
+      const sep = url.includes('?') ? '&' : '?';
+      return `${url}${sep}usage=personal`;
+    }
+    if (isPro) {
+      if (typeof selectedCompany === 'number') {
+        const sep = url.includes('?') ? '&' : '?';
+        return `${url}${sep}company_id=${selectedCompany}`;
+      }
+      const sep = url.includes('?') ? '&' : '?';
+      return `${url}${sep}usage=professional`;
+    }
+    return globalAppendScope(url);
+  };
+
+  const { data, loading } = useApi<TrendsData>(appendScope(`${API}/trends?months=${monthRange}`));
 
   // Find anomalies: latest month with changePercent > 10%
   const anomalies = (data?.categories || [])
@@ -95,7 +120,23 @@ export default function Trends() {
           <h1 className="text-lg font-bold">{t('nav_trends', 'Tendances')}</h1>
         </div>
         <div className="flex items-center gap-2">
-          <ScopeSelect />
+          {isPro && companies.length > 1 && (
+            <select
+              value={String(selectedCompany)}
+              onChange={e => {
+                const v = e.target.value;
+                const val = v === 'pro' ? 'pro' as const : Number(v);
+                setSelectedCompany(val);
+                setScope(val);
+              }}
+              className="bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-accent-500 transition-colors max-w-[120px] truncate min-h-[36px]"
+            >
+              <option value="pro">Toutes</option>
+              {companies.map(c => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
           <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
       </div>
