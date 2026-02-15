@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, Volume2, VolumeX, ChevronDown, Landmark, TrendingUp, Home, CreditCard } from 'lucide-react';
+import { Download, Volume2, VolumeX, ChevronDown, Landmark, TrendingUp, Home, CreditCard, PlusCircle } from 'lucide-react';
 import EyeToggle from '../components/EyeToggle';
 import { useApi } from '../useApi';
 import { useFilter } from '../FilterContext';
