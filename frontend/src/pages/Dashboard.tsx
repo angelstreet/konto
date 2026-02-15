@@ -119,6 +119,47 @@ export default function Dashboard() {
   })() : [];
   const posTotal = donutData.filter(d => d.value > 0).reduce((s, d) => s + d.value, 0);
 
+  if (!data || data.accountCount === 0) {
+    const connectBank = async () => {
+      const res = await fetch(appendScope(`${API}/bank/connect`), { credentials: "include" });
+      const responseData = await res.json();
+      if (responseData.url) {
+        window.location.href = responseData.url;
+      }
+    };
+
+    return (
+      <div className="text-center py-20 px-4">
+        <div className="text-6xl mb-8 mx-auto">🦎</div>
+        <h2 className="text-3xl font-bold mb-6 text-accent-400">{t("welcome_konto")}</h2>
+        <p className="text-muted mb-12 text-lg max-w-md mx-auto">{t("no_accounts", "Aucun compte lié. Ajoutez-en un pour commencer.")}</p>
+        <div className="max-w-md mx-auto space-y-4">
+          <button
+            onClick={connectBank}
+            className="w-full flex items-center justify-center gap-3 px-8 py-5 bg-accent-500 hover:bg-accent-600 text-white rounded-2xl transition-all font-semibold shadow-xl h-14"
+          >
+            <Landmark size={24} />
+            <span>{t("connect_bank")}</span>
+          </button>
+          <button
+            onClick={() => window.location.href = "/accounts"}
+            className="w-full flex items-center justify-center gap-3 px-8 py-5 border-2 border-accent-500/50 bg-surface hover:bg-surface-hover text-accent-400 rounded-2xl transition-all font-semibold shadow-lg h-14"
+          >
+            <PlusCircle size={24} />
+            <span>{t("add_account", "Ajouter votre premier compte")}</span>
+          </button>
+          <button
+            onClick={() => window.location.href = "/import"}
+            className="w-full flex items-center justify-center gap-3 px-8 py-5 border border-border/50 hover:border-accent-400/50 bg-surface/50 hover:bg-surface text-muted hover:text-accent-400 rounded-2xl transition-all font-medium h-14"
+          >
+            <Download size={24} />
+            <span>{t("nav_import", "Importer depuis fichier")}</span>
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div>
       {/* Title row: Title LEFT, Eye+actions RIGHT */}
