@@ -13,11 +13,13 @@
     "test": "vitest run",
     "test:api": "vitest run tests/api/",
     "test:e2e": "vitest run tests/e2e/",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "build": "npm run build -w frontend && npm run build -w backend"
   },
   "devDependencies": {
     "@types/node": "^25.2.2",
     "concurrently": "^8.2.0",
+    "husky": "^9.1.7",
     "puppeteer": "^24.37.2",
     "vitest": "^4.0.18"
   }
