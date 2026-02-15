@@ -307,6 +307,13 @@ export async function migrateDatabase() {
     await db.execute("UPDATE bank_accounts SET subtype = 'stocks' WHERE type = 'investment' AND subtype IS NULL AND (LOWER(name) LIKE '%pea%' OR LOWER(name) LIKE '%action%' OR LOWER(name) LIKE '%bourse%' OR LOWER(name) LIKE '%trading%')");
     await db.execute("UPDATE bank_accounts SET subtype = 'other' WHERE type = 'investment' AND subtype IS NULL");
   }
+
+  // Add powens_refresh_token to bank_connections for automatic token refresh
+  try {
+    await db.execute("SELECT powens_refresh_token FROM bank_connections LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE bank_connections ADD COLUMN powens_refresh_token TEXT");
+  }
 }
 
 // Find or create user by Clerk ID. On first login, migrates existing user_id=1 data.

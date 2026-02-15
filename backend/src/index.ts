@@ -100,8 +100,62 @@ async function getUserId(c: any): Promise<number> {
   // Legacy/API-token mode: use default user (id=1)
   const result = await db.execute({ sql: 'SELECT id FROM users WHERE email = ?', args: ['jo@konto.fr'] });
   if (result.rows.length > 0) return result.rows[0].id as number;
-  const ins = await db.execute({ sql: 'INSERT INTO users (email, name, role) VALUES (?, ?, ?)', args: ['jo@konto.fr', 'Jo', 'admin'] });
+  const ins = await db.execute({ sql: 'INSERT INTO users (email, name, role) VALUES (?, ?, ?)', args: [process.env.DEFAULT_ADMIN_EMAIL || 'admin@example.com', process.env.DEFAULT_ADMIN_NAME || 'Admin', 'admin'] });
   return Number(ins.lastInsertRowid);
+}
+
+// --- Helper: refresh Powens token ---
+async function refreshPowensToken(connectionId: number): Promise<string | null> {
+  const connResult = await db.execute({
+    sql: 'SELECT powens_refresh_token FROM bank_connections WHERE id = ?',
+    args: [connectionId]
+  });
+  const conn = connResult.rows[0] as any;
+
+  if (!conn?.powens_refresh_token) {
+    console.log(`No refresh token for connection ${connectionId}`);
+    return null;
+  }
+
+  try {
+    console.log(`Attempting to refresh token for connection ${connectionId}`);
+    const tokenRes = await fetch(`${POWENS_API}/auth/token/refresh`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        client_id: POWENS_CLIENT_ID,
+        client_secret: POWENS_CLIENT_SECRET,
+        refresh_token: conn.powens_refresh_token
+      }),
+    });
+
+    if (!tokenRes.ok) {
+      const errorText = await tokenRes.text();
+      console.error(`Token refresh failed for connection ${connectionId}:`, errorText);
+      // Mark connection as expired
+      await db.execute({
+        sql: 'UPDATE bank_connections SET status = ? WHERE id = ?',
+        args: ['expired', connectionId]
+      });
+      return null;
+    }
+
+    const tokenData = await tokenRes.json() as any;
+    const newAccessToken = tokenData.access_token || tokenData.token;
+    const newRefreshToken = tokenData.refresh_token || conn.powens_refresh_token;
+
+    // Update connection with new tokens
+    await db.execute({
+      sql: 'UPDATE bank_connections SET powens_token = ?, powens_refresh_token = ?, status = ? WHERE id = ?',
+      args: [newAccessToken, newRefreshToken, 'active', connectionId]
+    });
+
+    console.log(`Token refreshed successfully for connection ${connectionId}`);
+    return newAccessToken;
+  } catch (err: any) {
+    console.error(`Token refresh error for connection ${connectionId}:`, err.message);
+    return null;
+  }
 }
 
 // --- Health ---
@@ -224,11 +278,14 @@ app.get('/api/bank-callback', async (c) => {
     if (!tokenRes.ok) throw new Error(tokenData.message || 'Token exchange failed');
 
     const accessToken = tokenData.access_token || tokenData.token;
+    const refreshToken = tokenData.refresh_token || null;
     const userId = await getUserId(c);
 
+    console.log('Powens token received:', { has_access: !!accessToken, has_refresh: !!refreshToken, expires_in: tokenData.expires_in });
+
     await db.execute({
-      sql: 'INSERT INTO bank_connections (user_id, powens_connection_id, powens_token, status) VALUES (?, ?, ?, ?)',
-      args: [userId, connectionId || null, accessToken, 'active']
+      sql: 'INSERT INTO bank_connections (user_id, powens_connection_id, powens_token, powens_refresh_token, status) VALUES (?, ?, ?, ?, ?)',
+      args: [userId, connectionId || null, accessToken, refreshToken, 'active']
     });
 
     let accounts: any[] = [];
@@ -528,17 +585,92 @@ app.get('/api/companies/info/:siren', async (c) => {
 // --- Sync transactions for an account ---
 app.post('/api/bank/accounts/:id/sync', async (c) => {
   const accountId = c.req.param('id');
-  const result = await db.execute({
-    sql: 'SELECT ba.*, bc.powens_token FROM bank_accounts ba JOIN bank_connections bc ON bc.user_id = (SELECT user_id FROM companies WHERE id = ba.company_id) WHERE ba.id = ?',
-    args: [accountId]
-  });
-  const account = result.rows[0] as any;
+  const userId = await getUserId(c);
 
-  if (!account?.powens_token) return c.json({ error: 'No connection found' }, 404);
+  // Get the account details
+  const accountResult = await db.execute({
+    sql: 'SELECT * FROM bank_accounts WHERE id = ? AND user_id = ?',
+    args: [accountId, userId]
+  });
+  const account = accountResult.rows[0] as any;
+
+  if (!account) return c.json({ error: 'Account not found' }, 404);
+  if (!account.provider_account_id || account.provider !== 'powens') {
+    return c.json({ error: 'Only Powens bank accounts can be synced' }, 400);
+  }
+
+  // Get all active connections for this user
+  const connectionsResult = await db.execute({
+    sql: 'SELECT * FROM bank_connections WHERE user_id = ? AND status = ?',
+    args: [userId, 'active']
+  });
+  const connections = connectionsResult.rows as any[];
+
+  if (connections.length === 0) return c.json({ error: 'No active bank connections found' }, 404);
+
+  // Find which connection owns this account
+  let connectionToken: string | null = null;
+  let debugInfo: any[] = [];
+  for (const conn of connections) {
+    let token = conn.powens_token;
+
+    try {
+      let accountsRes = await fetch(`${POWENS_API}/users/me/accounts`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+
+      // If 404/401, try to refresh token
+      if (!accountsRes.ok && (accountsRes.status === 404 || accountsRes.status === 401)) {
+        console.log(`Connection ${conn.id} returned ${accountsRes.status}, attempting token refresh...`);
+        const refreshedToken = await refreshPowensToken(conn.id);
+
+        if (refreshedToken) {
+          token = refreshedToken;
+          // Retry with refreshed token
+          accountsRes = await fetch(`${POWENS_API}/users/me/accounts`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          debugInfo.push({ conn_id: conn.id, refreshed: true, new_status: accountsRes.status });
+        } else {
+          debugInfo.push({ conn_id: conn.id, status: accountsRes.status, refresh_failed: true });
+          continue;
+        }
+      }
+
+      if (!accountsRes.ok) {
+        const errorText = await accountsRes.text();
+        debugInfo.push({ conn_id: conn.id, status: accountsRes.status, error: errorText });
+        console.error(`Connection ${conn.id} failed with status ${accountsRes.status}:`, errorText);
+        continue;
+      }
+
+      const accountsData = await accountsRes.json() as any;
+      const powensAccounts = accountsData.accounts || [];
+      debugInfo.push({ conn_id: conn.id, account_count: powensAccounts.length, account_ids: powensAccounts.slice(0, 3).map((a: any) => a.id) });
+
+      // Check if this connection has our account
+      if (powensAccounts.some((a: any) => String(a.id) === account.provider_account_id)) {
+        connectionToken = token; // Use the (possibly refreshed) token
+        break;
+      }
+    } catch (err: any) {
+      debugInfo.push({ conn_id: conn.id, error: err.message });
+      console.error(`Failed to fetch accounts for connection ${conn.id}:`, err);
+      continue;
+    }
+  }
+
+  if (!connectionToken) {
+    console.error(`No connection found for account ${accountId} (provider_id: ${account.provider_account_id}). Debug:`, debugInfo);
+    return c.json({
+      error: 'Bank connection expired. Please reconnect your bank account.',
+      debug: { looking_for: account.provider_account_id, checked_connections: debugInfo.length }
+    }, 404);
+  }
 
   try {
     const txRes = await fetch(`${POWENS_API}/users/me/accounts/${account.provider_account_id}/transactions?limit=50`, {
-      headers: { 'Authorization': `Bearer ${account.powens_token}` },
+      headers: { 'Authorization': `Bearer ${connectionToken}` },
     });
     const txData = await txRes.json() as any;
     const transactions = txData.transactions || [];
@@ -551,8 +683,8 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
     }
 
     await db.execute({
-      sql: 'UPDATE bank_accounts SET last_sync = ?, balance = ? WHERE id = ?',
-      args: [new Date().toISOString(), account.balance, account.id]
+      sql: 'UPDATE bank_accounts SET last_sync = ? WHERE id = ?',
+      args: [new Date().toISOString(), account.id]
     });
 
     return c.json({ synced: transactions.length });
