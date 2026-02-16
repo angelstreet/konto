@@ -1,6 +1,6 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
-import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign, MoreVertical, Search } from 'lucide-react';
+import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign, MoreVertical, Search, AlertTriangle } from 'lucide-react';
 import { useState } from 'react';
 import { useApi } from '../useApi';
 import { useFilter } from '../FilterContext';
@@ -30,6 +30,7 @@ interface BankAccount {
   blockchain_address: string | null;
   blockchain_network: string | null;
   subtype: string | null;
+  connection_expired: number;
 }
 
 function getRelativeTime(isoDate: string | null, t: (key: string, opts?: Record<string, unknown>) => string): { text: string; isStale: boolean } {
@@ -114,6 +115,7 @@ export default function Accounts() {
   const [updatingBalanceId, setUpdatingBalanceId] = useState<number | null>(null);
   const [newBalance, setNewBalance] = useState('');
 
+
   const loading = loadingAccounts || loadingConnections;
 
   const updateAccount = (id: number, patch: Partial<BankAccount>) => {
@@ -159,7 +161,12 @@ export default function Accounts() {
       } else if (acc?.provider === 'binance') {
         await authFetch(`${API}/binance/sync`, { method: 'POST' });
       } else {
-        await authFetch(`${API}/bank/accounts/${id}/sync`, { method: 'POST' });
+        const res = await authFetch(`${API}/bank/accounts/${id}/sync`, { method: 'POST' });
+        const result = await res.json();
+        if (!res.ok || result.reconnect_required) {
+          connectBank();
+          return;
+        }
       }
     } finally {
       setSyncingId(null);
@@ -882,6 +889,23 @@ export default function Accounts() {
         </>
       )}
 
+      {/* Expired connections banner */}
+      {!loading && (connections || []).some(c => c.status === 'expired') && (
+        <div className="mb-3 flex items-center gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+          <AlertTriangle size={18} className="text-red-400 flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-red-400 font-medium">{t('connection_expired_title')}</p>
+            <p className="text-xs text-red-400/70">{t('connection_expired_desc')}</p>
+          </div>
+          <button
+            onClick={connectBank}
+            className="flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+          >
+            {t('reconnect')}
+          </button>
+        </div>
+      )}
+
       {loading ? (
         <div className="text-center text-muted py-8">Loading...</div>
       ) : allAccounts.length === 0 && (connections || []).length === 0 ? (
@@ -1016,8 +1040,20 @@ export default function Accounts() {
                         {acc.hidden || allBalancesHidden ? <span className="amount-masked">{maskNumber(acc.iban)}</span> : maskNumber(acc.iban)}
                       </span>
                     )}
-                    <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${isStale ? 'bg-red-500' : 'bg-green-500'}`} />
-                    <span className="text-[10px] text-muted whitespace-nowrap">{syncText}</span>
+                    {acc.connection_expired ? (
+                      <button
+                        onClick={() => connectBank()}
+                        className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors flex items-center gap-1"
+                      >
+                        <AlertTriangle size={10} />
+                        {t('sync_expired') || 'Sync expirée'}
+                      </button>
+                    ) : (
+                      <>
+                        <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${isStale ? 'bg-red-500' : 'bg-green-500'}`} />
+                        <span className="text-[10px] text-muted whitespace-nowrap">{syncText}</span>
+                      </>
+                    )}
                   </div>
 
                   {/* Mobile: ⋮ overflow menu */}
@@ -1054,6 +1090,7 @@ export default function Accounts() {
                     )}
                   </div>
                 </div>
+
               </div>
             );
           })}

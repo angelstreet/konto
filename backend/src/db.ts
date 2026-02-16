@@ -73,6 +73,27 @@ export async function initDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS investments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      bank_account_id INTEGER NOT NULL REFERENCES bank_accounts(id),
+      provider_investment_id TEXT,
+      label TEXT NOT NULL,
+      isin_code TEXT,
+      code_type TEXT DEFAULT 'ISIN',
+      quantity REAL DEFAULT 0,
+      unit_price REAL DEFAULT 0,
+      unit_value REAL DEFAULT 0,
+      valuation REAL DEFAULT 0,
+      diff REAL DEFAULT 0,
+      diff_percent REAL DEFAULT 0,
+      portfolio_share REAL DEFAULT 0,
+      currency TEXT DEFAULT 'EUR',
+      vdate TEXT,
+      last_update TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_investments_unique ON investments(bank_account_id, isin_code);
+
     CREATE TABLE IF NOT EXISTS bank_connections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id),

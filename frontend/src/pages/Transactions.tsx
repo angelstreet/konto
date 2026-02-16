@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, SlidersHorizontal, X } from 'lucide-react';
+import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, SlidersHorizontal, X, RefreshCw, AlertTriangle, TrendingUp, TrendingDown } from 'lucide-react';
 import { useFilter } from '../FilterContext';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
@@ -24,6 +24,24 @@ interface Account {
   id: number;
   name: string;
   custom_name: string | null;
+  provider: string;
+  connection_expired: number;
+  type: string;
+}
+
+interface Investment {
+  id: number;
+  bank_account_id: number;
+  label: string;
+  isin_code: string | null;
+  quantity: number;
+  unit_price: number;
+  unit_value: number;
+  valuation: number;
+  diff: number;
+  diff_percent: number;
+  portfolio_share: number;
+  currency: string;
 }
 
 const PAGE_SIZE = 25;
@@ -33,14 +51,15 @@ export default function Transactions() {
   let getTokenTx: (() => Promise<string | null>) | undefined;
   if (clerkEnabledTx) { try { const auth = useAuth(); getTokenTx = auth.getToken; } catch {} }
   const getTokenTxRef = { current: getTokenTx };
-  const apiFetch = async (url: string) => {
-    const headers: Record<string, string> = {};
+  const apiFetch = async (url: string, opts?: RequestInit) => {
+    const headers: Record<string, string> = { ...(opts?.headers as Record<string, string> || {}) };
     if (clerkEnabledTx && getTokenTxRef.current) {
       const token = await getTokenTxRef.current();
       if (token) headers['Authorization'] = `Bearer ${token}`;
     }
-    return fetch(url, { headers }).then(r => r.json());
+    return fetch(url, { ...opts, headers });
   };
+  const apiFetchJson = async (url: string) => apiFetch(url).then(r => r.json());
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const { scope, appendScope } = useFilter();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -54,6 +73,34 @@ export default function Transactions() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const hasActiveFilters = !!accountFilter || !!search;
+  const [syncing, setSyncing] = useState(false);
+  const [investments, setInvestments] = useState<Investment[]>([]);
+  const [investmentsTotal, setInvestmentsTotal] = useState({ valuation: 0, diff: 0 });
+
+  const filteredAccount = accountFilter ? accounts.find(a => String(a.id) === accountFilter) : null;
+  const isInvestmentView = filteredAccount?.type === 'investment';
+  const powensAccounts = accounts.filter(a => a.provider === 'powens');
+  const hasPowensAccounts = powensAccounts.length > 0;
+
+  const syncAccounts = async () => {
+    const toSync = filteredAccount ? [filteredAccount] : powensAccounts;
+    if (toSync.length === 0) return;
+    setSyncing(true);
+    try {
+      for (const acc of toSync) {
+        const res = await apiFetch(`${API}/bank/accounts/${acc.id}/sync`, { method: 'POST' });
+        const result = await res.json();
+        if (!res.ok || result.reconnect_required) {
+          const connectRes = await apiFetchJson(`${API}/bank/connect-url`);
+          window.location.href = connectRes.url;
+          return;
+        }
+      }
+      fetchTransactions();
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const fetchTransactions = useCallback(async () => {
     setLoading(true);
@@ -68,7 +115,7 @@ export default function Transactions() {
       else if (scope === 'pro') params.set('usage', 'professional');
       else if (typeof scope === 'number') params.set('company_id', String(scope));
 
-      const res = await apiFetch(`${API}/transactions?${params}`);
+      const res = await apiFetchJson(`${API}/transactions?${params}`);
       setTransactions(res.transactions);
       setTotal(res.total);
     } catch {
@@ -78,12 +125,23 @@ export default function Transactions() {
   }, [page, accountFilter, search, scope]);
 
   useEffect(() => {
-    apiFetch(appendScope(API + '/bank/accounts')).then((accs: Account[]) => setAccounts(accs)).catch(() => {});
+    apiFetchJson(appendScope(API + '/bank/accounts')).then((accs: Account[]) => setAccounts(accs)).catch(() => {});
   }, [scope, appendScope]);
 
   useEffect(() => {
     fetchTransactions();
   }, [fetchTransactions]);
+
+  // Fetch investments when filtering to an investment account
+  useEffect(() => {
+    if (!isInvestmentView) { setInvestments([]); setInvestmentsTotal({ valuation: 0, diff: 0 }); return; }
+    apiFetchJson(`${API}/investments?account_id=${accountFilter}`)
+      .then((data: any) => {
+        setInvestments(data.investments || []);
+        setInvestmentsTotal({ valuation: data.total_valuation || 0, diff: data.total_diff || 0 });
+      })
+      .catch(() => { setInvestments([]); setInvestmentsTotal({ valuation: 0, diff: 0 }); });
+  }, [accountFilter, isInvestmentView]);
 
   const totalPages = Math.ceil(total / PAGE_SIZE);
 
@@ -109,9 +167,9 @@ export default function Transactions() {
     <div>
       <div className="flex items-center justify-between gap-2 mb-2 h-10">
         <div className="flex items-center gap-2 min-w-0">
-          <h1 className="text-xl font-semibold whitespace-nowrap">{t('nav_transactions')}</h1>
+          <h1 className="text-xl font-semibold whitespace-nowrap">{isInvestmentView ? t('positions') : t('nav_transactions')}</h1>
           <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
-          <span className="text-sm text-muted whitespace-nowrap">{total}</span>
+          <span className="text-sm text-muted whitespace-nowrap">{isInvestmentView ? investments.length : total}</span>
         </div>
         <div className="flex items-center gap-2 flex-shrink-0">
           {/* Mobile: single Filtrer ▾ button */}
@@ -202,17 +260,115 @@ export default function Transactions() {
         </select>
       </div>
 
-      {/* Table */}
+      {/* Content: positions for investment accounts, transactions for others */}
       {loading ? (
         <div className="bg-surface rounded-xl border border-border p-8 text-center">
           <p className="text-muted text-sm">...</p>
         </div>
+      ) : isInvestmentView ? (
+        /* === POSITIONS VIEW === */
+        investments.length === 0 ? (
+          <div className="bg-surface rounded-xl border border-border p-8 text-center">
+            <TrendingUp className="mx-auto text-muted mb-3" size={32} />
+            <p className="text-muted text-sm mb-4">{t('no_investments')}</p>
+            <button
+              onClick={syncAccounts}
+              disabled={syncing}
+              className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg bg-accent-500 text-black transition-colors"
+            >
+              <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+              {t('sync')}
+            </button>
+          </div>
+        ) : (
+          <div className="bg-surface rounded-xl border border-border overflow-hidden">
+            {/* Summary */}
+            <div className="flex items-center justify-between px-4 py-3 border-b border-border">
+              <span className="text-sm text-muted">{investments.length} {t('positions')}</span>
+              <div className="text-right">
+                <span className="text-sm font-semibold text-accent-400">
+                  {hideAmounts
+                    ? <span className="amount-masked">{new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(investmentsTotal.valuation)}</span>
+                    : new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(investmentsTotal.valuation)
+                  }
+                </span>
+                <span className={`ml-2 text-xs ${investmentsTotal.diff >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {investmentsTotal.diff >= 0 ? '+' : ''}{new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(investmentsTotal.diff)}
+                </span>
+              </div>
+            </div>
+            <div className="divide-y divide-border">
+              {investments.map(inv => (
+                <div key={inv.id} className="flex items-center gap-3 px-4 py-3 hover:bg-surface-hover transition-colors">
+                  <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${inv.diff >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'}`}>
+                    {inv.diff >= 0 ? <TrendingUp size={14} className="text-green-400" /> : <TrendingDown size={14} className="text-red-400" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-white truncate">{inv.label}</p>
+                    <div className="flex items-center gap-1.5 text-xs text-muted">
+                      {inv.isin_code && <span className="font-mono">{inv.isin_code}</span>}
+                      <span className="opacity-40">·</span>
+                      <span>{inv.quantity} {t('units')}</span>
+                      <span className="opacity-40">·</span>
+                      <span>{t('buy_price')} {new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(inv.unit_price)}</span>
+                    </div>
+                  </div>
+                  <div className="text-right flex-shrink-0">
+                    <p className={`text-sm font-semibold ${inv.diff >= 0 ? 'text-green-400' : 'text-white'}`}>
+                      {hideAmounts
+                        ? <span className="amount-masked">{new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(inv.valuation)}</span>
+                        : new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(inv.valuation)
+                      }
+                    </p>
+                    <p className={`text-[10px] ${inv.diff >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      {inv.diff >= 0 ? '+' : ''}{new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(inv.diff)}
+                      {' '}({(inv.diff_percent * 100).toFixed(1)}%)
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )
       ) : transactions.length === 0 ? (
+        /* === EMPTY TRANSACTIONS === */
         <div className="bg-surface rounded-xl border border-border p-8 text-center">
-          <ArrowLeftRight className="mx-auto text-muted mb-3" size={32} />
-          <p className="text-muted text-sm">{t('no_transactions')}</p>
+          {filteredAccount?.connection_expired ? (
+            <>
+              <AlertTriangle className="mx-auto text-red-400 mb-3" size={32} />
+              <p className="text-red-400 text-sm font-medium mb-1">{t('connection_expired_title')}</p>
+              <p className="text-muted text-xs mb-4">{t('connection_expired_desc')}</p>
+              <button
+                onClick={syncAccounts}
+                disabled={syncing}
+                className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors"
+              >
+                <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+                {t('reconnect')}
+              </button>
+            </>
+          ) : (filteredAccount?.provider === 'powens' || (!filteredAccount && hasPowensAccounts)) ? (
+            <>
+              <ArrowLeftRight className="mx-auto text-muted mb-3" size={32} />
+              <p className="text-muted text-sm mb-4">{t('no_transactions')}</p>
+              <button
+                onClick={syncAccounts}
+                disabled={syncing}
+                className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-lg bg-accent-500 text-black transition-colors"
+              >
+                <RefreshCw size={14} className={syncing ? 'animate-spin' : ''} />
+                {t('sync')}
+              </button>
+            </>
+          ) : (
+            <>
+              <ArrowLeftRight className="mx-auto text-muted mb-3" size={32} />
+              <p className="text-muted text-sm">{t('no_transactions')}</p>
+            </>
+          )}
         </div>
       ) : (
+        /* === TRANSACTIONS LIST === */
         <div className="bg-surface rounded-xl border border-border overflow-hidden">
           <div className="divide-y divide-border">
             {transactions.map(tx => (
@@ -221,7 +377,6 @@ export default function Transactions() {
                   onClick={() => setExpandedId(expandedId === tx.id ? null : tx.id)}
                   className="flex items-center gap-3 px-4 py-3 hover:bg-surface-hover transition-colors cursor-pointer"
                 >
-                  {/* Icon */}
                   <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
                     tx.amount >= 0 ? 'bg-green-500/20' : 'bg-red-500/20'
                   }`}>
@@ -230,8 +385,6 @@ export default function Transactions() {
                       : <ArrowUpRight size={14} className="text-red-400" />
                     }
                   </div>
-
-                  {/* Label + date/category — 2-line compact on mobile */}
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-sm text-white truncate">{tx.label || '—'}</p>
@@ -244,8 +397,6 @@ export default function Transactions() {
                       {tx.category && <span className="text-accent-400 truncate hidden sm:inline">{tx.category}</span>}
                     </div>
                   </div>
-
-                  {/* Amount */}
                   <div className={`text-sm font-semibold flex-shrink-0 text-right ${
                     tx.amount >= 0 ? 'text-green-400' : 'text-white'
                   }`}>
@@ -253,8 +404,6 @@ export default function Transactions() {
                     {tx.category && <p className="text-[10px] text-accent-400 font-normal sm:hidden truncate max-w-[80px]">{tx.category}</p>}
                   </div>
                 </div>
-
-                {/* Expanded details */}
                 {expandedId === tx.id && (
                   <div className="px-4 pb-3 pl-[3.75rem] grid grid-cols-2 gap-x-6 gap-y-2 text-xs border-t border-border/50 pt-3">
                     <div>
@@ -287,8 +436,8 @@ export default function Transactions() {
         </div>
       )}
 
-      {/* Pagination */}
-      {totalPages > 1 && (
+      {/* Pagination (transactions only) */}
+      {!isInvestmentView && totalPages > 1 && (
         <div className="flex items-center justify-between mt-4">
           <button
             onClick={() => setPage(p => Math.max(0, p - 1))}

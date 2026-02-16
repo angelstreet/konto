@@ -4,7 +4,7 @@ import 'dotenv/config';
 import { cronMonitor } from './cronMonitor.js';
 
 const JOB_NAME = 'refresh-stale-connections';
-const POWENS_DOMAIN = process.env.POWENS_DOMAIN || 'konto-sandbox.biapi.pro';
+const POWENS_DOMAIN = process.env.POWENS_DOMAIN || 'kompta-sandbox.biapi.pro';
 const POWENS_API = `https://${POWENS_DOMAIN}/2.0`;
 
 // Copy classify functions from index.ts
@@ -125,10 +125,9 @@ async function refreshStaleConnections() {
         const accUsage = classifyAccountUsage(powensAcc.usage, ba.company_id);
         const subtype = classifyAccountSubtype(accType, 'powens', powensAcc.name || powensAcc.original_name || '');
 
-        // Update balance, sync, type, usage, subtype
         await db.execute({
           sql: `
-            UPDATE bank_accounts 
+            UPDATE bank_accounts
             SET balance = ?, last_sync = ?, type = ?, usage = ?, subtype = ?
             WHERE id = ?
           `,
@@ -159,7 +158,7 @@ async function refreshStaleConnections() {
             for (const tx of transactions) {
               await db.execute({
                 sql: `
-                  INSERT OR IGNORE INTO transactions 
+                  INSERT OR IGNORE INTO transactions
                   (bank_account_id, date, amount, label, category)
                   VALUES (?, ?, ?, ?, ?)
                 `,

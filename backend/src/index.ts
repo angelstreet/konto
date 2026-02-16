@@ -57,7 +57,7 @@ app.use('/api/*', async (c, next) => {
 // --- Config ---
 const POWENS_CLIENT_ID = process.env.POWENS_CLIENT_ID || '91825215';
 const POWENS_CLIENT_SECRET = process.env.POWENS_CLIENT_SECRET || '';
-const POWENS_DOMAIN = process.env.POWENS_DOMAIN || 'konto-sandbox.biapi.pro';
+const POWENS_DOMAIN = process.env.POWENS_DOMAIN || 'kompta-sandbox.biapi.pro';
 const POWENS_API = `https://${POWENS_DOMAIN}/2.0`;
 const REDIRECT_URI = process.env.POWENS_REDIRECT_URI || 'https://65.108.14.251:8080/konto/api/bank-callback';
 
@@ -95,6 +95,7 @@ function classifyAccountUsage(powensUsage: string | undefined | null, companyId:
   if (powensUsage === 'private') return 'personal';
   return companyId ? 'professional' : 'personal';
 }
+
 
 // --- Helper: get authenticated user ID ---
 async function getUserId(c: any): Promise<number> {
@@ -314,12 +315,67 @@ app.get('/api/bank-callback', async (c) => {
       accounts = accountsData.accounts || [];
 
       for (const acc of accounts) {
-        const existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE provider_account_id = ?', args: [String(acc.id)] });
+        const accType = classifyAccountType(acc.type, acc.name || acc.original_name || '');
+        const accNumber = acc.number || acc.webid || null;
+        const accIban = acc.iban || null;
+
+        // Match existing account by: 1) same provider_account_id, 2) same iban, 3) same account_number
+        let existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE provider_account_id = ?', args: [String(acc.id)] });
+        if (existing.rows.length === 0 && accIban) {
+          existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE user_id = ? AND provider = ? AND iban = ?', args: [userId, 'powens', accIban] });
+        }
+        if (existing.rows.length === 0 && accNumber) {
+          existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE user_id = ? AND provider = ? AND account_number = ?', args: [userId, 'powens', accNumber] });
+        }
+
+        let bankAccountId: number;
         if (existing.rows.length === 0) {
-          await db.execute({
+          const ins = await db.execute({
             sql: 'INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, account_number, iban, balance, type, usage, subtype, last_sync) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-            args: [userId, null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, null), classifyAccountSubtype(classifyAccountType(acc.type, acc.name || acc.original_name || ''), 'powens', acc.name || acc.original_name || ''), new Date().toISOString()]
+            args: [userId, null, 'powens', String(acc.id), acc.name || acc.original_name || 'Account', acc.bic || null, accNumber, accIban, acc.balance || 0, accType, classifyAccountUsage(acc.usage, null), classifyAccountSubtype(accType, 'powens', acc.name || acc.original_name || ''), new Date().toISOString()]
           });
+          bankAccountId = Number(ins.lastInsertRowid);
+        } else {
+          bankAccountId = (existing.rows[0] as any).id;
+          // Update existing account: new provider_account_id, balance, last_sync
+          await db.execute({
+            sql: 'UPDATE bank_accounts SET provider_account_id = ?, balance = ?, last_sync = ? WHERE id = ?',
+            args: [String(acc.id), acc.balance || 0, new Date().toISOString(), bankAccountId]
+          });
+        }
+
+        // Sync investments for investment accounts
+        if (accType === 'investment') {
+          try {
+            const invRes = await fetch(`${POWENS_API}/users/me/accounts/${acc.id}/investments`, {
+              headers: { 'Authorization': `Bearer ${accessToken}` },
+            });
+            if (invRes.ok) {
+              const invData = await invRes.json() as any;
+              for (const inv of (invData.investments || [])) {
+                await db.execute({
+                  sql: `INSERT INTO investments (bank_account_id, provider_investment_id, label, isin_code, code_type, quantity, unit_price, unit_value, valuation, diff, diff_percent, portfolio_share, currency, vdate, last_update)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(bank_account_id, isin_code) DO UPDATE SET
+                          label=excluded.label, quantity=excluded.quantity, unit_price=excluded.unit_price,
+                          unit_value=excluded.unit_value, valuation=excluded.valuation, diff=excluded.diff,
+                          diff_percent=excluded.diff_percent, portfolio_share=excluded.portfolio_share,
+                          vdate=excluded.vdate, last_update=excluded.last_update`,
+                  args: [
+                    bankAccountId, String(inv.id), inv.label || 'Unknown', inv.code || null,
+                    inv.code_type || 'ISIN', inv.quantity || 0, inv.unitprice || 0,
+                    inv.original_unitvalue || inv.unitvalue || 0, inv.valuation || 0,
+                    inv.diff || 0, inv.diff_percent || 0, inv.portfolio_share || 0,
+                    inv.original_currency?.id || 'EUR', inv.vdate || null,
+                    inv.last_update || new Date().toISOString(),
+                  ]
+                });
+              }
+              console.log(`Synced ${(invData.investments || []).length} investments for account ${acc.id}`);
+            }
+          } catch (e: any) {
+            console.error(`Failed to sync investments for account ${acc.id}:`, e.message);
+          }
         }
       }
     } catch (e) {
@@ -365,9 +421,10 @@ app.post('/api/bank/sync', async (c) => {
         const existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE provider_account_id = ?', args: [String(acc.id)] });
         if (existing.rows.length > 0) {
           const full = await db.execute({ sql: 'SELECT company_id FROM bank_accounts WHERE id = ?', args: [existing.rows[0].id as number] });
+          const row = full.rows[0] as any;
           await db.execute({
             sql: 'UPDATE bank_accounts SET balance = ?, last_sync = ?, type = ?, usage = ? WHERE id = ?',
-            args: [acc.balance || 0, new Date().toISOString(), classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, (full.rows[0] as any)?.company_id || null), existing.rows[0].id as number]
+            args: [acc.balance || 0, new Date().toISOString(), classifyAccountType(acc.type, acc.name || acc.original_name || ''), classifyAccountUsage(acc.usage, row?.company_id || null), existing.rows[0].id as number]
           });
         } else {
           await db.execute({
@@ -458,7 +515,20 @@ app.get('/api/bank/accounts', async (c) => {
   else if (usage === 'professional') { where += ' AND usage = ?'; params.push('professional'); }
   else if (companyId) { where += ' AND company_id = ?'; params.push(companyId); }
   const result = await db.execute({ sql: `SELECT * FROM bank_accounts WHERE ${where}`, args: params });
-  return c.json(result.rows);
+
+  // Check if user has any active powens connections
+  const activeConns = await db.execute({
+    sql: 'SELECT COUNT(*) as cnt FROM bank_connections WHERE user_id = ? AND status = ?',
+    args: [userId, 'active']
+  });
+  const hasActivePowens = (activeConns.rows[0] as any).cnt > 0;
+
+  const rows = (result.rows as any[]).map(row => ({
+    ...row,
+    connection_expired: row.provider === 'powens' && !hasActivePowens ? 1 : 0
+  }));
+
+  return c.json(rows);
 });
 
 app.patch('/api/bank/accounts/:id', async (c) => {
@@ -623,10 +693,11 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
   });
   const connections = connectionsResult.rows as any[];
 
-  if (connections.length === 0) return c.json({ error: 'No active bank connections found' }, 404);
+  if (connections.length === 0) return c.json({ error: 'No active bank connections found', reconnect_required: true }, 404);
 
   // Find which connection owns this account
   let connectionToken: string | null = null;
+  let matchedConn: any = null;
   let debugInfo: any[] = [];
   for (const conn of connections) {
     let token = conn.powens_token;
@@ -667,7 +738,8 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
 
       // Check if this connection has our account
       if (powensAccounts.some((a: any) => String(a.id) === account.provider_account_id)) {
-        connectionToken = token; // Use the (possibly refreshed) token
+        connectionToken = token;
+        matchedConn = conn;
         break;
       }
     } catch (err: any) {
@@ -681,8 +753,30 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
     console.error(`No connection found for account ${accountId} (provider_id: ${account.provider_account_id}). Debug:`, debugInfo);
     return c.json({
       error: 'Bank connection expired. Please reconnect your bank account.',
+      reconnect_required: true,
       debug: { looking_for: account.provider_account_id, checked_connections: debugInfo.length }
     }, 404);
+  }
+
+  // Check Powens connection state — if SCA required or in error, trigger reconnect
+  if (matchedConn?.powens_connection_id) {
+    try {
+      const connStateRes = await fetch(`${POWENS_API}/users/me/connections/${matchedConn.powens_connection_id}`, {
+        headers: { 'Authorization': `Bearer ${connectionToken}` },
+      });
+      if (connStateRes.ok) {
+        const connState = await connStateRes.json() as any;
+        if (connState.error || connState.state === 'SCARequired') {
+          console.log(`Connection ${matchedConn.id} (powens ${matchedConn.powens_connection_id}) needs re-auth: state=${connState.state}, error=${connState.error}`);
+          return c.json({
+            error: `Bank connection needs re-authentication: ${connState.error || connState.state}`,
+            reconnect_required: true,
+          }, 400);
+        }
+      }
+    } catch (err: any) {
+      console.error(`Failed to check connection state:`, err.message);
+    }
   }
 
   try {
@@ -691,6 +785,15 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
     });
     const txData = await txRes.json() as any;
     const transactions = txData.transactions || [];
+    console.log(`Sync account ${accountId}: provider_id=${account.provider_account_id}, powens_status=${txRes.status}, tx_count=${transactions.length}`, txRes.ok ? '' : JSON.stringify(txData));
+
+    if (!txRes.ok) {
+      return c.json({
+        error: 'Bank sync failed. Please reconnect your bank account.',
+        reconnect_required: true,
+        debug: { powens_status: txRes.status, provider_account_id: account.provider_account_id }
+      }, 502);
+    }
 
     for (const tx of transactions) {
       await db.execute({
@@ -699,18 +802,115 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
       });
     }
 
+    // For investment accounts, also fetch investment positions
+    let investmentsSynced = 0;
+    if (account.type === 'investment') {
+      try {
+        const invRes = await fetch(`${POWENS_API}/users/me/accounts/${account.provider_account_id}/investments`, {
+          headers: { 'Authorization': `Bearer ${connectionToken}` },
+        });
+        if (invRes.ok) {
+          const invData = await invRes.json() as any;
+          const investments = invData.investments || [];
+          for (const inv of investments) {
+            await db.execute({
+              sql: `INSERT INTO investments (bank_account_id, provider_investment_id, label, isin_code, code_type, quantity, unit_price, unit_value, valuation, diff, diff_percent, portfolio_share, currency, vdate, last_update)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(bank_account_id, isin_code) DO UPDATE SET
+                      label=excluded.label, quantity=excluded.quantity, unit_price=excluded.unit_price,
+                      unit_value=excluded.unit_value, valuation=excluded.valuation, diff=excluded.diff,
+                      diff_percent=excluded.diff_percent, portfolio_share=excluded.portfolio_share,
+                      vdate=excluded.vdate, last_update=excluded.last_update`,
+              args: [
+                account.id,
+                String(inv.id),
+                inv.label || 'Unknown',
+                inv.code || null,
+                inv.code_type || 'ISIN',
+                inv.quantity || 0,
+                inv.unitprice || 0,
+                inv.original_unitvalue || inv.unitvalue || 0,
+                inv.valuation || 0,
+                inv.diff || 0,
+                inv.diff_percent || 0,
+                inv.portfolio_share || 0,
+                inv.original_currency?.id || 'EUR',
+                inv.vdate || null,
+                inv.last_update || new Date().toISOString(),
+              ]
+            });
+          }
+          investmentsSynced = investments.length;
+          console.log(`Synced ${investments.length} investments for account ${accountId}`);
+        }
+      } catch (err: any) {
+        console.error(`Failed to sync investments for account ${accountId}:`, err.message);
+      }
+    }
+
     await db.execute({
       sql: 'UPDATE bank_accounts SET last_sync = ? WHERE id = ?',
       args: [new Date().toISOString(), account.id]
     });
 
-    return c.json({ synced: transactions.length });
+    return c.json({ synced: transactions.length, investments_synced: investmentsSynced });
   } catch (err: any) {
-    return c.json({ error: err.message }, 500);
+    return c.json({ error: err.message, reconnect_required: true }, 500);
   }
 });
 
 // ========== EXPORT / IMPORT ==========
+
+// ========== INVESTMENTS ==========
+
+app.get('/api/investments', async (c) => {
+  const userId = await getUserId(c);
+  const accountId = c.req.query('account_id');
+  const scope = c.req.query('usage');
+  const companyId = c.req.query('company_id');
+
+  let sql = `SELECT i.*, ba.name as account_name, ba.custom_name as account_custom_name
+             FROM investments i
+             JOIN bank_accounts ba ON i.bank_account_id = ba.id
+             WHERE ba.user_id = ?`;
+  const args: any[] = [userId];
+
+  if (accountId) {
+    sql += ' AND i.bank_account_id = ?';
+    args.push(accountId);
+  }
+  if (scope === 'personal') {
+    sql += " AND ba.usage = 'personal'";
+  } else if (scope === 'professional') {
+    sql += " AND ba.usage = 'professional'";
+  }
+  if (companyId) {
+    sql += ' AND ba.company_id = ?';
+    args.push(companyId);
+  }
+
+  sql += ' ORDER BY i.valuation DESC';
+
+  const result = await db.execute({ sql, args });
+
+  // Also compute totals
+  let totalSql = `SELECT COALESCE(SUM(i.valuation), 0) as total_valuation, COALESCE(SUM(i.diff), 0) as total_diff
+                  FROM investments i JOIN bank_accounts ba ON i.bank_account_id = ba.id WHERE ba.user_id = ?`;
+  const totalArgs: any[] = [userId];
+  if (accountId) { totalSql += ' AND i.bank_account_id = ?'; totalArgs.push(accountId); }
+  if (scope === 'personal') totalSql += " AND ba.usage = 'personal'";
+  else if (scope === 'professional') totalSql += " AND ba.usage = 'professional'";
+  if (companyId) { totalSql += ' AND ba.company_id = ?'; totalArgs.push(companyId); }
+
+  const totals = await db.execute({ sql: totalSql, args: totalArgs });
+  const row = totals.rows[0] as any;
+
+  return c.json({
+    investments: result.rows,
+    total_valuation: row.total_valuation || 0,
+    total_diff: row.total_diff || 0,
+  });
+});
 
 app.get('/api/export', async (c) => {
   const userId = await getUserId(c);
@@ -2757,7 +2957,7 @@ export { app };
 async function main() {
   await initDatabase();
   await migrateDatabase();
-  serve({ fetch: app.fetch, port: 3004 }, (info) => {
+  serve({ fetch: app.fetch, port: Number(process.env.PORT) || 5004 }, (info) => {
     console.log(`🦎 Konto API running on http://localhost:${info.port}`);
   });
 }
