@@ -269,6 +269,52 @@ app.get('/api/bank/connect-url', (c) => {
   return c.json({ url });
 });
 
+// Reconnect a specific SCA-blocked connection
+app.get('/api/bank/reconnect-url/:accountId', async (c) => {
+  const accountId = c.req.param('accountId');
+  const userId = await getUserId(c);
+
+  const accRes = await db.execute({
+    sql: 'SELECT provider_account_id FROM bank_accounts WHERE id = ? AND user_id = ?',
+    args: [accountId, userId]
+  });
+  if (accRes.rows.length === 0) return c.json({ error: 'Account not found' }, 404);
+  const providerAccountId = (accRes.rows[0] as any).provider_account_id;
+
+  // Find which connection owns this account
+  const connsRes = await db.execute({
+    sql: 'SELECT * FROM bank_connections WHERE user_id = ? AND status = ?',
+    args: [userId, 'active']
+  });
+  for (const conn of connsRes.rows as any[]) {
+    try {
+      const accountsRes = await fetch(`${POWENS_API}/users/me/accounts`, {
+        headers: { 'Authorization': `Bearer ${conn.powens_token}` },
+      });
+      if (!accountsRes.ok) continue;
+      const data = await accountsRes.json() as any;
+      if ((data.accounts || []).some((a: any) => String(a.id) === providerAccountId)) {
+        // Generate a temporary code for the webview
+        const codeRes = await fetch(`${POWENS_API}/auth/token/code`, {
+          headers: { 'Authorization': `Bearer ${conn.powens_token}` },
+        });
+        if (!codeRes.ok) {
+          // Fallback: use token directly
+          const url = `https://webview.powens.com/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&token=${conn.powens_token}`;
+          return c.json({ url, connection_id: conn.powens_connection_id });
+        }
+        const codeData = await codeRes.json() as any;
+        const url = `https://webview.powens.com/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&code=${codeData.code}`;
+        return c.json({ url, connection_id: conn.powens_connection_id });
+      }
+    } catch {}
+  }
+
+  // Fallback to generic connect
+  const url = `https://webview.powens.com/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+  return c.json({ url });
+});
+
 // --- Powens: OAuth callback ---
 app.get('/api/bank-callback', async (c) => {
   const code = c.req.query('code');
@@ -573,12 +619,14 @@ app.get('/api/transactions', async (c) => {
   const search = c.req.query('search');
   const usage = c.req.query('usage');
   const companyId = c.req.query('company_id');
+  const year = c.req.query('year');
 
   let where = 'ba.user_id = ?';
   const params: any[] = [userId];
 
   if (accountId) { where += ' AND t.bank_account_id = ?'; params.push(accountId); }
   if (search) { where += ' AND t.label LIKE ?'; params.push(`%${search}%`); }
+  if (year) { where += " AND strftime('%Y', t.date) = ?"; params.push(year); }
   if (usage === 'personal') { where += ' AND ba.usage = ?'; params.push('personal'); }
   else if (usage === 'professional') { where += ' AND ba.usage = ?'; params.push('professional'); }
   else if (companyId) { where += ' AND ba.company_id = ?'; params.push(companyId); }
@@ -587,13 +635,26 @@ app.get('/api/transactions', async (c) => {
   const total = (totalResult.rows[0] as any).count;
 
   const rows = await db.execute({
-    sql: `SELECT t.*, ba.name as account_name, ba.custom_name as account_custom_name
+    sql: `SELECT t.*, ba.name as account_name, ba.custom_name as account_custom_name, ba.currency as account_currency
           FROM transactions t LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
           WHERE ${where} ORDER BY t.date DESC, t.id DESC LIMIT ? OFFSET ?`,
     args: [...params, limit, offset]
   });
 
-  return c.json({ transactions: rows.rows, total, limit, offset });
+  // Get available years for the filter (scoped to account if filtered)
+  let yearsWhere = 'ba.user_id = ?';
+  const yearsParams: any[] = [userId];
+  if (accountId) { yearsWhere += ' AND t.bank_account_id = ?'; yearsParams.push(accountId); }
+  if (usage === 'personal') { yearsWhere += ' AND ba.usage = ?'; yearsParams.push('personal'); }
+  else if (usage === 'professional') { yearsWhere += ' AND ba.usage = ?'; yearsParams.push('professional'); }
+  else if (companyId) { yearsWhere += ' AND ba.company_id = ?'; yearsParams.push(companyId); }
+  const yearsResult = await db.execute({
+    sql: `SELECT DISTINCT strftime('%Y', t.date) as year FROM transactions t LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id WHERE ${yearsWhere} ORDER BY year DESC`,
+    args: yearsParams,
+  });
+  const years = yearsResult.rows.map((r: any) => r.year).filter(Boolean);
+
+  return c.json({ transactions: rows.rows, total, limit, offset, years });
 });
 
 // --- Company info from SIREN ---
@@ -758,7 +819,8 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
     }, 404);
   }
 
-  // Check Powens connection state — if SCA required or in error, trigger reconnect
+  // Check Powens connection state — track SCA but don't block sync
+  let connectionNeedsSCA = false;
   if (matchedConn?.powens_connection_id) {
     try {
       const connStateRes = await fetch(`${POWENS_API}/users/me/connections/${matchedConn.powens_connection_id}`, {
@@ -766,10 +828,14 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
       });
       if (connStateRes.ok) {
         const connState = await connStateRes.json() as any;
-        if (connState.error || connState.state === 'SCARequired') {
-          console.log(`Connection ${matchedConn.id} (powens ${matchedConn.powens_connection_id}) needs re-auth: state=${connState.state}, error=${connState.error}`);
+        if (connState.state === 'SCARequired' || connState.error === 'SCARequired') {
+          connectionNeedsSCA = true;
+          console.log(`Connection ${matchedConn.id} (powens ${matchedConn.powens_connection_id}) needs SCA — will sync cached data`);
+        } else if (connState.error && connState.error !== 'SCARequired') {
+          // Real errors like wrongpass — require reconnect
+          console.log(`Connection ${matchedConn.id} has error: ${connState.error} — requires reconnect`);
           return c.json({
-            error: `Bank connection needs re-authentication: ${connState.error || connState.state}`,
+            error: `Bank connection error: ${connState.error}`,
             reconnect_required: true,
           }, 400);
         }
@@ -780,16 +846,33 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
   }
 
   try {
+    // Also update balance from Powens account data
+    try {
+      const accDataRes = await fetch(`${POWENS_API}/users/me/accounts/${account.provider_account_id}`, {
+        headers: { 'Authorization': `Bearer ${connectionToken}` },
+      });
+      if (accDataRes.ok) {
+        const accData = await accDataRes.json() as any;
+        if (accData.balance !== undefined) {
+          await db.execute({
+            sql: 'UPDATE bank_accounts SET balance = ? WHERE id = ?',
+            args: [accData.balance, account.id]
+          });
+        }
+      }
+    } catch {}
+
     const txRes = await fetch(`${POWENS_API}/users/me/accounts/${account.provider_account_id}/transactions?limit=50`, {
       headers: { 'Authorization': `Bearer ${connectionToken}` },
     });
     const txData = await txRes.json() as any;
     const transactions = txData.transactions || [];
-    console.log(`Sync account ${accountId}: provider_id=${account.provider_account_id}, powens_status=${txRes.status}, tx_count=${transactions.length}`, txRes.ok ? '' : JSON.stringify(txData));
+    console.log(`Sync account ${accountId}: provider_id=${account.provider_account_id}, powens_status=${txRes.status}, tx_count=${transactions.length}, sca=${connectionNeedsSCA}`, txRes.ok ? '' : JSON.stringify(txData));
 
-    if (!txRes.ok) {
+    // If Powens returns an error but we know it's SCA — don't fail, just use whatever cached data we got
+    if (!txRes.ok && !connectionNeedsSCA) {
       return c.json({
-        error: 'Bank sync failed. Please reconnect your bank account.',
+        error: 'Bank sync failed',
         reconnect_required: true,
         debug: { powens_status: txRes.status, provider_account_id: account.provider_account_id }
       }, 502);
@@ -849,14 +932,150 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
     }
 
     await db.execute({
-      sql: 'UPDATE bank_accounts SET last_sync = ? WHERE id = ?',
-      args: [new Date().toISOString(), account.id]
+      sql: 'UPDATE bank_accounts SET last_sync = ?, sca_required = ? WHERE id = ?',
+      args: [new Date().toISOString(), connectionNeedsSCA ? 1 : 0, account.id]
     });
 
-    return c.json({ synced: transactions.length, investments_synced: investmentsSynced });
+    return c.json({
+      synced: transactions.length,
+      investments_synced: investmentsSynced,
+      sca_required: connectionNeedsSCA,
+    });
   } catch (err: any) {
-    return c.json({ error: err.message, reconnect_required: true }, 500);
+    console.error(`Sync error for account ${accountId}:`, err.message);
+    return c.json({ error: err.message }, 500);
   }
+});
+
+// --- Sync all accounts at once (background-friendly) ---
+app.post('/api/bank/sync-all', async (c) => {
+  const userId = await getUserId(c);
+
+  // Get all active connections
+  const connectionsResult = await db.execute({
+    sql: 'SELECT * FROM bank_connections WHERE user_id = ? AND status = ?',
+    args: [userId, 'active']
+  });
+  const connections = connectionsResult.rows as any[];
+  if (connections.length === 0) return c.json({ error: 'No active connections', synced: 0 });
+
+  let totalSynced = 0;
+  let totalInvestments = 0;
+  let scaConnections: number[] = [];
+  let errors = 0;
+
+  for (const conn of connections) {
+    const token = conn.powens_token;
+
+    try {
+      // Fetch accounts visible to this connection
+      const accountsRes = await fetch(`${POWENS_API}/users/me/accounts`, {
+        headers: { 'Authorization': `Bearer ${token}` },
+      });
+      if (!accountsRes.ok) {
+        // Try refresh
+        const refreshedToken = await refreshPowensToken(conn.id);
+        if (!refreshedToken) { errors++; continue; }
+        // Retry not needed here — move on
+        continue;
+      }
+      const accountsData = await accountsRes.json() as any;
+      const powensAccounts = accountsData.accounts || [];
+
+      // Check connection state for SCA
+      let isSCA = false;
+      if (conn.powens_connection_id) {
+        try {
+          const stateRes = await fetch(`${POWENS_API}/users/me/connections/${conn.powens_connection_id}`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (stateRes.ok) {
+            const state = await stateRes.json() as any;
+            if (state.state === 'SCARequired' || state.error === 'SCARequired') {
+              isSCA = true;
+              scaConnections.push(conn.powens_connection_id);
+            }
+          }
+        } catch {}
+      }
+
+      // Sync each account
+      for (const powensAcc of powensAccounts) {
+        const providerId = String(powensAcc.id);
+        const accRes = await db.execute({
+          sql: 'SELECT id, type FROM bank_accounts WHERE user_id = ? AND provider = ? AND provider_account_id = ?',
+          args: [userId, 'powens', providerId]
+        });
+        if (accRes.rows.length === 0) continue;
+        const localAcc = accRes.rows[0] as any;
+
+        // Update balance
+        if (powensAcc.balance !== undefined) {
+          await db.execute({
+            sql: 'UPDATE bank_accounts SET balance = ?, last_sync = ? WHERE id = ?',
+            args: [powensAcc.balance, new Date().toISOString(), localAcc.id]
+          });
+        }
+
+        // Fetch transactions
+        try {
+          const txRes = await fetch(`${POWENS_API}/users/me/accounts/${providerId}/transactions?limit=50`, {
+            headers: { 'Authorization': `Bearer ${token}` },
+          });
+          if (txRes.ok) {
+            const txData = await txRes.json() as any;
+            const transactions = txData.transactions || [];
+            for (const tx of transactions) {
+              await db.execute({
+                sql: 'INSERT OR IGNORE INTO transactions (bank_account_id, date, amount, label, category) VALUES (?, ?, ?, ?, ?)',
+                args: [localAcc.id, tx.date || tx.rdate, tx.value, tx.original_wording || tx.wording, tx.category?.name || null]
+              });
+            }
+            totalSynced += transactions.length;
+          }
+        } catch {}
+
+        // Fetch investments for investment accounts
+        if (localAcc.type === 'investment') {
+          try {
+            const invRes = await fetch(`${POWENS_API}/users/me/accounts/${providerId}/investments`, {
+              headers: { 'Authorization': `Bearer ${token}` },
+            });
+            if (invRes.ok) {
+              const invData = await invRes.json() as any;
+              for (const inv of (invData.investments || [])) {
+                await db.execute({
+                  sql: `INSERT INTO investments (bank_account_id, provider_investment_id, label, isin_code, code_type, quantity, unit_price, unit_value, valuation, diff, diff_percent, portfolio_share, currency, vdate, last_update)
+                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ON CONFLICT(bank_account_id, isin_code) DO UPDATE SET
+                          label=excluded.label, quantity=excluded.quantity, unit_price=excluded.unit_price,
+                          unit_value=excluded.unit_value, valuation=excluded.valuation, diff=excluded.diff,
+                          diff_percent=excluded.diff_percent, portfolio_share=excluded.portfolio_share,
+                          vdate=excluded.vdate, last_update=excluded.last_update`,
+                  args: [localAcc.id, String(inv.id), inv.label || 'Unknown', inv.code || null, inv.code_type || 'ISIN',
+                    inv.quantity || 0, inv.unitprice || 0, inv.original_unitvalue || inv.unitvalue || 0,
+                    inv.valuation || 0, inv.diff || 0, inv.diff_percent || 0, inv.portfolio_share || 0,
+                    inv.original_currency?.id || 'EUR', inv.vdate || null, inv.last_update || new Date().toISOString()]
+                });
+              }
+              totalInvestments += (invData.investments || []).length;
+            }
+          } catch {}
+        }
+      }
+    } catch (err: any) {
+      console.error(`Sync-all error for connection ${conn.id}:`, err.message);
+      errors++;
+    }
+  }
+
+  console.log(`Sync-all complete: ${totalSynced} tx, ${totalInvestments} investments, ${scaConnections.length} SCA, ${errors} errors`);
+  return c.json({
+    synced: totalSynced,
+    investments_synced: totalInvestments,
+    sca_connections: scaConnections,
+    errors,
+  });
 });
 
 // ========== EXPORT / IMPORT ==========
@@ -1195,6 +1414,182 @@ async function fetchBlockchainBalance(network: string, address: string): Promise
   throw new Error(`Unsupported network: ${network}`);
 }
 
+interface BlockchainTx {
+  tx_hash: string;
+  date: string;
+  amount: number;
+  label: string;
+}
+
+async function fetchBlockchainTransactions(network: string, address: string): Promise<BlockchainTx[]> {
+  const txs: BlockchainTx[] = [];
+
+  if (network === 'bitcoin') {
+    // For xpub: derive addresses and aggregate txs, dedup by txid
+    const addresses: string[] = [];
+    const addressSet = new Set<string>();
+    if (/^[xyz]pub/.test(address)) {
+      const node = bip32.fromBase58(address);
+      for (const chain of [0, 1]) {
+        let emptyCount = 0;
+        for (let i = 0; emptyCount < 5 && i < 50; i++) {
+          const child = node.derive(chain).derive(i);
+          const { address: addr } = bitcoin.payments.p2wpkh({ pubkey: child.publicKey, network: bitcoin.networks.bitcoin });
+          if (!addr) continue;
+          try {
+            const res = await fetch(`https://blockstream.info/api/address/${addr}`);
+            const data = await res.json() as any;
+            if ((data.chain_stats?.tx_count || 0) === 0) { emptyCount++; } else { emptyCount = 0; addresses.push(addr); addressSet.add(addr); }
+          } catch { emptyCount++; }
+        }
+      }
+    } else {
+      addresses.push(address);
+      addressSet.add(address);
+    }
+
+    const seenTxids = new Set<string>();
+    for (const addr of addresses) {
+      try {
+        const res = await fetch(`https://blockstream.info/api/address/${addr}/txs`);
+        const rawTxs = await res.json() as any[];
+        for (const tx of rawTxs) {
+          if (seenTxids.has(tx.txid)) continue;
+          seenTxids.add(tx.txid);
+          // Sum inputs from our addresses (sent) and outputs to our addresses (received)
+          let sent = 0, received = 0;
+          let fromAddr = '', toAddr = '';
+          for (const vin of (tx.vin || [])) {
+            if (vin.prevout && addressSet.has(vin.prevout.scriptpubkey_address)) {
+              sent += vin.prevout.value;
+            } else if (vin.prevout) {
+              fromAddr = vin.prevout.scriptpubkey_address || '';
+            }
+          }
+          for (const vout of (tx.vout || [])) {
+            if (addressSet.has(vout.scriptpubkey_address)) {
+              received += vout.value;
+            } else {
+              toAddr = vout.scriptpubkey_address || '';
+            }
+          }
+          const net = (received - sent) / 1e8;
+          const short = (s: string) => s ? `${s.slice(0, 6)}...${s.slice(-4)}` : '?';
+          const label = net >= 0
+            ? `Received ${Math.abs(net).toFixed(8)} BTC from ${short(fromAddr)}`
+            : `Sent ${Math.abs(net).toFixed(8)} BTC to ${short(toAddr)}`;
+          const timestamp = tx.status?.block_time ? new Date(tx.status.block_time * 1000).toISOString() : new Date().toISOString();
+          txs.push({ tx_hash: tx.txid, date: timestamp, amount: net, label });
+        }
+      } catch (e) { console.error(`BTC tx fetch failed for ${addr}:`, e); }
+    }
+    return txs;
+  }
+
+  if (network === 'xrp' || network === 'ripple') {
+    try {
+      const res = await fetch('https://s1.ripple.com:51234/', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'account_tx', params: [{ account: address, limit: 50 }] }),
+      });
+      const data = await res.json() as any;
+      const transactions = data.result?.transactions || [];
+      for (const entry of transactions) {
+        const tx = entry.tx_json || entry.tx || {};
+        if (tx.TransactionType !== 'Payment') continue;
+        const amount = typeof tx.Amount === 'string' ? parseInt(tx.Amount) / 1e6 : 0;
+        if (amount === 0) continue;
+        const isSent = tx.Account === address;
+        const net = isSent ? -amount : amount;
+        const peer = isSent ? tx.Destination : tx.Account;
+        const short = (s: string) => s ? `${s.slice(0, 6)}...${s.slice(-4)}` : '?';
+        const label = isSent
+          ? `Sent ${amount.toFixed(6)} XRP to ${short(peer)}`
+          : `Received ${amount.toFixed(6)} XRP from ${short(peer)}`;
+        // XRP epoch starts 2000-01-01, offset = 946684800
+        const timestamp = tx.date ? new Date((tx.date + 946684800) * 1000).toISOString() : new Date().toISOString();
+        txs.push({ tx_hash: tx.hash, date: timestamp, amount: net, label });
+      }
+    } catch (e) { console.error('XRP tx fetch failed:', e); }
+    return txs;
+  }
+
+  if (network === 'solana') {
+    try {
+      // Get recent signatures
+      const sigRes = await fetch('https://api.mainnet-beta.solana.com', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getSignaturesForAddress', params: [address, { limit: 30 }] }),
+      });
+      const sigData = await sigRes.json() as any;
+      const signatures = sigData.result || [];
+      for (const sig of signatures) {
+        try {
+          const txRes = await fetch('https://api.mainnet-beta.solana.com', {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'getTransaction', params: [sig.signature, { encoding: 'jsonParsed', maxSupportedTransactionVersion: 0 }] }),
+          });
+          const txData = await txRes.json() as any;
+          const meta = txData.result?.meta;
+          const msg = txData.result?.transaction?.message;
+          if (!meta || !msg) continue;
+          // Find our account index to compute SOL balance diff
+          const accounts = msg.accountKeys?.map((k: any) => typeof k === 'string' ? k : k.pubkey) || [];
+          const idx = accounts.indexOf(address);
+          if (idx === -1) continue;
+          const pre = (meta.preBalances?.[idx] || 0);
+          const post = (meta.postBalances?.[idx] || 0);
+          const diff = (post - pre) / 1e9;
+          if (Math.abs(diff) < 0.000001) continue; // skip dust / fee-only
+          const short = (s: string) => s ? `${s.slice(0, 6)}...${s.slice(-4)}` : '?';
+          const otherAddr = accounts.find((a: string) => a !== address) || '?';
+          const label = diff >= 0
+            ? `Received ${Math.abs(diff).toFixed(6)} SOL from ${short(otherAddr)}`
+            : `Sent ${Math.abs(diff).toFixed(6)} SOL to ${short(otherAddr)}`;
+          const timestamp = sig.blockTime ? new Date(sig.blockTime * 1000).toISOString() : new Date().toISOString();
+          txs.push({ tx_hash: sig.signature, date: timestamp, amount: diff, label });
+        } catch { /* skip individual tx errors */ }
+      }
+    } catch (e) { console.error('Solana tx fetch failed:', e); }
+    return txs;
+  }
+
+  // EVM chains — use Blockscout API (free, no API key)
+  const evmBlockscout: Record<string, { url: string; currency: string; decimals: number }> = {
+    ethereum:  { url: 'https://eth.blockscout.com/api', currency: 'ETH', decimals: 18 },
+    base:      { url: 'https://base.blockscout.com/api', currency: 'ETH', decimals: 18 },
+    polygon:   { url: 'https://polygon.blockscout.com/api', currency: 'POL', decimals: 18 },
+    bnb:       { url: 'https://bsc.blockscout.com/api', currency: 'BNB', decimals: 18 },
+    avalanche: { url: 'https://avalanche.blockscout.com/api', currency: 'AVAX', decimals: 18 },
+    arbitrum:  { url: 'https://arbitrum.blockscout.com/api', currency: 'ETH', decimals: 18 },
+    optimism:  { url: 'https://optimism.blockscout.com/api', currency: 'ETH', decimals: 18 },
+  };
+
+  const chain = evmBlockscout[network];
+  if (chain) {
+    try {
+      const res = await fetch(`${chain.url}?module=account&action=txlist&address=${address}&sort=desc&page=1&offset=50`);
+      const data = await res.json() as any;
+      for (const tx of (data.result || [])) {
+        const value = parseFloat(tx.value || '0') / Math.pow(10, chain.decimals);
+        if (value === 0) continue; // skip contract interactions with 0 value
+        const isSent = tx.from?.toLowerCase() === address.toLowerCase();
+        const net = isSent ? -value : value;
+        const peer = isSent ? tx.to : tx.from;
+        const short = (s: string) => s ? `${s.slice(0, 6)}...${s.slice(-4)}` : '?';
+        const label = isSent
+          ? `Sent ${value.toFixed(6)} ${chain.currency} to ${short(peer)}`
+          : `Received ${value.toFixed(6)} ${chain.currency} from ${short(peer)}`;
+        const timestamp = tx.timeStamp ? new Date(parseInt(tx.timeStamp) * 1000).toISOString() : new Date().toISOString();
+        txs.push({ tx_hash: tx.hash, date: timestamp, amount: net, label });
+      }
+    } catch (e) { console.error(`EVM tx fetch failed for ${network}:`, e); }
+    return txs;
+  }
+
+  return txs;
+}
+
 app.post('/api/accounts/blockchain', async (c) => {
   const userId = await getUserId(c);
   const body = await c.req.json() as any;
@@ -1229,7 +1624,23 @@ app.post('/api/accounts/:id/sync-blockchain', async (c) => {
   try {
     const { balance, currency } = await fetchBlockchainBalance(account.blockchain_network, account.blockchain_address);
     await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), id] });
-    return c.json({ balance, currency });
+
+    // Fetch and insert on-chain transactions
+    let txCount = 0;
+    try {
+      const txs = await fetchBlockchainTransactions(account.blockchain_network, account.blockchain_address);
+      for (const tx of txs) {
+        const res = await db.execute({
+          sql: `INSERT OR IGNORE INTO transactions (bank_account_id, date, amount, label, category, is_pro, tx_hash) VALUES (?, ?, ?, ?, 'Crypto', 0, ?)`,
+          args: [id, tx.date, tx.amount, tx.label, tx.tx_hash],
+        });
+        if (res.rowsAffected > 0) txCount++;
+      }
+    } catch (txErr: any) {
+      console.error(`Blockchain tx fetch failed for account ${id}:`, txErr.message);
+    }
+
+    return c.json({ balance, currency, synced: txCount });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -2134,10 +2545,16 @@ app.post('/api/analytics/recompute', async (c) => {
 // Get drive connection status
 app.get('/api/drive/status', async (c) => {
   const userId = await getUserId(c);
-  const result = await db.execute({
-    sql: 'SELECT id, folder_id, folder_path, status, created_at FROM drive_connections WHERE user_id = ? ORDER BY id DESC LIMIT 1',
-    args: [userId]
-  });
+  const companyId = c.req.query('company_id');
+
+  const sql = companyId
+    ? 'SELECT id, company_id, folder_id, folder_path, status, created_at FROM drive_connections WHERE user_id = ? AND company_id = ? AND status = ? LIMIT 1'
+    : 'SELECT id, company_id, folder_id, folder_path, status, created_at FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1';
+
+  const args = companyId ? [userId, parseInt(companyId), 'active'] : [userId, 'active'];
+
+  const result = await db.execute({ sql, args });
+
   if (result.rows.length === 0) return c.json({ connected: false });
   const conn: any = result.rows[0];
   return c.json({ connected: conn.status === 'active', ...conn });
@@ -2145,12 +2562,18 @@ app.get('/api/drive/status', async (c) => {
 
 // POST /api/drive/connect → generate Google OAuth URL
 app.post('/api/drive/connect', async (c) => {
+  const body = await c.req.json().catch(() => ({}));
+  const companyId = body.company_id || null;
+
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
   const DRIVE_REDIRECT_URI = process.env.GOOGLE_DRIVE_REDIRECT_URI || 'https://65.108.14.251:8080/konto/api/drive-callback';
 
   if (!GOOGLE_CLIENT_ID) {
     return c.json({ error: 'Google Drive not configured' }, 500);
   }
+
+  // Encode company_id in state parameter for OAuth callback
+  const state = companyId ? Buffer.from(JSON.stringify({ company_id: companyId })).toString('base64') : '';
 
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -2159,6 +2582,7 @@ app.post('/api/drive/connect', async (c) => {
     response_type: 'code',
     access_type: 'offline',
     prompt: 'consent',
+    ...(state && { state }),
   });
 
   const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
@@ -2167,13 +2591,89 @@ app.post('/api/drive/connect', async (c) => {
 
 app.delete('/api/drive/disconnect', async (c) => {
   const userId = await getUserId(c);
-  await db.execute({ sql: 'DELETE FROM drive_connections WHERE user_id = ?', args: [userId] });
+  const companyId = c.req.query('company_id');
+
+  const sql = companyId
+    ? 'DELETE FROM drive_connections WHERE user_id = ? AND company_id = ?'
+    : 'DELETE FROM drive_connections WHERE user_id = ? AND company_id IS NULL';
+
+  const args = companyId ? [userId, parseInt(companyId)] : [userId];
+
+  await db.execute({ sql, args });
+  return c.json({ ok: true });
+});
+
+// GET /api/drive/folders - List folders from Google Drive
+app.get('/api/drive/folders', async (c) => {
+  const userId = await getUserId(c);
+  const companyId = c.req.query('company_id');
+
+  const sql = companyId
+    ? 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id = ? AND status = ? LIMIT 1'
+    : 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1';
+
+  const args = companyId ? [userId, parseInt(companyId), 'active'] : [userId, 'active'];
+  const conn = await db.execute({ sql, args });
+
+  if (conn.rows.length === 0) {
+    return c.json({ error: 'No active Google Drive connection' }, 400);
+  }
+
+  const driveConn: any = conn.rows[0];
+  const accessToken = driveConn.access_token;
+
+  try {
+    // Get parent folder ID from query (for nested navigation)
+    const parentFolderId = c.req.query('parent_id');
+
+    // Build query for folders
+    let query = "mimeType='application/vnd.google-apps.folder'";
+    if (parentFolderId) {
+      query += ` and '${parentFolderId}' in parents`;
+    } else {
+      // Root level: folders not in trash and in "My Drive" (not shared drives)
+      query += " and 'root' in parents";
+    }
+
+    const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name)&orderBy=name&pageSize=100`;
+    const listRes = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+
+    if (!listRes.ok) {
+      const err = await listRes.text();
+      return c.json({ error: 'Drive API error', details: err }, 502);
+    }
+
+    const listData: any = await listRes.json();
+    return c.json({ folders: listData.files || [] });
+  } catch (err: any) {
+    return c.json({ error: err.message }, 500);
+  }
+});
+
+// PATCH /api/drive/folder - Update folder for a drive connection
+app.patch('/api/drive/folder', async (c) => {
+  const userId = await getUserId(c);
+  const body = await c.req.json();
+  const { company_id, folder_id, folder_name } = body;
+
+  const sql = company_id
+    ? 'UPDATE drive_connections SET folder_id = ?, folder_path = ? WHERE user_id = ? AND company_id = ? AND status = ?'
+    : 'UPDATE drive_connections SET folder_id = ?, folder_path = ? WHERE user_id = ? AND company_id IS NULL AND status = ?';
+
+  const args = company_id
+    ? [folder_id || null, folder_name || null, userId, company_id, 'active']
+    : [folder_id || null, folder_name || null, userId, 'active'];
+
+  await db.execute({ sql, args });
   return c.json({ ok: true });
 });
 
 // GET /api/drive-callback?code=... → exchange code for tokens
 app.get('/api/drive-callback', async (c) => {
   const code = c.req.query('code');
+  const state = c.req.query('state');
   const error = c.req.query('error');
 
   if (error) {
@@ -2190,6 +2690,18 @@ app.get('/api/drive-callback', async (c) => {
   }
 
   const userId = await getUserId(c);
+
+  // Extract company_id from state parameter
+  let companyId = null;
+  if (state) {
+    try {
+      const decoded = JSON.parse(Buffer.from(state, 'base64').toString());
+      companyId = decoded.company_id || null;
+    } catch (e) {
+      console.error('Failed to decode state:', e);
+    }
+  }
+
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
   const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
   const DRIVE_REDIRECT_URI = process.env.GOOGLE_DRIVE_REDIRECT_URI || 'https://65.108.14.251:8080/konto/api/drive-callback';
@@ -2214,14 +2726,14 @@ app.get('/api/drive-callback', async (c) => {
     const expiry = expires_in ? new Date(Date.now() + expires_in * 1000).toISOString() : null;
 
     await db.execute({
-      sql: `INSERT INTO drive_connections (user_id, access_token, refresh_token, token_expiry, status)
-            VALUES (?, ?, ?, ?, 'active')
-            ON CONFLICT(id) DO UPDATE SET 
+      sql: `INSERT INTO drive_connections (user_id, company_id, access_token, refresh_token, token_expiry, status)
+            VALUES (?, ?, ?, ?, ?, 'active')
+            ON CONFLICT(id) DO UPDATE SET
               access_token = excluded.access_token,
               refresh_token = excluded.refresh_token,
               token_expiry = excluded.token_expiry,
               status = 'active'`,
-      args: [userId, access_token, refresh_token || null, expiry]
+      args: [userId, companyId, access_token, refresh_token || null, expiry]
     });
 
     return c.html(`<html><head><meta http-equiv="refresh" content="3;url=/konto/invoices"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
@@ -2954,11 +3466,87 @@ app.get('/api/trends', async (c) => {
 
 export { app };
 
+// Background sync: refresh all accounts using active tokens + check SCA state
+async function backgroundSyncAll() {
+  try {
+    const usersRes = await db.execute({ sql: 'SELECT DISTINCT user_id FROM bank_connections WHERE status = ?', args: ['active'] });
+    for (const row of usersRes.rows as any[]) {
+      const userId = row.user_id;
+      const connsRes = await db.execute({ sql: 'SELECT * FROM bank_connections WHERE user_id = ? AND status = ?', args: [userId, 'active'] });
+      for (const conn of connsRes.rows as any[]) {
+        try {
+          const token = conn.powens_token;
+          const accountsRes = await fetch(`${POWENS_API}/users/me/accounts`, { headers: { 'Authorization': `Bearer ${token}` } });
+          if (!accountsRes.ok) continue;
+          const accountsData = await accountsRes.json() as any;
+
+          // Check connection SCA state
+          let isSCA = false;
+          if (conn.powens_connection_id) {
+            try {
+              const stateRes = await fetch(`${POWENS_API}/users/me/connections/${conn.powens_connection_id}`, {
+                headers: { 'Authorization': `Bearer ${token}` },
+              });
+              if (stateRes.ok) {
+                const state = await stateRes.json() as any;
+                isSCA = state.state === 'SCARequired' || state.error === 'SCARequired';
+              }
+            } catch {}
+          }
+
+          for (const powensAcc of (accountsData.accounts || [])) {
+            const accRes = await db.execute({
+              sql: 'SELECT id, type FROM bank_accounts WHERE user_id = ? AND provider = ? AND provider_account_id = ?',
+              args: [userId, 'powens', String(powensAcc.id)]
+            });
+            if (accRes.rows.length === 0) continue;
+            const localAcc = accRes.rows[0] as any;
+            // Update balance + last_sync + sca_required
+            await db.execute({
+              sql: 'UPDATE bank_accounts SET balance = ?, last_sync = ?, sca_required = ? WHERE id = ?',
+              args: [powensAcc.balance || 0, new Date().toISOString(), isSCA ? 1 : 0, localAcc.id]
+            });
+          }
+          if (isSCA) console.log(`Connection ${conn.id} (powens=${conn.powens_connection_id}) needs SCA`);
+        } catch (e: any) {
+          console.error(`Background sync error for connection ${conn.id}:`, e.message);
+        }
+      }
+    }
+    // Sync blockchain accounts: refresh balances + fetch transactions
+    const blockchainAccs = await db.execute({ sql: "SELECT * FROM bank_accounts WHERE provider = 'blockchain'", args: [] });
+    for (const acc of blockchainAccs.rows as any[]) {
+      try {
+        const { balance, currency } = await fetchBlockchainBalance(acc.blockchain_network, acc.blockchain_address);
+        await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), acc.id] });
+        const txs = await fetchBlockchainTransactions(acc.blockchain_network, acc.blockchain_address);
+        let count = 0;
+        for (const tx of txs) {
+          const res = await db.execute({
+            sql: `INSERT OR IGNORE INTO transactions (bank_account_id, date, amount, label, category, is_pro, tx_hash) VALUES (?, ?, ?, ?, 'Crypto', 0, ?)`,
+            args: [acc.id, tx.date, tx.amount, tx.label, tx.tx_hash],
+          });
+          if (res.rowsAffected > 0) count++;
+        }
+        if (count > 0) console.log(`Synced ${count} new txs for ${acc.name} (${acc.blockchain_network})`);
+      } catch (e: any) {
+        console.error(`Background blockchain sync error for ${acc.name}:`, e.message);
+      }
+    }
+
+    console.log('Background sync complete — all balances + SCA states updated');
+  } catch (e: any) {
+    console.error('Background sync failed:', e.message);
+  }
+}
+
 async function main() {
   await initDatabase();
   await migrateDatabase();
   serve({ fetch: app.fetch, port: Number(process.env.PORT) || 5004 }, (info) => {
     console.log(`🦎 Konto API running on http://localhost:${info.port}`);
+    // Sync all accounts in background on startup
+    setTimeout(() => backgroundSyncAll(), 3000);
   });
 }
 

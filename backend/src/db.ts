@@ -335,6 +335,21 @@ export async function migrateDatabase() {
   } catch {
     await db.execute("ALTER TABLE bank_connections ADD COLUMN powens_refresh_token TEXT");
   }
+
+  // Track SCA state per account so frontend can show re-auth indicators
+  try {
+    await db.execute("SELECT sca_required FROM bank_accounts LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE bank_accounts ADD COLUMN sca_required INTEGER NOT NULL DEFAULT 0");
+  }
+
+  // Add tx_hash column to transactions for blockchain transaction dedup
+  try {
+    await db.execute("SELECT tx_hash FROM transactions LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE transactions ADD COLUMN tx_hash TEXT");
+    await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_tx_hash ON transactions(bank_account_id, tx_hash)");
+  }
 }
 
 // Find or create user by Clerk ID. On first login, migrates existing user_id=1 data.
