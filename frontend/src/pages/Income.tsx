@@ -50,7 +50,7 @@ export default function Income() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' });
-  const [expandedEntryId, setExpandedEntryId] = useState<number | null>(null); // year on mobile, entry id on desktop
+  const [expandedYears, setExpandedYears] = useState<Set<number> | null>(null); // null = default (last 3 years expanded)
 
   // Collapsible sections
   const [incomeOpen, setIncomeOpen] = useState(true);
@@ -224,18 +224,28 @@ export default function Income() {
                   byYear.get(e.year)!.push(e);
                 });
                 const years = [...byYear.keys()].sort((a, b) => b - a);
+                const defaultExpanded = new Set(years.slice(0, 3));
                 return years.map(year => {
                   const yearEntries = byYear.get(year)!;
                   const totalGross = yearEntries.reduce((s, e) => s + e.gross_annual, 0);
-                  const isExpanded = expandedEntryId === year;
+                  const isExpanded = expandedYears === null ? defaultExpanded.has(year) : expandedYears.has(year);
                   const mainCurrency = yearEntries[0]?.country === 'CH' ? 'CHF' : 'EUR';
                   const fmtYear = mainCurrency === 'CHF' ? fmtCHF : fmt;
+                  const toggleYear = () => {
+                    setExpandedYears(prev => {
+                      const current = prev ?? new Set(defaultExpanded);
+                      const next = new Set(current);
+                      if (next.has(year)) next.delete(year);
+                      else next.add(year);
+                      return next;
+                    });
+                  };
                   return (
                     <div key={year} className="bg-surface-hover rounded-lg overflow-hidden">
                       {/* Year summary line */}
                       <div
                         className="flex items-center justify-between px-3 py-2.5 cursor-pointer"
-                        onClick={() => setExpandedEntryId(isExpanded ? null : year)}
+                        onClick={toggleYear}
                       >
                         <div className="flex items-center gap-3 min-w-0">
                           <span className="text-sm font-bold text-white">{year}</span>
@@ -277,7 +287,7 @@ export default function Income() {
                 });
               })()}
             </div>
-            {/* Desktop: group by year, current year expanded by default */}
+            {/* Desktop: group by year, last 3 years expanded by default */}
             <div className="hidden sm:block space-y-1">
               {(() => {
                 const byYear = new Map<number, IncomeEntry[]>();
@@ -286,18 +296,27 @@ export default function Income() {
                   byYear.get(e.year)!.push(e);
                 });
                 const years = [...byYear.keys()].sort((a, b) => b - a);
-                const currentYear = new Date().getFullYear();
+                const defaultExpanded = new Set(years.slice(0, 3));
                 return years.map(year => {
                   const yearEntries = byYear.get(year)!;
                   const totalGross = yearEntries.reduce((s, e) => s + e.gross_annual, 0);
-                  const isExpanded = expandedEntryId === year || (expandedEntryId === null && year === currentYear);
+                  const isExpanded = expandedYears === null ? defaultExpanded.has(year) : expandedYears.has(year);
                   const mainCurrency = yearEntries[0]?.country === 'CH' ? 'CHF' : 'EUR';
                   const fmtYear = mainCurrency === 'CHF' ? fmtCHF : fmt;
+                  const toggleYear = () => {
+                    setExpandedYears(prev => {
+                      const current = prev ?? new Set(defaultExpanded);
+                      const next = new Set(current);
+                      if (next.has(year)) next.delete(year);
+                      else next.add(year);
+                      return next;
+                    });
+                  };
                   return (
                     <div key={year} className="bg-surface-hover rounded-lg overflow-hidden">
                       <div
                         className="flex items-center justify-between px-4 py-3 cursor-pointer hover:bg-white/5 transition-colors"
-                        onClick={() => setExpandedEntryId(isExpanded ? -1 : year)}
+                        onClick={toggleYear}
                       >
                         <div className="flex items-center gap-4 min-w-0">
                           <span className="text-base font-bold text-white">{year}</span>

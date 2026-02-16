@@ -283,5 +283,14 @@
   "new_files_scanned": "nouveaux fichiers",
   "matched": "rapprochés",
   "unmatched": "Non rapprochés",
-  "no_invoices": "Aucun justificatif trouvé. Lancez un scan pour commencer."
+  "no_invoices": "Aucun justificatif trouvé. Lancez un scan pour commencer.",
+  "total_cost": "Coût total",
+  "pnl": "Plus/Moins-value",
+  "portfolio_weight": "Poids du portefeuille",
+  "other_accounts": "Autres",
+  "accounts.other": "Autres comptes",
+  "bank_group_total": "Total",
+  "sca_required": "Auth requise",
+  "sca_required_title": "Authentification bancaire requise",
+  "sca_required_desc": "Certains comptes nécessitent une ré-authentification pour accéder aux données récentes."
 }

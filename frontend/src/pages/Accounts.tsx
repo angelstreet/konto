@@ -31,6 +31,7 @@ interface BankAccount {
   blockchain_network: string | null;
   subtype: string | null;
   connection_expired: number;
+  sca_required: number;
 }
 
 function getRelativeTime(isoDate: string | null, t: (key: string, opts?: Record<string, unknown>) => string): { text: string; isStale: boolean } {
@@ -114,6 +115,7 @@ export default function Accounts() {
   // Balance update state
   const [updatingBalanceId, setUpdatingBalanceId] = useState<number | null>(null);
   const [newBalance, setNewBalance] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
 
   const loading = loadingAccounts || loadingConnections;
@@ -130,6 +132,12 @@ export default function Accounts() {
 
   const connectBank = async () => {
     const res = await authFetch(`${API}/bank/connect-url`);
+    const { url } = await res.json();
+    window.location.href = url;
+  };
+
+  const reconnectAccount = async (accountId: number) => {
+    const res = await authFetch(`${API}/bank/reconnect-url/${accountId}`);
     const { url } = await res.json();
     window.location.href = url;
   };
@@ -163,8 +171,13 @@ export default function Accounts() {
       } else {
         const res = await authFetch(`${API}/bank/accounts/${id}/sync`, { method: 'POST' });
         const result = await res.json();
-        if (!res.ok || result.reconnect_required) {
+        if (result.reconnect_required) {
           connectBank();
+          return;
+        }
+        // If SCA and investment account — redirect to reconnect so user can fix it
+        if (result.sca_required && acc?.type === 'investment') {
+          reconnectAccount(id);
           return;
         }
       }
@@ -906,6 +919,7 @@ export default function Accounts() {
         </div>
       )}
 
+
       {loading ? (
         <div className="text-center text-muted py-8">Loading...</div>
       ) : allAccounts.length === 0 && (connections || []).length === 0 ? (
@@ -1046,7 +1060,15 @@ export default function Accounts() {
                         className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/20 text-red-400 hover:bg-red-500/30 transition-colors flex items-center gap-1"
                       >
                         <AlertTriangle size={10} />
-                        {t('sync_expired') || 'Sync expirée'}
+                        {t('sync_expired')}
+                      </button>
+                    ) : acc.sca_required && acc.type === 'investment' ? (
+                      <button
+                        onClick={() => reconnectAccount(acc.id)}
+                        className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors flex items-center gap-1"
+                      >
+                        <AlertTriangle size={10} />
+                        {t('sca_required')}
                       </button>
                     ) : (
                       <>

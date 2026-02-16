@@ -283,5 +283,14 @@
   "new_files_scanned": "new files",
   "matched": "Matched",
   "unmatched": "Unmatched",
-  "no_invoices": "No receipts found. Run a scan to get started."
+  "no_invoices": "No receipts found. Run a scan to get started.",
+  "total_cost": "Total cost",
+  "pnl": "P&L",
+  "portfolio_weight": "Portfolio weight",
+  "other_accounts": "Other",
+  "accounts.other": "Other accounts",
+  "bank_group_total": "Total",
+  "sca_required": "Auth required",
+  "sca_required_title": "Bank authentication required",
+  "sca_required_desc": "Some accounts need re-authentication to access recent data."
 }

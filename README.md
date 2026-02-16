@@ -76,6 +76,11 @@ npm run dev:backend    # → http://localhost:3004/api/
 - Centralized tools page (2×2 grid) for quick access to simulators and utilities
 - Credit simulator, budget analyzer, and more
 
+### Investment Positions
+- Sync investment portfolios from Powens during bank sync
+- Track ISIN-based positions with quantity, unit price, current valuation, P&L
+- View in dedicated endpoint and Transactions page (investment account filter)
+
 ## Project Structure
 
 ```

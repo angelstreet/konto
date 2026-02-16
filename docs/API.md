@@ -366,3 +366,29 @@ Full JSON dump of all data (companies, accounts, transactions, assets with costs
 ### `POST /api/import`
 
 Import from a previous export. Body = the export JSON.
+
+## Investments
+
+### `GET /api/investments`
+
+Query params: `company_id`.
+
+Returns list of investment positions synced from Powens for investment accounts (ISIN, quantity, unit price, valuation, P&L).
+
+```json
+[
+  {
+    "id": 1,
+    "isin": "FR0000121014",
+    "name": "BNP Paribas",
+    "quantity": 100,
+    "unit_price": 55.20,
+    "valuation": 5520.00,
+    "pnl": 520.00,
+    "pnl_percent": 10.43
+  }
+]
+```
+
+Positions also shown in Transactions page when filtering by investment account.
+

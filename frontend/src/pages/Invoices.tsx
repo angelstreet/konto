@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Search, RefreshCw, CheckCircle, AlertTriangle, Link2, Unlink, Trash2, CloudOff, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useAuthFetch } from '../useApi';
+import { useAuthFetch, useApi } from '../useApi';
 
 interface Invoice {
   id: number;
@@ -30,28 +30,41 @@ interface Stats {
   match_rate: number;
 }
 
+interface Company {
+  id: number;
+  name: string;
+}
+
 export default function Invoices() {
   const { t: _t } = useTranslation();
   const navigate = useNavigate();
   const authFetch = useAuthFetch();
+  const [selectedCompanyId, setSelectedCompanyId] = useState<number | null>(null);
+  const { data: companies } = useApi<Company[]>(`${API}/companies`);
   const [invoices, setInvoices] = useState<Invoice[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [scanning, setScanning] = useState(false);
   const [filter, setFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
   const [scanResult, setScanResult] = useState<any>(null);
   const [driveStatus, setDriveStatus] = useState<any>(null);
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [folders, setFolders] = useState<any[]>([]);
+  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [folderPath, setFolderPath] = useState<Array<{id: string | null, name: string}>>([{id: null, name: 'Mon Drive'}]);
 
   const load = useCallback(async () => {
     const matchParam = filter === 'all' ? '' : `?matched=${filter === 'matched'}`;
+    const driveParam = selectedCompanyId ? `?company_id=${selectedCompanyId}` : '';
     const [invRes, statsRes, driveRes] = await Promise.all([
       authFetch(`${API}/invoices${matchParam}`),
       authFetch(`${API}/invoices/stats`),
-      authFetch(`${API}/drive/status`),
+      authFetch(`${API}/drive/status${driveParam}`),
     ]);
     setInvoices(await invRes.json());
     setStats(await statsRes.json());
     setDriveStatus(await driveRes.json());
-  }, [filter]);
+  }, [filter, selectedCompanyId]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -59,7 +72,10 @@ export default function Invoices() {
     setScanning(true);
     setScanResult(null);
     try {
-      const res = await authFetch(`${API}/invoices/scan`, { method: 'POST', body: '{}' });
+      const res = await authFetch(`${API}/invoices/scan`, {
+        method: 'POST',
+        body: JSON.stringify({ company_id: selectedCompanyId })
+      });
       const data = await res.json();
       setScanResult(data);
       await load();
@@ -78,7 +94,80 @@ export default function Invoices() {
     await load();
   };
 
+  const loadFolders = async (parentId: string | null = null, parentName: string = 'Mon Drive') => {
+    setLoadingFolders(true);
+    try {
+      const companyParam = selectedCompanyId ? `company_id=${selectedCompanyId}` : '';
+      const parentParam = parentId ? `parent_id=${parentId}` : '';
+      const params = [companyParam, parentParam].filter(Boolean).join('&');
+      const url = `${API}/drive/folders${params ? '?' + params : ''}`;
+
+      const res = await authFetch(url);
+      const data = await res.json();
+      setFolders(data.folders || []);
+      setCurrentFolderId(parentId);
+
+      // Update breadcrumb path
+      if (parentId) {
+        const existingIndex = folderPath.findIndex(f => f.id === parentId);
+        if (existingIndex >= 0) {
+          setFolderPath(folderPath.slice(0, existingIndex + 1));
+        } else {
+          setFolderPath([...folderPath, { id: parentId, name: parentName }]);
+        }
+      } else {
+        setFolderPath([{ id: null, name: 'Mon Drive' }]);
+      }
+
+      setShowFolderPicker(true);
+    } catch (err) {
+      console.error('Failed to load folders:', err);
+    } finally {
+      setLoadingFolders(false);
+    }
+  };
+
+  const navigateToFolder = (folderId: string | null, folderName: string) => {
+    loadFolders(folderId, folderName);
+  };
+
+  const selectFolder = async (folderId: string | null, folderName: string | null) => {
+    try {
+      // Build full path for display
+      const fullPath = folderId ? folderPath.map(f => f.name).join(' / ') + (folderName ? ` / ${folderName}` : '') : null;
+
+      await authFetch(`${API}/drive/folder`, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          company_id: selectedCompanyId,
+          folder_id: folderId,
+          folder_name: fullPath
+        })
+      });
+      setShowFolderPicker(false);
+      setFolderPath([{ id: null, name: 'Mon Drive' }]);
+      setCurrentFolderId(null);
+      await load();
+    } catch (err) {
+      console.error('Failed to update folder:', err);
+    }
+  };
+
+  const disconnectDrive = async () => {
+    if (!confirm(`Déconnecter Drive pour ${companyName} ?`)) return;
+    try {
+      const param = selectedCompanyId ? `?company_id=${selectedCompanyId}` : '';
+      await authFetch(`${API}/drive/disconnect${param}`, { method: 'DELETE' });
+      await load();
+    } catch (err) {
+      console.error('Failed to disconnect:', err);
+    }
+  };
+
   const fmt = (n: number | null) => n != null ? `${n.toFixed(2)} €` : '—';
+
+  const selectedCompany = companies?.find(c => c.id === selectedCompanyId);
+  const companyName = selectedCompany?.name || 'Personnel';
 
   return (
     <div>
@@ -89,25 +178,40 @@ export default function Invoices() {
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap">Justificatifs</h1>
         </div>
-        <button
-          onClick={scan}
-          disabled={scanning || !driveStatus?.connected}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-500 text-white rounded-lg text-xs font-medium disabled:opacity-40 flex-shrink-0"
-        >
-          <RefreshCw size={14} className={scanning ? 'animate-spin' : ''} />
-          {scanning ? 'Scan...' : 'Scanner'}
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <select
+            value={selectedCompanyId || ''}
+            onChange={(e) => setSelectedCompanyId(e.target.value ? parseInt(e.target.value) : null)}
+            className="text-xs px-2 py-1.5 bg-surface border border-border rounded-lg"
+          >
+            <option value="">Personnel</option>
+            {companies?.map(c => (
+              <option key={c.id} value={c.id}>{c.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={scan}
+            disabled={scanning || !driveStatus?.connected}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-accent-500 text-white rounded-lg text-xs font-medium disabled:opacity-40 flex-shrink-0"
+          >
+            <RefreshCw size={14} className={scanning ? 'animate-spin' : ''} />
+            {scanning ? 'Scan...' : 'Scanner'}
+          </button>
+        </div>
       </div>
 
       {!driveStatus?.connected && (
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4 text-sm text-yellow-300 flex items-center justify-between gap-3">
           <span className="flex items-center gap-2">
             <CloudOff size={16} className="shrink-0" />
-            Drive non connecté
+            Drive non connecté pour {companyName}
           </span>
           <button
             onClick={async () => {
-              const res = await authFetch(`${API}/drive/connect`, { method: 'POST', body: '{}' });
+              const res = await authFetch(`${API}/drive/connect`, {
+                method: 'POST',
+                body: JSON.stringify({ company_id: selectedCompanyId })
+              });
               const data = await res.json();
               if (data.url) window.location.href = data.url;
               else await load();
@@ -116,6 +220,30 @@ export default function Invoices() {
           >
             Lier Drive
           </button>
+        </div>
+      )}
+
+      {driveStatus?.connected && (
+        <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 mb-4 text-sm text-green-300 flex items-center justify-between">
+          <span className="flex items-center gap-2">
+            ✅ Drive connecté {driveStatus.folder_path && `- Dossier: ${driveStatus.folder_path}`}
+            {!driveStatus.folder_path && '- Tous les dossiers'}
+          </span>
+          <div className="flex gap-2">
+            <button
+              onClick={() => loadFolders()}
+              disabled={loadingFolders}
+              className="text-xs px-2 py-1 bg-green-500/20 hover:bg-green-500/30 text-green-200 rounded transition-colors disabled:opacity-50"
+            >
+              {loadingFolders ? '...' : '📂 Choisir'}
+            </button>
+            <button
+              onClick={disconnectDrive}
+              className="text-xs px-2 py-1 bg-red-500/20 hover:bg-red-500/30 text-red-300 rounded transition-colors"
+            >
+              🔌 Déconnecter
+            </button>
+          </div>
         </div>
       )}
 
@@ -210,6 +338,87 @@ export default function Invoices() {
           </div>
         ))}
       </div>
+
+      {/* Folder Picker Modal */}
+      {showFolderPicker && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowFolderPicker(false)}>
+          <div className="bg-surface rounded-xl border border-border p-5 max-w-md w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold">Choisir un dossier Drive</h2>
+              <button onClick={() => { setShowFolderPicker(false); setFolderPath([{id: null, name: 'Mon Drive'}]); }} className="text-muted hover:text-white p-1">✕</button>
+            </div>
+
+            {/* Breadcrumb Navigation */}
+            <div className="flex items-center gap-1 mb-3 text-xs text-muted overflow-x-auto pb-2">
+              {folderPath.map((folder, idx) => (
+                <div key={folder.id || 'root'} className="flex items-center gap-1 shrink-0">
+                  <button
+                    onClick={() => navigateToFolder(folder.id, folder.name)}
+                    className="hover:text-white transition-colors"
+                  >
+                    {folder.name}
+                  </button>
+                  {idx < folderPath.length - 1 && <span>/</span>}
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2 overflow-auto flex-1">
+              {/* Option to select current folder or all folders */}
+              {currentFolderId ? (
+                <button
+                  onClick={() => selectFolder(currentFolderId, folderPath[folderPath.length - 1].name)}
+                  className="w-full text-left px-4 py-3 rounded-lg border border-accent-500 bg-accent-500/10 hover:bg-accent-500/20 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">✅</span>
+                    <div>
+                      <div className="font-medium text-accent-400">Sélectionner ce dossier</div>
+                      <div className="text-xs text-muted">{folderPath.map(f => f.name).join(' / ')}</div>
+                    </div>
+                  </div>
+                </button>
+              ) : (
+                <button
+                  onClick={() => selectFolder(null, null)}
+                  className="w-full text-left px-4 py-3 rounded-lg border border-border hover:bg-white/5 transition-colors"
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-lg">📁</span>
+                    <div>
+                      <div className="font-medium">Tous les dossiers</div>
+                      <div className="text-xs text-muted">Scanner tous les PDF du Drive</div>
+                    </div>
+                  </div>
+                </button>
+              )}
+
+              {/* List of folders */}
+              {loadingFolders && (
+                <div className="text-center text-muted py-8 text-sm">Chargement...</div>
+              )}
+              {!loadingFolders && folders.length === 0 && (
+                <div className="text-center text-muted py-8 text-sm">Aucun sous-dossier</div>
+              )}
+              {folders.map((folder: any) => (
+                <button
+                  key={folder.id}
+                  onClick={() => navigateToFolder(folder.id, folder.name)}
+                  className="w-full text-left px-4 py-3 rounded-lg border border-border hover:bg-white/5 transition-colors group"
+                >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="text-lg">📂</span>
+                      <div className="font-medium truncate">{folder.name}</div>
+                    </div>
+                    <span className="text-xs text-muted group-hover:text-white">Ouvrir →</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
