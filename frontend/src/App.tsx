@@ -10,6 +10,7 @@ import Transactions from './pages/Transactions';
 import Company from './pages/Company';
 import Settings from './pages/Settings';
 import Assets from './pages/Assets';
+import LoansDashboard from './pages/LoansDashboard';
 import ComingSoon from './pages/ComingSoon';
 import CreditSimulator from './pages/CreditSimulator';
 import Report from './pages/Report';
@@ -22,7 +23,6 @@ import Outils from './pages/Outils';
 import Onboarding from './pages/Onboarding';
 import Trends from './pages/Trends';
 import PropertyROI from './pages/PropertyROI';
-import CryptoDashboard from './pages/CryptoDashboard';
 import { FilterProvider } from './FilterContext';
 import { PreferencesProvider, usePreferences } from './PreferencesContext';
 import { AmountVisibilityProvider } from './AmountVisibilityContext';
@@ -38,6 +38,7 @@ function AppRoutes() {
       <Route path="/companies" element={<Company />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/assets" element={<Assets />} />
+      <Route path="/loans" element={<LoansDashboard />} />
       <Route path="/analysis" element={<Analytics />} />
       <Route path="/cashflow" element={<ComingSoon titleKey="nav_cashflow" />} />
       <Route path="/ledger" element={<ComingSoon titleKey="nav_ledger" />} />
@@ -54,7 +55,6 @@ function AppRoutes() {
       <Route path="/trends" element={<Trends />} />
       <Route path="/trends-pro" element={<Trends />} />
       <Route path="/property-roi" element={<PropertyROI />} />
-      <Route path="/crypto" element={<CryptoDashboard />} />
       <Route path="/simulators" element={<CreditSimulator />} />
       <Route path="/outils" element={<Outils />} />
       <Route path="/more" element={<More />} />
@@ -63,6 +63,7 @@ function AppRoutes() {
   );
 }
 
+// ... rest of App.tsx unchanged (ClerkApp, LegacyApp, etc.)
 function ClerkApp() {
   const { isLoaded, isSignedIn } = useUser();
   const { signOut } = useClerkHook();

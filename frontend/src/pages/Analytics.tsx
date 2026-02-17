@@ -48,7 +48,7 @@ export default function Analytics() {
   const isPerso = pathname === '/budget';
   const isPro = pathname === '/analysis';
 
-  const { appendScope: globalAppendScope, setScope, companies } = useFilter();
+  const { appendScope: globalAppendScope, setScope, companies, scope } = useFilter();
   const [selectedCompany, setSelectedCompany] = useState<number | 'pro'>('pro');
 
   // Auto-scope based on menu context
