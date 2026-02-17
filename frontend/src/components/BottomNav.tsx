@@ -8,6 +8,7 @@ const items = [
   { path: '/transactions', icon: ArrowLeftRight, labelKey: 'nav_transactions' },
   { path: '/companies', icon: Building2, labelKey: 'nav_companies' },
   { path: '/crypto', icon: Bitcoin, labelKey: 'nav_crypto' },
+  { path: '/stocks', icon: BarChart3, labelKey: 'nav_stocks' },
   { path: '/more', icon: MoreHorizontal, labelKey: 'more' },
 ];
 

@@ -70,6 +70,7 @@ const navGroups: NavGroup[] = [
       { kind: 'leaf', path: '/companies', icon: Building2, labelKey: 'nav_companies' },
       { kind: 'leaf', path: '/assets', icon: Home, labelKey: 'nav_assets' },\n      { kind: 'leaf', path: '/loans', icon: Banknote, labelKey: 'nav_loans' },
       { kind: 'leaf', path: '/crypto', icon: Bitcoin, labelKey: 'nav_crypto' },
+      { kind: 'leaf', path: '/stocks', icon: BarChart3, labelKey: 'nav_stocks' },
       { kind: 'leaf', path: '/property-roi', icon: TrendingUp, labelKey: 'nav_property_roi' },
       { kind: 'leaf', path: '/crypto', icon: Bitcoin, labelKey: 'nav_crypto' },
     ],
