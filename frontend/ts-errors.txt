@@ -1,0 +1,17 @@
+src/components/BottomNav.tsx(11,28): error TS2304: Cannot find name 'BarChart3'.
+src/components/Sidebar.tsx(31,3): error TS6133: 'Percent' is declared but its value is never read.
+src/pages/Assets.tsx(318,22): error TS2339: Property 'connected' does not exist on type '{}'.
+src/pages/LoansDashboard.tsx(8,9): error TS6133: 't' is declared but its value is never read.
+src/pages/LoansDashboard.tsx(36,35): error TS2304: Cannot find name 'useState'.
+src/pages/PropertyROI.tsx(7,32): error TS6133: 'ChevronDown' is declared but its value is never read.
+src/pages/PropertyROI.tsx(51,10): error TS6133: 'showCharges' is declared but its value is never read.
+src/pages/PropertyROI.tsx(51,23): error TS6133: 'setShowCharges' is declared but its value is never read.
+src/pages/PropertyROI.tsx(52,9): error TS2488: Type 'number' must have a '[Symbol.iterator]()' method that returns an iterator.
+src/pages/PropertyROI.tsx(52,10): error TS6133: 'selectedProp' is declared but its value is never read.
+src/pages/PropertyROI.tsx(52,24): error TS6133: 'setSelectedProp' is declared but its value is never read.
+src/pages/PropertyROI.tsx(52,43): error TS2362: The left-hand side of an arithmetic operation must be of type 'any', 'number', 'bigint' or an enum type.
+src/pages/PropertyROI.tsx(52,52): error TS2304: Cannot find name 'lt'.
+src/pages/PropertyROI.tsx(52,55): error TS2693: 'Property' only refers to a type, but is being used as a value here.
+src/pages/PropertyROI.tsx(52,66): error TS18050: The value 'null' cannot be used here.
+src/pages/PropertyROI.tsx(52,71): error TS2304: Cannot find name 'gt'.
+src/pages/StocksDashboard.tsx(5,9): error TS6133: 't' is declared but its value is never read.

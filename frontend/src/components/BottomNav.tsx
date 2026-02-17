@@ -1,6 +1,6 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Landmark, ArrowLeftRight, Building2, Bitcoin, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Landmark, ArrowLeftRight, Building2, Bitcoin, BarChart3, MoreHorizontal } from 'lucide-react';
 
 const items = [
   { path: '/', icon: LayoutDashboard, labelKey: 'nav_dashboard' },

@@ -84,7 +84,7 @@ async function refreshStaleConnections() {
     try {
       // Get active token for user
       const connRes = await db.execute({
-        sql: 'SELECT powens_token FROM bank_connections WHERE user_id = ? AND status = "active" LIMIT 1',
+        sql: "SELECT powens_token FROM bank_connections WHERE user_id = ? AND status = 'active' LIMIT 1",
         args: [userId],
       });
       const token = (connRes.rows[0] as any)?.powens_token;
@@ -112,7 +112,7 @@ async function refreshStaleConnections() {
       for (const powensAcc of powensAccounts) {
         const providerId = String(powensAcc.id);
         const accRes = await db.execute({
-          sql: 'SELECT id, company_id FROM bank_accounts WHERE provider = "powens" AND provider_account_id = ?',
+          sql: "SELECT id, company_id FROM bank_accounts WHERE provider = 'powens' AND provider_account_id = ?",
           args: [providerId],
         });
         const ba = accRes.rows[0] as any;

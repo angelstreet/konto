@@ -18,6 +18,7 @@ import Income from './pages/Income';
 import Analytics from './pages/Analytics';
 import Invoices from './pages/Invoices';
 import Bilan from './pages/Bilan';
+import FondsEuros from './pages/FondsEuros';
 import More from './pages/More';
 import Outils from './pages/Outils';
 import Onboarding from './pages/Onboarding';
@@ -57,6 +58,7 @@ function AppRoutes() {
       <Route path="/property-roi" element={<PropertyROI />} />
       <Route path="/simulators" element={<CreditSimulator />} />
       <Route path="/outils" element={<Outils />} />
+      <Route path="/fonds-euros" element={<FondsEuros />} />
       <Route path="/more" element={<More />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
