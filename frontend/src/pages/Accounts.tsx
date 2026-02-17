@@ -101,6 +101,7 @@ export default function Accounts() {
   const [filterCrypto, setFilterCrypto] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [overflowMenuId, setOverflowMenuId] = useState<number | null>(null);
+  // groupedView reserved for future bank-grouped UI
 
   // Add account state
   const [addMode, setAddMode] = useState<AddMode>(null);

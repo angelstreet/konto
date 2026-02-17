@@ -1,6 +1,5 @@
-import { useState, useMemo } from 'react';
-import { useTranslation } from 'react-i18next';
-import { ArrowLeft, Car, Watch, Package, Plus } from 'lucide-react';
+import { useState } from 'react';
+import { ArrowLeft, Car, Plus } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
 import EyeToggle from '../components/EyeToggle';
@@ -13,18 +12,14 @@ const fmtCompact = (n: number) => {
   if (Math.abs(n) >= 1_000) return `${Math.round(n / 1_000)}k€`;
   return `${Math.round(n)}€`;
 };
+const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(2)}%`;
 
 const periods = ['1J', '7J', '1M', '3M', 'YTD', '1A', 'TOUT'] as const;
 type Period = typeof periods[number];
 
-const mockChartData = [
-  { date: '2025-02-01', value: 28000 },
-  { date: '2025-08-01', value: 28000 },
-  { date: '2026-02-17', value: 30000 },
-];
+// mockChartData reserved for future Recharts LineChart
 
 export default function AutresActifs() {
-  const { t } = useTranslation();
   const navigate = useNavigate();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const f = (n: number) => hideAmounts ? <span className="amount-masked">{fmt(n)}</span> : fmt(n);
@@ -34,13 +29,6 @@ export default function AutresActifs() {
   const assetCount = 4;
   const oneYearChange = 0;
   const oneYearPct = 0;
-
-  const chartData = useMemo(() => mockChartData, []);
-
-  const formatDate = (value: string) => {
-    const date = new Date(value);
-    return date.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
-  };
 
   return (
     <div>

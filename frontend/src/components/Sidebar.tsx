@@ -28,7 +28,6 @@ import {
   User,
   Briefcase,
   TrendingUp,
-  Percent,
   Bitcoin,
 } from 'lucide-react';
 

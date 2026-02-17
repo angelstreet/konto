@@ -1,8 +1,6 @@
-import { useTranslation } from 'react-i18next';
 import { BarChart3, Plus } from 'lucide-react';
 
 export default function StocksDashboard() {
-  const { t } = useTranslation();
 
   return (
     <div>

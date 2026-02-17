@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  PiggyBank, Building2, BarChart3, Package, Plus, Pencil, Trash2, ChevronDown, ArrowLeft
+  PiggyBank, Building2, BarChart3, Package, Plus, ChevronDown, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -12,7 +12,7 @@ import ScopeSelect from '../components/ScopeSelect';
 import { usePreferences } from '../PreferencesContext';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import { useFilter } from '../FilterContext';
-import { useApi, useAuthFetch, invalidateApi } from '../useApi';
+import { useApi, useAuthFetch } from '../useApi';
 
 const TYPES = [
   { id: 'fonds-euros', icon: PiggyBank, labelKey: 'fonds_euros' },
@@ -66,7 +66,7 @@ export default function FondsEuros() {
     type: 'fonds-euros' as Holding['type'],
     reminder_months: '',
   });
-  const { prefs } = usePreferences();
+  usePreferences();
   const { scope, appendScope } = useFilter();
 
   const holdingsUrl = `${API}/fonds-euros`;
@@ -101,20 +101,6 @@ export default function FondsEuros() {
     setShowForm(true);
   };
 
-  const startEdit = (h: Holding) => {
-    setForm({
-      name: h.name,
-      account_id: h.account_id ? String(h.account_id) : '',
-      current_value: String(h.current_value),
-      annual_rate: h.annual_rate ? String(h.annual_rate * 100) : '',
-      last_update_date: h.last_update_date,
-      type: h.type,
-      reminder_months: h.reminder_months ? String(h.reminder_months) : '',
-    });
-    setEditingId(h.id);
-    setShowForm(true);
-  };
-
   const save = async () => {
     const body = {
       name: form.name,
@@ -138,17 +124,6 @@ export default function FondsEuros() {
     } catch (e) {
       console.error(e);
     }
-  };
-
-  const deleteHolding = (id: number) => {
-    setConfirmAction({
-      message: 'Confirmer la suppression ?',
-      onConfirm: async () => {
-        setConfirmAction(null);
-        await authFetch(`${API}/fonds-euros/${id}`, { method: 'DELETE' });
-        reload();
-      },
-    });
   };
 
   const typeIcon = (type: string) => {
@@ -283,7 +258,6 @@ export default function FondsEuros() {
         <div className="space-y-3">
           {holdingList.map((h: Holding) => {
             const Icon = typeIcon(h.type);
-            const expanded = false; // stub
             return (
               <div key={h.id} className="bg-surface rounded-xl border border-border overflow-hidden">
                 <div 

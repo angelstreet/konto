@@ -1,5 +1,5 @@
 import { API } from '../config';
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Download, Volume2, VolumeX, ChevronDown, Landmark, TrendingUp, Home, CreditCard, PlusCircle } from 'lucide-react';
 import EyeToggle from '../components/EyeToggle';
@@ -57,11 +57,14 @@ export default function Dashboard() {
   const { appendScope } = useFilter();
   const { formatCurrency, convertToDisplay } = usePreferences();
   const { data, loading } = useApi<DashboardData>(appendScope(`${API}/dashboard`));
+  const { data: accountsData } = useApi<any[]>(appendScope(`${API}/bank/accounts`));
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const [showNet, setShowNet] = useState(() => localStorage.getItem('konto_show_net') !== 'false');
   const [donutOpen, setDonutOpen] = useState(true);
   const [speaking, setSpeaking] = useState(false);
   const fc = (n: number) => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
+
+  const convertBalance = (balance: number, currency: string) => convertToDisplay(balance, currency || 'EUR');
 
   const quoteIndex = (Math.floor(Date.now() / 86400000) % QUOTE_COUNT) + 1;
   const quoteText = t(`quote_${quoteIndex}`);
@@ -92,9 +95,27 @@ export default function Dashboard() {
   // Crypto = blockchain/coinbase accounts (type investment with crypto currencies)
   // For now include all investments as "Stocks" and patrimoine real_estate as "Real Estate"
   const cashTotal = checking + savings;
-  
+
   const brutTotal = cashTotal + investments + immoValue + (data ? data.patrimoine.assets.filter(a => a.type !== 'real_estate').reduce((s, a) => s + a.currentValue, 0) : 0);
   const netTotal = brutTotal + loans;
+
+  interface BankGroup {
+    bank: string;
+    total: number;
+  }
+
+  const bankTotals = useMemo<BankGroup[]>(() => {
+    if (!accountsData) return [];
+    const groups: Record<string, number> = {};
+    accountsData.filter((a: any) => ['checking', 'savings', 'investment'].includes(a.type || '')).forEach((a: any) => {
+      const bank = a.bank_name || 'Sans banque';
+      groups[bank] = (groups[bank] || 0) + convertBalance(a.balance, a.currency || 'EUR');
+    });
+    return Object.entries(groups)
+      .map(([bank, total]) => ({ bank, total }))
+      .sort((a, b) => Math.abs(b.total) - Math.abs(a.total))
+      .slice(0, 8);
+  }, [accountsData, convertBalance]);
 
   // Summary blocks
   const summaryBlocks = data ? [
@@ -212,6 +233,27 @@ export default function Dashboard() {
                 </div>
               );
             })}
+          </div>
+
+          {/* Summary blocks */}
+          <div className="mb-3">
+            <h3 className="text-xs font-medium text-muted mb-2 uppercase tracking-wider flex items-center gap-1">
+              <Landmark size={12} />
+              Comptes par banque
+            </h3>
+            <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2">
+              {bankTotals.map(({bank, total}) => (
+                <div key={bank} className="bg-surface rounded-xl border border-border px-3 py-2 flex items-center gap-2">
+                  <Landmark size={16} className="text-blue-400 flex-shrink-0" />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[11px] text-muted truncate font-medium">{bank}</p>
+                    <p className={`text-sm font-semibold ${total < 0 ? 'text-orange-400' : 'text-accent-400'}`}>
+                      {fc(total)}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
           </div>
 
           {/* Patrimoine evolution chart — separate section, self-hides when empty */}

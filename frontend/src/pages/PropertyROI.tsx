@@ -4,7 +4,7 @@ import { API } from '../config';
 import { useAuthFetch } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
-import { ArrowLeft, Building2, ChevronDown, Home } from 'lucide-react';
+import { ArrowLeft, Building2, Home } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -48,8 +48,7 @@ export default function PropertyROI() {
   const [data, setData] = useState<ROIData | null>(null);
   const [loading, setLoading] = useState(true);
   const [months, setMonths] = useState(6);
-  const [showCharges, setShowCharges] = useState(false);
-  const [selectedProp, setSelectedProp] = useState&lt;Property | null&gt;(null);
+  // showCharges and selectedProp reserved for future expand/filter UI
 
   useEffect(() => {
     setLoading(true);

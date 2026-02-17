@@ -1,0 +1,43 @@
+
+> konto-frontend@0.1.0 dev
+> vite
+
+Port 5176 is in use, trying another one...
+Port 5177 is in use, trying another one...
+
+  VITE v5.4.21  ready in 145 ms
+
+  ➜  Local:   http://localhost:5178/konto/
+  ➜  Network: http://192.168.0.133:5178/konto/
+  ➜  Network: http://172.18.0.1:5178/konto/
+6:52:32 PM [vite] Pre-transform error: /home/jndoye/shared/projects/konto/frontend/src/pages/Dashboard.tsx: Identifier 'bankTotals' has already been declared. (118:8)
+
+  116 |   }
+  117 |
+> 118 |   const bankTotals = useMemo<BankGroup[]>(() => {
+      |         ^
+  119 |     if (!accountsData) return [];
+  120 |     const groups: Record<string, number> = {};
+  121 |     accountsData.filter((a: any) => ['checking', 'savings', 'investment'].includes(a.type || '')).forEach((a: any) => {
+6:52:32 PM [vite] hmr update /src/pages/Assets.tsx, /src/index.css
+6:52:36 PM [vite] hmr update /src/pages/PropertyROI.tsx, /src/index.css
+6:52:42 PM [vite] hmr update /src/pages/AutresActifs.tsx, /src/index.css
+6:53:34 PM [vite] hmr update /src/pages/Accounts.tsx, /src/index.css
+6:53:41 PM [vite] hmr update /src/pages/Accounts.tsx, /src/index.css
+6:53:45 PM [vite] hmr update /src/components/Sidebar.tsx, /src/index.css
+6:53:50 PM [vite] hmr update /src/pages/AutresActifs.tsx, /src/index.css
+6:54:46 PM [vite] hmr update /src/pages/AutresActifs.tsx, /src/index.css
+6:54:49 PM [vite] hmr update /src/pages/AutresActifs.tsx, /src/index.css
+6:54:55 PM [vite] hmr update /src/pages/AutresActifs.tsx, /src/index.css
+6:55:18 PM [vite] hmr update /src/pages/FondsEuros.tsx, /src/index.css
+6:55:21 PM [vite] hmr update /src/pages/FondsEuros.tsx, /src/index.css
+6:55:24 PM [vite] hmr update /src/pages/FondsEuros.tsx, /src/index.css
+6:55:36 PM [vite] hmr update /src/pages/FondsEuros.tsx, /src/index.css
+6:55:40 PM [vite] hmr update /src/pages/FondsEuros.tsx, /src/index.css
+6:55:49 PM [vite] hmr update /src/pages/FondsEuros.tsx, /src/index.css
+6:55:58 PM [vite] hmr update /src/pages/LoansDashboard.tsx, /src/index.css
+6:56:01 PM [vite] hmr update /src/pages/PropertyROI.tsx, /src/index.css
+6:56:09 PM [vite] hmr update /src/pages/PropertyROI.tsx, /src/index.css
+6:56:15 PM [vite] page reload src/pages/StocksDashboard.tsx
+6:56:22 PM [vite] hmr update /src/pages/Accounts.tsx, /src/index.css
+6:56:36 PM [vite] hmr update /src/pages/AutresActifs.tsx, /src/index.css

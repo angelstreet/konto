@@ -1,43 +1,26 @@
 import { useState } from 'react';
-import { useTranslation } from 'react-i18next';
+import { useApi } from '../useApi';
+import { useFilter } from '../FilterContext';
+import { API } from '../config';
 import { Banknote, Plus, ChevronDown } from 'lucide-react';
 import EyeToggle from '../components/EyeToggle';
 import ScopeSelect from '../components/ScopeSelect';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 
 export default function LoansDashboard() {
-  const { t } = useTranslation();
+  const { appendScope } = useFilter();
+  const { data: loansData } = useApi<any[]>(appendScope(`${API}/bank/accounts?type=loan`));
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const f = (n: number) => hideAmounts ? `***€` : new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
 
-  // Mock data for expandable cards (#714)
-  const loans = [
-    {
-      id: 1,
-      name: 'CIC Prêt Immo Modulable (JND Construction)',
-      bank: 'CIC',
-      remaining: 415833,
-      paid: 0.12,
-      rate: 2.60,
-      monthly: 2121,
-      linkedProperty: 'Villa Miami',
-    },
-    {
-      id: 2,
-      name: 'CIC Prêt Immo Modulable (personal)',
-      bank: 'CIC',
-      remaining: 127800,
-      paid: 0.31,
-      rate: 1.15,
-      monthly: 813,
-      linkedProperty: 'T4 Vitrolles',
-    },
-  ];
+  const loans = (loansData || []) as any[];
 
   const [expanded, setExpanded] = useState<number | null>(null);
 
-  const totalRemaining = loans.reduce((sum, loan) => sum + loan.remaining, 0);
-  const totalMonthly = loans.reduce((sum, loan) => sum + loan.monthly, 0);
+  const totalDebt = loans.reduce((sum, loan) => sum + Math.abs(loan.balance || 0), 0);
+  const totalMonthly = 0; // N/A - not in API
+  const avgRate = 0; // N/A - not in API
+  const count = loans.length;
 
   return (
     <div>
@@ -51,17 +34,21 @@ export default function LoansDashboard() {
 
       {/* Summary header */}
       <div className="bg-gradient-to-br from-red-900/80 to-red-800/80 backdrop-blur-sm rounded-2xl border border-red-700/50 p-6 mb-6 shadow-2xl">
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
           <div>
-            <p className="text-red-300 text-sm font-medium uppercase tracking-wide mb-2">Capital restant dû</p>
-            <p className="text-4xl lg:text-5xl font-bold text-white">{f(totalRemaining)}</p>
+            <p className="text-red-300 text-sm font-medium uppercase tracking-wide mb-2">Total dette</p>
+            <p className="text-4xl lg:text-5xl font-bold text-white">{f(totalDebt)}</p>
           </div>
           <div>
             <p className="text-red-300 text-sm font-medium uppercase tracking-wide mb-2">Mensualités totales</p>
-            <p className="text-3xl font-bold text-red-400">{f(totalMonthly)}/mois</p>
+            <p className="text-3xl font-bold text-red-400">{totalMonthly ? `${f(totalMonthly)}/mois` : 'N/A'}</p>
+          </div>
+          <div>
+            <p className="text-red-300 text-sm font-medium uppercase tracking-wide mb-2">Taux moyen</p>
+            <p className="text-3xl font-bold text-red-400">{avgRate ? `${avgRate}%` : 'N/A'}</p>
           </div>
           <div className="text-right lg:text-left pt-4 lg:pt-0 border-t border-red-700/50">
-            <p className="text-xs text-red-400">2 prêts actifs</p>
+            <p className="text-xs text-red-400">{count} prêts actifs</p>
           </div>
         </div>
       </div>
