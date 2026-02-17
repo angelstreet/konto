@@ -23,7 +23,6 @@ import Onboarding from './pages/Onboarding';
 import Trends from './pages/Trends';
 import PropertyROI from './pages/PropertyROI';
 import CryptoDashboard from './pages/CryptoDashboard';
-import LoansDashboard from './pages/LoansDashboard';
 import { FilterProvider } from './FilterContext';
 import { PreferencesProvider, usePreferences } from './PreferencesContext';
 import { AmountVisibilityProvider } from './AmountVisibilityContext';
@@ -55,7 +54,6 @@ function AppRoutes() {
       <Route path="/trends" element={<Trends />} />
       <Route path="/trends-pro" element={<Trends />} />
       <Route path="/property-roi" element={<PropertyROI />} />
-      <Route path="/loans" element={<LoansDashboard />} />
       <Route path="/crypto" element={<CryptoDashboard />} />
       <Route path="/simulators" element={<CreditSimulator />} />
       <Route path="/outils" element={<Outils />} />
