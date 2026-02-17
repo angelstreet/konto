@@ -1,12 +1,13 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Landmark, ArrowLeftRight, Building2, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Landmark, ArrowLeftRight, Building2, Bitcoin, MoreHorizontal } from 'lucide-react';
 
 const items = [
   { path: '/', icon: LayoutDashboard, labelKey: 'nav_dashboard' },
   { path: '/accounts', icon: Landmark, labelKey: 'nav_accounts' },
   { path: '/transactions', icon: ArrowLeftRight, labelKey: 'nav_transactions' },
   { path: '/companies', icon: Building2, labelKey: 'nav_companies' },
+  { path: '/crypto', icon: Bitcoin, labelKey: 'nav_crypto' },
   { path: '/more', icon: MoreHorizontal, labelKey: 'more' },
 ];
 
