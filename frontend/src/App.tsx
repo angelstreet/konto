@@ -10,6 +10,7 @@ import Transactions from './pages/Transactions';
 import Company from './pages/Company';
 import Settings from './pages/Settings';
 import Assets from './pages/Assets';
+import AutresActifs from './pages/AutresActifs';
 import LoansDashboard from './pages/LoansDashboard';
 import ComingSoon from './pages/ComingSoon';
 import CreditSimulator from './pages/CreditSimulator';
@@ -39,6 +40,7 @@ function AppRoutes() {
       <Route path="/companies" element={<Company />} />
       <Route path="/settings" element={<Settings />} />
       <Route path="/assets" element={<Assets />} />
+<Route path="/autres-actifs" element={<AutresActifs />} />
       <Route path="/loans" element={<LoansDashboard />} />
       <Route path="/analysis" element={<Analytics />} />
       <Route path="/cashflow" element={<ComingSoon titleKey="nav_cashflow" />} />

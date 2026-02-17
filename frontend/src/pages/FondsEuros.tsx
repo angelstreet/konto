@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  PiggyBank, Building2, BarChart3, Package, Plus, Pencil, Trash2, ChevronDown, X, ArrowLeft
+  PiggyBank, Building2, BarChart3, Package, Plus, Pencil, Trash2, ChevronDown, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -33,7 +33,12 @@ interface Holding {
   reminder_months?: number;
 }
 
-interface BankAccount { id: number; name: string; custom_name: string | null; type: string; }
+interface BankAccount { 
+  id: number; 
+  name: string; 
+  custom_name: string | null; 
+  type: string; 
+}
 
 const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
 const fmtCompact = (n: number) => {
@@ -49,10 +54,8 @@ export default function FondsEuros() {
   const authFetch = useAuthFetch();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const f = (n: number): React.ReactNode => hideAmounts ? <span className="amount-masked">{fmt(n)}</span> : fmt(n);
-  const [filter, setFilter] = useState('');
-  const [showForm, setShowForm] = useState(false);
+  const [showForm, setShowForm ] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
   const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [form, setForm] = useState({
     name: '',
@@ -66,23 +69,18 @@ export default function FondsEuros() {
   const { prefs } = usePreferences();
   const { scope, appendScope } = useFilter();
 
-  const holdingsUrl = useMemo(() => {
-    let url = `${API}/fonds-euros`;
-    if (filter) url += `?type=${filter}`;
-    return url;
-  }, [filter]);
+  const holdingsUrl = `${API}/fonds-euros`;
 
   const accountsUrl = useMemo(() => appendScope(`${API}/bank/accounts`), [scope, appendScope]);
 
-  const { data: holdings, refetch: refetchHoldings } = useApi<any[]>(holdingsUrl);
+  const { data: holdings } = useApi<any[]>(holdingsUrl);
   const { data: accountsRaw } = useApi<BankAccount[]>(accountsUrl);
 
   const accounts = accountsRaw || [];
   const holdingList = holdings || [];
 
   const reload = () => {
-    invalidateApi(holdingsUrl);
-    refetchHoldings();
+    window.location.reload();
   };
 
   const resetForm = () => {
@@ -161,182 +159,166 @@ export default function FondsEuros() {
   const totalValue = holdingList.reduce((s, h) => s + h.current_value, 0);
 
   return (
-    &lt;div&gt;
-      &lt;div className="flex items-center justify-between gap-2 mb-2 h-10"&gt;
-        &lt;div className="flex items-center gap-2 min-w-0"&gt;
-          &lt;button onClick={() =&gt; navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0"&gt;
-            &lt;ArrowLeft size={20} /&gt;
-          &lt;/button&gt;
-          &lt;h1 className="text-xl font-semibold whitespace-nowrap"&gt;Fonds Euros&lt;/h1&gt;
-          {holdingList.length &gt; 0 &amp;&amp; (
-            &lt;EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} /&gt;
+    <div>
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <div className="flex items-center gap-2 min-w-0">
+          <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-semibold whitespace-nowrap">Fonds Euros</h1>
+          {holdingList.length > 0 && (
+            <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
           )}
-        &lt;/div&gt;
-        &lt;div className="flex items-center gap-1 flex-shrink-0"&gt;
-          &lt;span className="hidden md:block"&gt;&lt;ScopeSelect /&gt;&lt;/span&gt;
-          &lt;button
+        </div>
+        <div className="flex items-center gap-1 flex-shrink-0">
+          <span className="hidden md:block"><ScopeSelect /></span>
+          <button
             onClick={startCreate}
             className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black"
-          &gt;
-            &lt;Plus size={16} /&gt; &lt;span className="hidden sm:inline"&gt;Ajouter&lt;/span&gt;
-          &lt;/button&gt;
-        &lt;/div&gt;
-      &lt;/div&gt;
-      {holdingList.length &gt; 0 &amp;&amp; (
-        &lt;div className="text-sm text-muted mb-3"&gt;
-          Total: {hideAmounts ? &lt;span className="amount-masked"&gt;{fmtCompact(totalValue)}&lt;/span&gt; : fmtCompact(totalValue)}
-        &lt;/div&gt;
+          >
+            <Plus size={16} /> <span className="hidden sm:inline">Ajouter</span>
+          </button>
+        </div>
+      </div>
+      {holdingList.length > 0 && (
+        <div className="text-sm text-muted mb-3">
+          Total: {hideAmounts ? <span className="amount-masked">{fmtCompact(totalValue)}</span> : fmtCompact(totalValue)}
+        </div>
       )}
 
-      {showForm &amp;&amp; (
-        &lt;div className="bg-surface rounded-xl border border-border p-3.5 mb-3 md:max-w-2xl mx-auto"&gt;
-          &lt;h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-2"&gt;
+      {showForm && (
+        <div className="bg-surface rounded-xl border border-border p-3.5 mb-3 md:max-w-2xl mx-auto">
+          <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-2">
             {editingId ? 'Modifier le fonds' : 'Nouveau fonds'}
-          &lt;/h2&gt;
-          &lt;div className="space-y-3"&gt;
-            &lt;input
+          </h2>
+          <div className="space-y-3">
+            <input
               placeholder="Nom du fonds (ex: Fonds euros Suravenir Opportunités 2)" 
               value={form.name}
-              onChange={e =&gt; setForm(f =&gt; ({ ...f, name: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm"
-            /&gt;
-            &lt;select 
+            />
+            <select 
               value={form.type}
-              onChange={e =&gt; setForm(f =&gt; ({ ...f, type: e.target.value as Holding['type'] }))}
+              onChange={e => setForm(f => ({ ...f, type: e.target.value as Holding['type'] }))}
               className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm"
-            &gt;
-              {TYPES.map(({ id, labelKey }) =&gt; (
-                &lt;option key={id} value={id}&gt;{t(labelKey) || id.replace('-', ' ').toUpperCase()}&lt;/option&gt;
+            >
+              {TYPES.map(({ id, labelKey }) => (
+                <option key={id} value={id}>{t(labelKey) || id.replace('-', ' ').toUpperCase()}</option>
               ))}
-            &lt;/select&gt;
-            &lt;select 
+            </select>
+            <select 
               value={form.account_id}
-              onChange={e =&gt; setForm(f =&gt; ({ ...f, account_id: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, account_id: e.target.value }))}
               className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm"
-            &gt;
-              &lt;option value=""&gt;Sélectionner un compte / assurance-vie&lt;/option&gt;
-              {accounts.map(a =&gt; (
-                &lt;option key={a.id} value={a.id.toString()}&gt;{a.custom_name || a.name}&lt;/option&gt;
+            >
+              <option value="">Sélectionner un compte / assurance-vie</option>
+              {accounts.map(a => (
+                <option key={a.id} value={a.id.toString()}>{a.custom_name || a.name}</option>
               ))}
-            &lt;/select&gt;
-            &lt;div&gt;
-              &lt;label className="text-xs text-muted mb-1 block font-medium"&gt;Mettre à jour la valeur&lt;/label&gt;
-              &lt;input 
+            </select>
+            <div>
+              <label className="text-xs text-muted mb-1 block font-medium">Mettre à jour la valeur</label>
+              <input 
                 type="number"
                 placeholder="Valeur actuelle (€)"
                 value={form.current_value}
-                onChange={e =&gt; setForm(f =&gt; ({ ...f, current_value: e.target.value }))}
+                onChange={e => setForm(f => ({ ...f, current_value: e.target.value }))}
                 className="w-full bg-accent-500/10 border-2 border-accent-500 rounded-lg px-3 py-2 text-sm font-semibold text-accent-400"
-              /&gt;
-            &lt;/div&gt;
-            &lt;input
+              />
+            </div>
+            <input
               type="date"
               placeholder="Date de mise à jour"
               value={form.last_update_date}
-              onChange={e =&gt; setForm(f =&gt; ({ ...f, last_update_date: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, last_update_date: e.target.value }))}
               className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm"
-            /&gt;
-            &lt;input
+            />
+            <input
               type="number"
               placeholder="Taux annuel (%)"
               value={form.annual_rate}
-              onChange={e =&gt; setForm(f =&gt; ({ ...f, annual_rate: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, annual_rate: e.target.value }))}
               step="0.01"
               className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm"
-            /&gt;
-            &lt;select 
+            />
+            <select 
               value={form.reminder_months}
-              onChange={e =&gt; setForm(f =&gt; ({ ...f, reminder_months: e.target.value }))}
+              onChange={e => setForm(f => ({ ...f, reminder_months: e.target.value }))}
               className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm"
-            &gt;
-              &lt;option value=""&gt;Pas de rappel&lt;/option&gt;
-              &lt;option value="3"&gt;Tous les 3 mois&lt;/option&gt;
-              &lt;option value="6"&gt;Tous les 6 mois&lt;/option&gt;
-              &lt;option value="12"&gt;Tous les 12 mois&lt;/option&gt;
-            &lt;/select&gt;
-            &lt;div className="flex gap-2 pt-2"&gt;
-              &lt;button 
+            >
+              <option value="">Pas de rappel</option>
+              <option value="3">Tous les 3 mois</option>
+              <option value="6">Tous les 6 mois</option>
+              <option value="12">Tous les 12 mois</option>
+            </select>
+            <div className="flex gap-2 pt-2">
+              <button 
                 onClick={save} 
                 disabled={!form.name || !form.current_value}
                 className="flex-1 px-4 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black disabled:opacity-40"
-              &gt;
+              >
                 {editingId ? 'Sauvegarder' : 'Créer'}
-              &lt;/button&gt;
-              &lt;button 
-                onClick={() =&gt; { setShowForm(false); resetForm(); }}
+              </button>
+              <button 
+                onClick={() => { setShowForm(false); resetForm(); }}
                 className="px-4 py-2 rounded-lg text-sm font-medium bg-transparent text-muted hover:text-white"
-              &gt;
+              >
                 Annuler
-              &lt;/button&gt;
-            &lt;/div&gt;
-          &lt;/div&gt;
-        &lt;/div&gt;
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {holdingList.length === 0 ? (
-        &lt;div className="bg-surface rounded-xl border border-border p-8 text-center"&gt;
-          &lt;PiggyBank className="mx-auto text-muted mb-3" size={32} /&gt;
-          &lt;p className="text-muted text-sm"&gt;Aucun fonds euros ajouté.&lt;/p&gt;
-          &lt;button onClick={startCreate} className="mt-4 px-6 py-2 bg-accent-500 text-black rounded-lg font-medium"&gt;
+        <div className="bg-surface rounded-xl border border-border p-8 text-center">
+          <PiggyBank className="mx-auto text-muted mb-3" size={32} />
+          <p className="text-muted text-sm">Aucun fonds euros ajouté.</p>
+          <button onClick={startCreate} className="mt-4 px-6 py-2 bg-accent-500 text-black rounded-lg font-medium">
             Ajouter mon premier
-          &lt;/button&gt;
-        &lt;/div&gt;
+          </button>
+        </div>
       ) : (
-        &lt;div className="space-y-3"&gt;
-          {holdingList.map((h: Holding) =&gt; {
+        <div className="space-y-3">
+          {holdingList.map((h: Holding) => {
             const Icon = typeIcon(h.type);
-            const expanded = expandedId === h.id;
+            const expanded = false; // stub
             return (
-              &lt;div key={h.id} className="bg-surface rounded-xl border border-border overflow-hidden"&gt;
-                &lt;div 
+              <div key={h.id} className="bg-surface rounded-xl border border-border overflow-hidden">
+                <div 
                   className="px-4 py-3 cursor-pointer hover:bg-surface-hover transition-colors"
-                  onClick={() =&gt; setExpandedId(expanded ? null : h.id)}
-                &gt;
-                  &lt;div className="flex items-center gap-2"&gt;
-                    &lt;div className="w-8 h-8 rounded-lg bg-accent-500/10 items-center justify-center flex-shrink-0 hidden md:flex"&gt;
-                      &lt;Icon size={16} className="text-accent-400" /&gt;
-                    &lt;/div&gt;
-                    &lt;p className="text-sm font-medium text-white truncate min-w-0 flex-1"&gt;{h.name}&lt;/p&gt;
-                    &lt;span className="text-sm font-semibold text-accent-400 flex-shrink-0"&gt;
+                >
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-lg bg-accent-500/10 items-center justify-center flex-shrink-0 hidden md:flex">
+                      <Icon size={16} className="text-accent-400" />
+                    </div>
+                    <p className="text-sm font-medium text-white truncate min-w-0 flex-1">{h.name}</p>
+                    <span className="text-sm font-semibold text-accent-400 flex-shrink-0">
                       {f(h.current_value)}
-                    &lt;/span&gt;
-                    &lt;ChevronDown size={14} className={`text-muted flex-shrink-0 transition-transform duration-200 ${expanded ? 'rotate-0' : '-rotate-90'}`} /&gt;
-                  &lt;/div&gt;
-                  &lt;div className="mt-1 flex items-center gap-2 text-xs text-muted"&gt;
-                    {h.account_name &amp;&amp; &lt;span&gt;{h.account_name}&lt;/span&gt;}
-                    {h.annual_rate &amp;&amp; &lt;span className="text-green-400"&gt;{fmtPct(h.annual_rate * 100)}/an&lt;/span&gt;}
-                    &lt;span&gt;{h.last_update_date}&lt;/span&gt;
-                  &lt;/div&gt;
-                &lt;/div&gt;
-                {expanded &amp;&amp; (
-                  &lt;div className="px-4 pb-3 border-t border-border/50 pt-3"&gt;
-                    &lt;div className="flex gap-2 mb-3"&gt;
-                      &lt;button onClick={e =&gt; { e.stopPropagation(); startEdit(h); }} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-white/5 hover:bg-white/10"&gt;
-                        &lt;Pencil size={12} /&gt; Modifier
-                      &lt;/button&gt;
-                      &lt;button onClick={e =&gt; { e.stopPropagation(); deleteHolding(h.id); }} className="flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs bg-white/5 hover:bg-red-500/10 text-red-400"&gt;
-                        &lt;Trash2 size={12} /&gt; Supprimer
-                      &lt;/button&gt;
-                    &lt;/div&gt;
-                    {h.reminder_months &amp;&amp; (
-                      &lt;p className="text-xs text-muted mb-2"&gt;Rappel tous les {h.reminder_months} mois&lt;/p&gt;
-                    )}
-                  &lt;/div&gt;
-                )}
-              &lt;/div&gt;
+                    </span>
+                    <ChevronDown size={14} className="text-muted flex-shrink-0 transition-transform duration-200 rotate-[-90deg]" />
+                  </div>
+                  <div className="mt-1 flex items-center gap-2 text-xs text-muted">
+                    {h.account_name && <span>{h.account_name}</span>}
+                    {h.annual_rate && <span className="text-green-400">{fmtPct(h.annual_rate * 100)}/an</span>}
+                    <span>{h.last_update_date}</span>
+                  </div>
+                </div>
+              </div>
             );
           })}
-        &lt;/div&gt;
+        </div>
       )}
 
-      &lt;ConfirmDialog
+      <ConfirmDialog
         open={!!confirmAction}
         title="Supprimer"
         message={confirmAction?.message || ''}
         variant="danger"
-        onConfirm={() =&gt; confirmAction?.onConfirm()}
-        onCancel={() =&gt; setConfirmAction(null)}
-      /&gt;
-    &lt;/div&gt;
+        onConfirm={() => confirmAction?.onConfirm()}
+        onCancel={() => setConfirmAction(null)}
+      />
+    </div>
   );
 }
