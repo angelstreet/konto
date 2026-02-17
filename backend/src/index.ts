@@ -2716,7 +2716,7 @@ export { app };
 async function main() {
   await initDatabase();
   await migrateDatabase();
-  serve({ fetch: app.fetch, port: 3004 }, (info) => {
+  serve({ fetch: app.fetch, port: Number(process.env.PORT) || 5004 }, (info) => {
     console.log(`🦎 Konto API running on http://localhost:${info.port}`);
   });
 }
