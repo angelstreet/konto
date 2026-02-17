@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Banknote, Plus, ChevronDown } from 'lucide-react';
 import EyeToggle from '../components/EyeToggle';
