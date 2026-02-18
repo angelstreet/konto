@@ -297,7 +297,7 @@ export default function Import() {
             </div>
             <div className="text-center">
               <div className="text-[11px] text-muted">{t('period')}</div>
-              <div className="text-sm font-bold">{summary.from?.slice(5)} → {summary.to?.slice(5)}</div>
+              <div className="text-sm font-bold">{summary.from} → {summary.to}</div>
             </div>
             <div className="text-center">
               <div className="text-[11px] text-muted text-green-400">{t('revenue')}</div>

@@ -5,7 +5,6 @@ import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Receipt, Building2
 import { useNavigate } from 'react-router-dom';
 import { useApi } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
-import { useFilter } from '../FilterContext';
 import EyeToggle from '../components/EyeToggle';
 
 interface BilanData {
@@ -31,13 +30,12 @@ export default function Bilan() {
   const { t: _t } = useTranslation();
   const navigate = useNavigate();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
-  const { appendScope } = useFilter();
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
   const [year, setYear] = useState(() => {
     const stored = localStorage.getItem('konto_bilan_year');
     return stored ? parseInt(stored) : new Date().getFullYear();
   });
-  const { data, loading } = useApi<BilanData>(appendScope(`${API}/bilan/${year}`));
+  const { data, loading } = useApi<BilanData>(`${API}/bilan/${year}?usage=personal`);
 
   const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
 

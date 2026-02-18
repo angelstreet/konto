@@ -164,6 +164,62 @@ async function refreshPowensToken(connectionId: number): Promise<string | null> 
   }
 }
 
+// --- Helper: get valid Drive access token (refresh if expired) ---
+async function getDriveAccessToken(driveConn: any): Promise<string> {
+  const now = new Date();
+  const expiry = driveConn.token_expiry ? new Date(driveConn.token_expiry) : null;
+
+  // If token not expired (with 5min buffer), return as-is
+  if (expiry && expiry.getTime() - 5 * 60 * 1000 > now.getTime()) {
+    return driveConn.access_token;
+  }
+
+  // Need to refresh
+  if (!driveConn.refresh_token) {
+    console.warn(`Drive connection ${driveConn.id}: no refresh_token, returning current access_token`);
+    return driveConn.access_token;
+  }
+
+  const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+  const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+
+  try {
+    console.log(`Refreshing Drive token for connection ${driveConn.id}...`);
+    const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({
+        client_id: GOOGLE_CLIENT_ID!,
+        client_secret: GOOGLE_CLIENT_SECRET!,
+        refresh_token: driveConn.refresh_token,
+        grant_type: 'refresh_token',
+      }).toString(),
+    });
+
+    const tokenData = await tokenRes.json();
+    if (!tokenRes.ok) {
+      console.error(`Drive token refresh failed for connection ${driveConn.id}:`, tokenData);
+      return driveConn.access_token; // fallback to old token
+    }
+
+    const newAccessToken = tokenData.access_token;
+    const newExpiry = tokenData.expires_in
+      ? new Date(Date.now() + tokenData.expires_in * 1000).toISOString()
+      : null;
+
+    await db.execute({
+      sql: 'UPDATE drive_connections SET access_token = ?, token_expiry = ? WHERE id = ?',
+      args: [newAccessToken, newExpiry, driveConn.id],
+    });
+
+    console.log(`Drive token refreshed for connection ${driveConn.id}`);
+    return newAccessToken;
+  } catch (err: any) {
+    console.error(`Drive token refresh error for connection ${driveConn.id}:`, err.message);
+    return driveConn.access_token; // fallback
+  }
+}
+
 // --- Health ---
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
 
@@ -2723,7 +2779,7 @@ app.get('/api/drive/folders', async (c) => {
   if (!driveConn) {
     return c.json({ error: 'No active Google Drive connection' }, 400);
   }
-  const accessToken = driveConn.access_token;
+  const accessToken = await getDriveAccessToken(driveConn);
 
   try {
     // Get parent folder ID from query (for nested navigation)

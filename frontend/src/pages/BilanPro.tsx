@@ -52,24 +52,48 @@ export default function BilanPro() {
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
   const [year, setYear] = useState(new Date().getFullYear());
-  const [selected, setSelected] = useState<Selection | null>(null); // null = not yet initialized
+
+  const readSelected = (): Selection | null => {
+    const s = localStorage.getItem('konto_bilan_pro_selected');
+    if (!s) return null;
+    if (s === 'all') return 'all';
+    const n = parseInt(s, 10);
+    return isNaN(n) ? null : n;
+  };
+
+  const [selected, setSelectedState] = useState<Selection | null>(readSelected);
+
+  const setSelected = (v: Selection) => {
+    localStorage.setItem('konto_bilan_pro_selected', String(v));
+    setSelectedState(v);
+  };
 
   const fmt = (n: number) =>
     new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
 
   const { data: proData, loading: proLoading } = useApi<ProBilanData>(`${API}/bilan-pro/${year}`);
 
-  // Default to first company once data loads
+  // Default to first company once data loads (only if nothing was previously saved)
   useEffect(() => {
     if (proData && selected === null) {
-      setSelected(proData.companies.length > 0 ? proData.companies[0].company_id : 'all');
+      const stored = readSelected();
+      if (stored !== null) {
+        // Validate stored company_id still exists
+        if (typeof stored === 'number' && !proData.companies.some(c => c.company_id === stored)) {
+          setSelected('all');
+        } else {
+          setSelectedState(stored);
+        }
+      } else {
+        setSelected(proData.companies.length > 0 ? proData.companies[0].company_id : 'all');
+      }
     }
   }, [proData, selected]);
 
-  // Reset selection when year changes
+  // Reset selection when year changes (keep stored so default picks it up again)
   const changeYear = (delta: number) => {
     setYear(y => y + delta);
-    setSelected(null);
+    setSelectedState(null);
   };
 
   const { data: detailData, loading: detailLoading } = useApi<BilanData>(

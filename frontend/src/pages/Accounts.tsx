@@ -1315,7 +1315,7 @@ export default function Accounts() {
       />
 
       {/* CSV Import Modal */}
-      {importAccountId && (csvRows.length > 0 || csvError || csvResult) && (
+      {importAccountId && (csvRows.length > 0 || csvError || csvResult || csvBatches.length > 0) && (
         <>
           <div className="fixed inset-0 bg-black/60 z-50" onClick={() => setImportAccountId(null)} />
           <div className="fixed inset-x-4 top-[10%] max-w-lg mx-auto bg-surface border border-border rounded-2xl z-50 overflow-hidden max-h-[80vh] flex flex-col">
@@ -1334,6 +1334,21 @@ export default function Accounts() {
               </button>
             </div>
 
+            {/* Account mismatch warning */}
+            {csvAccountName && (() => {
+              const targetAcc = (accounts || []).find(a => a.id === importAccountId);
+              const targetName = (targetAcc?.name || '').toUpperCase();
+              const csvName = csvAccountName.toUpperCase();
+              const matches = targetName.includes(csvName) || csvName.includes(targetName) ||
+                targetName.split(' ').some(w => w.length > 3 && csvName.includes(w));
+              return !matches ? (
+                <div className="flex items-center gap-2 px-4 py-2 bg-orange-500/10 text-xs text-orange-400">
+                  <AlertTriangle size={14} className="flex-shrink-0" />
+                  <span>CSV: <strong>{csvAccountName}</strong> — account: <strong>{targetAcc?.name}</strong></span>
+                </div>
+              ) : null;
+            })()}
+
             {/* Error */}
             {csvError && (
               <div className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-sm text-red-400">
@@ -1349,9 +1364,19 @@ export default function Accounts() {
                   {csvResult.imported} imported, {csvResult.skipped} skipped
                 </div>
                 <div className="text-xs text-muted mb-3">{csvResult.total} rows processed</div>
-                <button onClick={() => setImportAccountId(null)} className="text-xs text-accent-400 hover:text-accent-300">
-                  {t('confirm')}
-                </button>
+                <div className="flex items-center justify-center gap-4">
+                  <button onClick={() => setImportAccountId(null)} className="text-xs text-accent-400 hover:text-accent-300">
+                    {t('confirm')}
+                  </button>
+                  {csvResult.batch_id && csvResult.imported > 0 && (
+                    <button
+                      onClick={() => { undoCsvBatch(csvResult.batch_id!); setCsvResult(null); setCsvRows([]); }}
+                      className="text-xs text-red-400 hover:text-red-300"
+                    >
+                      Undo import
+                    </button>
+                  )}
+                </div>
               </div>
             ) : csvRows.length > 0 && csvSummary ? (
               <>
@@ -1363,7 +1388,7 @@ export default function Accounts() {
                   </div>
                   <div className="text-center">
                     <div className="text-[10px] text-muted">{t('period')}</div>
-                    <div className="text-xs font-bold">{csvSummary.from?.slice(5)} → {csvSummary.to?.slice(5)}</div>
+                    <div className="text-xs font-bold">{csvSummary.from} → {csvSummary.to}</div>
                   </div>
                   <div className="text-center">
                     <div className="text-[10px] text-green-400">{t('revenue')}</div>
@@ -1407,6 +1432,35 @@ export default function Accounts() {
                 </div>
               </>
             ) : null}
+
+            {/* Past import batches + upload button */}
+            {!csvResult && csvRows.length === 0 && (
+              <div className="p-4 space-y-2">
+                <button
+                  onClick={() => csvFileRef.current?.click()}
+                  className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-accent-500/15 text-accent-400 rounded-lg text-sm font-medium hover:bg-accent-500/25 transition-colors"
+                >
+                  <Upload size={16} /> {t('upload')} CSV
+                </button>
+                {csvBatches.length > 0 && (
+                  <>
+                    <div className="text-xs text-muted mt-3 mb-1">Past imports</div>
+                    {csvBatches.map(b => (
+                      <div key={b.batch_id} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-hover/50 text-xs">
+                        <span className="text-muted">{b.from_date} → {b.to_date}</span>
+                        <span className="font-medium">{b.count} tx</span>
+                        <button
+                          onClick={() => undoCsvBatch(b.batch_id)}
+                          className="ml-auto text-red-400 hover:text-red-300"
+                        >
+                          <Trash2 size={13} />
+                        </button>
+                      </div>
+                    ))}
+                  </>
+                )}
+              </div>
+            )}
           </div>
         </>
       )}
