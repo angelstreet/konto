@@ -23,6 +23,7 @@ import Outils from './pages/Outils';
 import Onboarding from './pages/Onboarding';
 import Trends from './pages/Trends';
 import PropertyROI from './pages/PropertyROI';
+import Import from './pages/Import';
 import { FilterProvider } from './FilterContext';
 import { PreferencesProvider, usePreferences } from './PreferencesContext';
 import { AmountVisibilityProvider } from './AmountVisibilityContext';
@@ -47,7 +48,7 @@ function AppRoutes() {
       <Route path="/fec-export" element={<ComingSoon titleKey="nav_fec_export" />} />
       <Route path="/budget" element={<Analytics />} />
       <Route path="/income" element={<Income />} />
-      <Route path="/import" element={<ComingSoon titleKey="nav_import" />} />
+      <Route path="/import" element={<Import />} />
       <Route path="/reconciliation" element={<Invoices />} />
       <Route path="/invoices" element={<Invoices />} />
       <Route path="/bilan" element={<Bilan />} />

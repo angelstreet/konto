@@ -893,9 +893,13 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
     }
 
     for (const tx of transactions) {
+      const txHash = tx.id ? `powens_${tx.id}` : null;
       await db.execute({
-        sql: 'INSERT OR IGNORE INTO transactions (bank_account_id, date, amount, label, category) VALUES (?, ?, ?, ?, ?)',
-        args: [account.id, tx.date || tx.rdate, tx.value, tx.original_wording || tx.wording, tx.category?.name || null]
+        sql: `INSERT INTO transactions (bank_account_id, date, amount, label, category, tx_hash)
+              VALUES (?, ?, ?, ?, ?, ?)
+              ON CONFLICT(bank_account_id, tx_hash) DO UPDATE SET
+                date=excluded.date, amount=excluded.amount, label=excluded.label, category=excluded.category`,
+        args: [account.id, tx.date || tx.rdate, tx.value, tx.original_wording || tx.wording, tx.category?.name || null, txHash]
       });
     }
 
@@ -1047,9 +1051,13 @@ app.post('/api/bank/sync-all', async (c) => {
             bulkOffset += 500;
           }
           for (const tx of bulkAll) {
+            const txHash = tx.id ? `powens_${tx.id}` : null;
             await db.execute({
-              sql: 'INSERT OR IGNORE INTO transactions (bank_account_id, date, amount, label, category) VALUES (?, ?, ?, ?, ?)',
-              args: [localAcc.id, tx.date || tx.rdate, tx.value, tx.original_wording || tx.wording, tx.category?.name || null]
+              sql: `INSERT INTO transactions (bank_account_id, date, amount, label, category, tx_hash)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                    ON CONFLICT(bank_account_id, tx_hash) DO UPDATE SET
+                      date=excluded.date, amount=excluded.amount, label=excluded.label, category=excluded.category`,
+              args: [localAcc.id, tx.date || tx.rdate, tx.value, tx.original_wording || tx.wording, tx.category?.name || null, txHash]
             });
           }
           totalSynced += bulkAll.length;
@@ -4201,6 +4209,66 @@ async function extractPayslipFromDrive(fileId: string, accessToken: string): Pro
 
   return { gross, net, employer };
 }
+
+// ========== CSV IMPORT ==========
+
+app.post('/api/import/csv', async (c) => {
+  const userId = await getUserId(c);
+  const body = await c.req.json();
+  const { account_id, rows } = body;
+  // rows: array of { date: 'YYYY-MM-DD', amount: number, label: string }
+
+  if (!account_id || !rows || !Array.isArray(rows)) {
+    return c.json({ error: 'Missing account_id or rows' }, 400);
+  }
+
+  // Verify account belongs to user
+  const acc = await db.execute({
+    sql: 'SELECT id FROM bank_accounts WHERE id = ? AND user_id = ?',
+    args: [account_id, userId],
+  });
+  if (acc.rows.length === 0) return c.json({ error: 'Account not found' }, 404);
+
+  // Load existing transactions for this account to deduplicate
+  const existing = await db.execute({
+    sql: 'SELECT date, amount, label FROM transactions WHERE bank_account_id = ?',
+    args: [account_id],
+  });
+  // Build a set of "date|amount" keys for fast lookup
+  const existingKeys = new Set<string>();
+  for (const row of existing.rows as any[]) {
+    // Round amount to 2 decimals for matching
+    const amt = Math.round(Number(row.amount) * 100) / 100;
+    existingKeys.add(`${row.date}|${amt}`);
+  }
+
+  let imported = 0;
+  let skipped = 0;
+
+  for (const row of rows) {
+    const amt = Math.round(Number(row.amount) * 100) / 100;
+    const date = row.date;
+    const key = `${date}|${amt}`;
+
+    // Check for exact date+amount match (already exists from Powens or previous import)
+    if (existingKeys.has(key)) {
+      skipped++;
+      continue;
+    }
+
+    const txHash = `csv_${date}_${amt}_${(row.label || '').slice(0, 30).replace(/[^a-zA-Z0-9]/g, '')}`;
+    await db.execute({
+      sql: `INSERT INTO transactions (bank_account_id, date, amount, label, category, tx_hash)
+            VALUES (?, ?, ?, ?, NULL, ?)
+            ON CONFLICT(bank_account_id, tx_hash) DO NOTHING`,
+      args: [account_id, date, amt, row.label || '', txHash],
+    });
+    existingKeys.add(key);
+    imported++;
+  }
+
+  return c.json({ imported, skipped, total: rows.length });
+});
 
 // ========== START SERVER ==========
 
