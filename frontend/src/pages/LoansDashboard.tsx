@@ -5,26 +5,26 @@ export default function LoansDashboard() {
   const { t } = useTranslation();
 
   return (
-    &lt;div&gt;
-      &lt;div className=&quot;flex items-center justify-between gap-2 mb-2 h-10&quot;&gt;
-        &lt;h1 className=&quot;text-xl font-semibold whitespace-nowrap&quot;&gt;Prêts&lt;/h1&gt;
-        &lt;button className=&quot;flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black&quot;&gt;
-          &lt;Plus size={16} /&gt;
-          &lt;span className=&quot;hidden sm:inline&quot;&gt;Ajouter un prêt&lt;/span&gt;
-        &lt;/button&gt;
-      &lt;/div&gt;
-      &lt;div className=&quot;bg-surface rounded-xl border border-border p-8 text-center&quot;&gt;
-        &lt;Banknote className=&quot;mx-auto text-muted mb-3&quot; size={32} /&gt;
-        &lt;p className=&quot;text-muted text-sm mb-4&quot;&gt;Aucun prêt ajouté.&lt;/p&gt;
-        &lt;p className=&quot;text-muted text-xs mb-6&quot;&gt;Ajoutez vos emprunts immobiliers, prêts auto, etc. pour suivre votre endettement.&lt;/p&gt;
-        &lt;button 
-          className=&quot;flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-accent-500 text-black mx-auto&quot;
-          onClick={() =&gt; alert(&#x27;Formulaire de prêt à venir (tâches suivantes)&#x27;)}
-        &gt;
-          &lt;Plus size={16} /&gt;
+    <div>
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <h1 className="text-xl font-semibold whitespace-nowrap">Prêts</h1>
+        <button className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black">
+          <Plus size={16} />
+          <span className="hidden sm:inline">Ajouter un prêt</span>
+        </button>
+      </div>
+      <div className="bg-surface rounded-xl border border-border p-8 text-center">
+        <Banknote className="mx-auto text-muted mb-3" size={32} />
+        <p className="text-muted text-sm mb-4">Aucun prêt ajouté.</p>
+        <p className="text-muted text-xs mb-6">Ajoutez vos emprunts immobiliers, prêts auto, etc. pour suivre votre endettement.</p>
+        <button 
+          className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium bg-accent-500 text-black mx-auto"
+          onClick={() => alert('Formulaire de prêt à venir (tâches suivantes)')}
+        >
+          <Plus size={16} />
           + Ajouter un prêt
-        &lt;/button&gt;
-      &lt;/div&gt;
-    &lt;/div&gt;
+        </button>
+      </div>
+    </div>
   );
 }

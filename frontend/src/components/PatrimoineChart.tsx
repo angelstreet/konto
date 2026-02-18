@@ -19,14 +19,16 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
 
   useEffect(() => {
     setLoading(true);
-    fetch(`${API}/dashboard/history?range=${range}&category=all`)
+    const params = new URLSearchParams({ range, category: 'all' });
+    if (showNet) params.set('net', '1');
+    fetch(`${API}/dashboard/history?${params.toString()}`)
       .then(r => r.json())
       .then(d => {
         setData(d.history || []);
         setBaselineDate(d.baselineDate || null);
       })
       .finally(() => setLoading(false));
-  }, [range]);
+  }, [range, showNet]);
 
   const latestValue = data.length > 0 ? data[data.length - 1].value : 0;
   // Use the first snapshot on or after the baseline date (when current accounts were all present)

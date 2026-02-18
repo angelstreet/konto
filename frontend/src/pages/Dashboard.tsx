@@ -112,7 +112,8 @@ export default function Dashboard() {
     if (savings > 0) distData.push({ key: 'savings', value: savings });
     if (investments > 0) distData.push({ key: 'investment', value: investments });
     for (const asset of data.patrimoine.assets) {
-      distData.push({ key: asset.type || 'other', value: asset.currentValue });
+      const val = showNet ? asset.currentValue + asset.loanBalance : asset.currentValue;
+      distData.push({ key: asset.type || 'other', value: val });
     }
     const merged: Record<string, number> = {};
     for (const d of distData) merged[d.key] = (merged[d.key] || 0) + d.value;
