@@ -54,6 +54,13 @@ function typeBadgeColor(type: string): string {
   return 'bg-white/5 text-muted';
 }
 
+function typeFilterActiveColor(type: string): string {
+  if (type === 'savings') return 'bg-blue-500/20 text-blue-400';
+  if (type === 'loan') return 'bg-orange-500/20 text-orange-400';
+  if (type === 'investment') return 'bg-purple-500/20 text-purple-400';
+  return 'bg-white/15 text-white'; // checking — make it visible
+}
+
 function subtypeBadgeColor(subtype: string): string {
   if (subtype === 'crypto') return 'bg-amber-500/20 text-amber-400';
   if (subtype === 'stocks') return 'bg-indigo-500/20 text-indigo-400';
@@ -864,15 +871,25 @@ export default function Accounts() {
                 {uniqueTypes.length > 1 && <span className="w-px h-5 bg-border self-center" />}
               </>
             )}
-            {uniqueTypes.length > 1 && uniqueTypes.map(type => (
-              <button
-                key={type}
-                onClick={() => setFilterType(filterType === type ? '' : type)}
-                className={`text-xs px-3 py-1 rounded-full transition-colors ${filterType === type ? typeBadgeColor(type) : 'bg-white/5 text-muted hover:text-white'}`}
-              >
-                {t(`account_type_${type}`)}
-              </button>
-            ))}
+            {uniqueTypes.length > 1 && (
+              <>
+                <button
+                  onClick={() => setFilterType('')}
+                  className={`text-xs px-3 py-1 rounded-full transition-colors ${!filterType ? 'bg-accent-500/20 text-accent-400' : 'bg-white/5 text-muted hover:text-white'}`}
+                >
+                  {t('all')}
+                </button>
+                {uniqueTypes.map(type => (
+                  <button
+                    key={type}
+                    onClick={() => setFilterType(filterType === type ? '' : type)}
+                    className={`text-xs px-3 py-1 rounded-full transition-colors ${filterType === type ? typeFilterActiveColor(type) : 'bg-white/5 text-muted hover:text-white'}`}
+                  >
+                    {t(`account_type_${type}`)}
+                  </button>
+                ))}
+              </>
+            )}
             {uniqueSubtypes.length > 1 && (
               <>
                 <span className="w-px h-5 bg-border self-center" />
