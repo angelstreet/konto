@@ -2,7 +2,7 @@ import { useTranslation } from 'react-i18next';
 import { Banknote, Plus } from 'lucide-react';
 
 export default function LoansDashboard() {
-  const { t } = useTranslation();
+  const { t: _t } = useTranslation();
 
   return (
     <div>

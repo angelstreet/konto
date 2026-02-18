@@ -33,6 +33,28 @@ function fmt(v: number, currency = 'EUR') {
 
 function fmtCHF(v: number) { return fmt(v, 'CHF'); }
 
+// Benchmark data — INSEE 2023 (FR), OFS 2022 (CH) — brut annuel
+const FR_PERCENTILES = [
+  { p: 10, gross: 13500 }, { p: 25, gross: 19500 }, { p: 50, gross: 26400 },
+  { p: 75, gross: 37500 }, { p: 90, gross: 52000 }, { p: 95, gross: 65000 }, { p: 99, gross: 100000 },
+];
+const CH_PERCENTILES = [
+  { p: 10, gross: 38000 }, { p: 25, gross: 56000 }, { p: 50, gross: 81456 },
+  { p: 75, gross: 110000 }, { p: 90, gross: 140000 }, { p: 95, gross: 165000 }, { p: 99, gross: 210000 },
+];
+
+function getPercentile(gross: number, data: { p: number; gross: number }[]): number {
+  if (gross <= data[0].gross) return Math.max(1, Math.round(data[0].p * gross / data[0].gross));
+  if (gross >= data[data.length - 1].gross) return 99;
+  for (let i = 0; i < data.length - 1; i++) {
+    if (gross >= data[i].gross && gross < data[i + 1].gross) {
+      const ratio = (gross - data[i].gross) / (data[i + 1].gross - data[i].gross);
+      return Math.round(data[i].p + ratio * (data[i + 1].p - data[i].p));
+    }
+  }
+  return 50;
+}
+
 export default function Income() {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -101,6 +123,37 @@ export default function Income() {
     const byYear: Record<number, number> = {};
     entries.forEach(e => { byYear[e.year] = (byYear[e.year] || 0) + e.gross_annual; });
     return Object.entries(byYear).sort(([a], [b]) => Number(a) - Number(b)).map(([year, total]) => ({ year: Number(year), total }));
+  }, [entries]);
+
+  const benchmarkData = useMemo(() => {
+    if (entries.length === 0) return null;
+    const maxYear = Math.max(...entries.map(e => e.year));
+    const latestEntries = entries.filter(e => e.year === maxYear);
+    const latestGross = latestEntries.reduce((s, e) => s + e.gross_annual, 0);
+    const latestCountry = latestEntries[0]?.country || 'FR';
+    if (latestCountry === 'OTHER') return null;
+    const isCH = latestCountry === 'CH';
+    const percentileData = isCH ? CH_PERCENTILES : FR_PERCENTILES;
+    const median = isCH ? 81456 : 26400;
+    const percentile = getPercentile(latestGross, percentileData);
+    const diffPct = Math.round((latestGross - median) / median * 100);
+    // CAGR & best YoY from all entries
+    const byYear: Record<number, number> = {};
+    entries.forEach(e => { byYear[e.year] = (byYear[e.year] || 0) + e.gross_annual; });
+    const yearTotals = Object.entries(byYear).map(([y, t]) => ({ year: Number(y), total: t })).sort((a, b) => a.year - b.year);
+    let cagr: number | null = null;
+    let bestYoY: { year: number; pct: number } | null = null;
+    if (yearTotals.length >= 2) {
+      const nYears = yearTotals[yearTotals.length - 1].year - yearTotals[0].year;
+      if (nYears > 0) cagr = Math.round(((yearTotals[yearTotals.length - 1].total / yearTotals[0].total) ** (1 / nYears) - 1) * 1000) / 10;
+      let best = { year: 0, pct: -Infinity };
+      for (let i = 1; i < yearTotals.length; i++) {
+        const pct = (yearTotals[i].total - yearTotals[i - 1].total) / yearTotals[i - 1].total * 100;
+        if (pct > best.pct) best = { year: yearTotals[i].year, pct };
+      }
+      if (best.year > 0) bestYoY = { year: best.year, pct: Math.round(best.pct) };
+    }
+    return { latestYear: maxYear, isCH, percentile, median, diffPct, cagr, bestYoY };
   }, [entries]);
 
   const countries = [
@@ -398,7 +451,66 @@ export default function Income() {
         </>)}
       </section>
 
-      {/* Tax Estimation and Borrowing Capacity moved to Outils page */}
+      {/* ===== SECTION 2: Salary Benchmark ===== */}
+      {benchmarkData && (
+        <section className="bg-surface rounded-xl border border-border p-4 space-y-4">
+          <div>
+            <h2 className="text-base font-semibold">Positionnement salarial</h2>
+            <p className="text-xs text-muted mt-0.5">Basé sur votre salaire brut {benchmarkData.latestYear}</p>
+          </div>
+
+          {/* Percentile bar */}
+          <div>
+            <div className="flex justify-between items-baseline mb-3">
+              <span className="text-xs text-muted">Parmi les salariés {benchmarkData.isCH ? 'suisses' : 'français'}</span>
+              <span className="text-3xl font-bold text-white leading-none">
+                {benchmarkData.percentile}<span className="text-base text-muted font-normal">e percentile</span>
+              </span>
+            </div>
+            <div className="relative h-2 rounded-full" style={{ background: 'linear-gradient(to right, #ef4444 0%, #f59e0b 35%, #22c55e 70%, #16a34a 100%)' }}>
+              <div
+                className="absolute top-1/2 w-4 h-4 bg-white rounded-full border-2 border-gray-800 shadow-lg"
+                style={{ left: `${Math.min(Math.max(benchmarkData.percentile, 2), 98)}%`, transform: 'translateX(-50%) translateY(-50%)' }}
+              />
+            </div>
+            <div className="flex justify-between text-[10px] text-muted mt-2">
+              <span>Bas</span>
+              <span>Médiane {benchmarkData.isCH ? fmtCHF(benchmarkData.median) : fmt(benchmarkData.median)}</span>
+              <span>Haut</span>
+            </div>
+          </div>
+
+          {/* Stat cards */}
+          <div className={`grid gap-3 ${benchmarkData.cagr !== null && benchmarkData.bestYoY ? 'grid-cols-3' : benchmarkData.cagr !== null ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            <div className="bg-surface-hover rounded-xl p-3 text-center">
+              <div className={`text-xl font-bold ${benchmarkData.diffPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                {benchmarkData.diffPct >= 0 ? '+' : ''}{benchmarkData.diffPct}%
+              </div>
+              <div className="text-xs text-muted mt-0.5">vs. médiane nationale</div>
+            </div>
+            {benchmarkData.cagr !== null && (
+              <div className="bg-surface-hover rounded-xl p-3 text-center">
+                <div className={`text-xl font-bold ${benchmarkData.cagr >= 0 ? 'text-green-400' : 'text-orange-400'}`}>
+                  {benchmarkData.cagr >= 0 ? '+' : ''}{benchmarkData.cagr}%<span className="text-sm font-normal">/an</span>
+                </div>
+                <div className="text-xs text-muted mt-0.5">Croissance (CAGR)</div>
+              </div>
+            )}
+            {benchmarkData.bestYoY && (
+              <div className="bg-surface-hover rounded-xl p-3 text-center">
+                <div className="text-xl font-bold text-indigo-400">
+                  {benchmarkData.bestYoY.pct >= 0 ? '+' : ''}{benchmarkData.bestYoY.pct}%
+                </div>
+                <div className="text-xs text-muted mt-0.5">Meilleure année ({benchmarkData.bestYoY.year})</div>
+              </div>
+            )}
+          </div>
+
+          <p className="text-[10px] text-muted/60">
+            Source : {benchmarkData.isCH ? 'OFS 2022 (Suisse)' : 'INSEE 2023 (France)'} — salaires bruts annuels
+          </p>
+        </section>
+      )}
     </div>
   );
 }

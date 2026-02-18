@@ -115,7 +115,7 @@ export default function Accounts() {
   // Balance update state
   const [updatingBalanceId, setUpdatingBalanceId] = useState<number | null>(null);
   const [newBalance, setNewBalance] = useState('');
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
+  const [_expandedGroups, _setExpandedGroups] = useState<Record<string, boolean>>({});
 
 
   const loading = loadingAccounts || loadingConnections;

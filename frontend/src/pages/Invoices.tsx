@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, RefreshCw, CheckCircle, Unlink, CloudOff, ArrowLeft, FolderOpen, Folder, ChevronRight, Check, Paperclip, Upload } from 'lucide-react';
+import { Search, RefreshCw, CheckCircle, Unlink, CloudOff, ArrowLeft, FolderOpen, Folder, ChevronRight, Check, Paperclip, Upload, Link2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch, useApi } from '../useApi';
 
@@ -48,6 +48,16 @@ interface TxRow {
   amount_ht: number | null;
 }
 
+interface DriveFile {
+  id: number;
+  filename: string;
+  drive_file_id: string;
+  date: string | null;
+  vendor: string | null;
+  amount_ht: number | null;
+  transaction_id: number | null;
+}
+
 export default function Invoices() {
   const { t: _t } = useTranslation();
   const navigate = useNavigate();
@@ -64,9 +74,12 @@ export default function Invoices() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanDone, setScanDone] = useState(false);
-  const [filter, setFilter] = useState<'matched' | 'unmatched'>('matched');
+  const [filter, setFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
   const [year, setYear] = useState(new Date().getFullYear());
   const [uploadingTxId, setUploadingTxId] = useState<number | null>(null);
+  const [linkingTx, setLinkingTx] = useState<TxRow | null>(null);
+  const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
+  const [loadingDriveFiles, setLoadingDriveFiles] = useState(false);
   const [scanResult, setScanResult] = useState<any>(null);
   const [driveStatus, setDriveStatus] = useState<any>(null);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
@@ -81,7 +94,7 @@ export default function Invoices() {
     const statsParam = cid ? `?company_id=${cid}&year=${year}` : '';
     if (cid) {
       const [txRes, statsRes, driveRes] = await Promise.all([
-        authFetch(`${API}/invoices/transactions?company_id=${cid}&year=${year}&matched=${filter === 'matched'}`),
+        authFetch(`${API}/invoices/transactions?company_id=${cid}&year=${year}${filter !== 'all' ? `&matched=${filter === 'matched'}` : ''}`),
         authFetch(`${API}/invoices/stats${statsParam}`),
         authFetch(`${API}/drive/status${driveParam}`),
       ]);
@@ -137,6 +150,27 @@ export default function Invoices() {
     } finally {
       setUploadingTxId(null);
     }
+  };
+
+  const openFilePicker = async (tx: TxRow) => {
+    setLinkingTx(tx);
+    setLoadingDriveFiles(true);
+    try {
+      const res = await authFetch(`${API}/invoices/files?company_id=${selectedCompanyId}`);
+      setDriveFiles(await res.json());
+    } finally {
+      setLoadingDriveFiles(false);
+    }
+  };
+
+  const linkFile = async (invoiceId: number) => {
+    if (!linkingTx) return;
+    await authFetch(`${API}/invoices/link`, {
+      method: 'POST',
+      body: JSON.stringify({ invoice_id: invoiceId, transaction_id: linkingTx.id })
+    });
+    setLinkingTx(null);
+    await load();
   };
 
   const loadFolders = async (parentId: string | null = null, parentName: string = 'Mon Drive') => {
@@ -352,7 +386,7 @@ export default function Invoices() {
 
           {/* Tabs */}
           <div className="flex gap-2 mb-3">
-            {(['matched', 'unmatched'] as const).map(f => (
+            {(['all', 'matched', 'unmatched'] as const).map(f => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
@@ -360,7 +394,9 @@ export default function Invoices() {
                   filter === f ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-foreground'
                 }`}
               >
-                {f === 'matched'
+                {f === 'all'
+                  ? `Tous${stats ? ` · ${stats.total}` : ''}`
+                  : f === 'matched'
                   ? `Justifiés${stats ? ` · ${stats.matched}` : ''}`
                   : `Manquants${stats ? ` · ${stats.unmatched}` : ''}`}
               </button>
@@ -372,7 +408,7 @@ export default function Invoices() {
             {txRows.length === 0 && (
               <div className="p-8 text-center text-muted">
                 <Search size={28} className="mx-auto mb-2 opacity-30" />
-                <p className="text-sm">{filter === 'matched' ? 'Aucune transaction justifiée' : 'Toutes les transactions sont justifiées'}</p>
+                <p className="text-sm">{filter === 'matched' ? 'Aucune transaction justifiée' : filter === 'unmatched' ? 'Toutes les transactions sont justifiées' : 'Aucune transaction'}</p>
               </div>
             )}
             {txRows.map((tx, i) => (
@@ -407,23 +443,71 @@ export default function Invoices() {
                     <Unlink size={13} />
                   </button>
                 ) : (
-                  <label className="cursor-pointer p-1.5 rounded-lg text-muted hover:text-accent-400 hover:bg-accent-500/10 transition-colors shrink-0" title="Joindre un justificatif">
-                    {uploadingTxId === tx.id
-                      ? <RefreshCw size={13} className="animate-spin" />
-                      : <Upload size={13} />
-                    }
-                    <input
-                      type="file"
-                      accept=".pdf,.jpg,.jpeg,.png,.heic"
-                      className="hidden"
-                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadInvoice(tx.id, f); e.target.value = ''; }}
-                    />
-                  </label>
+                  <div className="flex items-center gap-1 shrink-0">
+                    {/* Link from Drive (already scanned files) */}
+                    <button
+                      onClick={() => openFilePicker(tx)}
+                      className="p-1.5 rounded-lg text-muted hover:text-accent-400 hover:bg-accent-500/10 transition-colors"
+                      title="Lier depuis Drive"
+                    >
+                      <Link2 size={13} />
+                    </button>
+                    {/* Upload from device */}
+                    <label className="cursor-pointer p-1.5 rounded-lg text-muted hover:text-accent-400 hover:bg-accent-500/10 transition-colors" title="Envoyer depuis l'appareil">
+                      {uploadingTxId === tx.id
+                        ? <RefreshCw size={13} className="animate-spin" />
+                        : <Upload size={13} />
+                      }
+                      <input
+                        type="file"
+                        accept=".pdf,.jpg,.jpeg,.png,.heic"
+                        className="hidden"
+                        onChange={e => { const f = e.target.files?.[0]; if (f) uploadInvoice(tx.id, f); e.target.value = ''; }}
+                      />
+                    </label>
+                  </div>
                 )}
               </div>
             ))}
           </div>
         </>
+      )}
+
+      {/* Drive File Picker Modal (link existing file to transaction) */}
+      {linkingTx && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setLinkingTx(null)}>
+          <div className="bg-[#1c1c1e] rounded-xl border border-white/10 p-3 max-w-sm w-full max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="min-w-0">
+                <div className="text-xs font-medium text-white">Choisir un justificatif</div>
+                <div className="text-[10px] text-muted truncate mt-0.5">{linkingTx.label}</div>
+              </div>
+              <button onClick={() => setLinkingTx(null)} className="text-muted hover:text-white p-1 ml-2 shrink-0 text-sm leading-none">✕</button>
+            </div>
+            <div className="overflow-auto flex-1 -mx-1">
+              {loadingDriveFiles && <div className="text-center text-muted py-6 text-xs">Chargement...</div>}
+              {!loadingDriveFiles && driveFiles.length === 0 && (
+                <div className="text-center text-muted py-6 text-xs">Aucun fichier scanné — lancez un scan d'abord</div>
+              )}
+              {driveFiles.map((f, i) => (
+                <button
+                  key={f.id}
+                  onClick={() => linkFile(f.id)}
+                  className={`w-full text-left px-3 py-2.5 flex items-center justify-between gap-2 hover:bg-white/[0.04] transition-colors ${i < driveFiles.length - 1 ? 'border-b border-white/5' : ''} ${f.transaction_id ? 'opacity-40' : ''}`}
+                >
+                  <div className="flex items-center gap-2 min-w-0">
+                    <Paperclip size={12} className="text-muted shrink-0" />
+                    <span className="text-xs truncate">{f.filename}</span>
+                  </div>
+                  <div className="flex items-center gap-2 shrink-0 text-[10px] text-muted">
+                    {f.amount_ht != null && <span>{f.amount_ht.toFixed(2)} €</span>}
+                    {f.transaction_id && <span className="text-yellow-500/60">lié</span>}
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Folder Picker Modal */}
