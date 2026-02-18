@@ -57,7 +57,7 @@ interface CachedInvestments {
   total_diff: number;
 }
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50;
 
 export default function Transactions() {
   const { t } = useTranslation();
@@ -91,8 +91,9 @@ export default function Transactions() {
   const [expandedInvId, setExpandedInvId] = useState<number | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [yearFilter, setYearFilter] = useState('');
+  const [monthFilter, setMonthFilter] = useState('');
   const [availableYears, setAvailableYears] = useState<string[]>([]);
-  const hasActiveFilters = !!accountFilter || !!search || !!yearFilter;
+  const hasActiveFilters = !!accountFilter || !!search || !!yearFilter || !!monthFilter;
   const [syncing, setSyncing] = useState(false);
   const [investments, setInvestments] = useState<Investment[]>([]);
   const [investmentsTotal, setInvestmentsTotal] = useState({ valuation: 0, diff: 0 });
@@ -108,7 +109,7 @@ export default function Transactions() {
   const hasPowensAccounts = powensAccounts.length > 0;
 
   // Synchronous cache read during render — prevents flicker
-  const txCacheKey = `${accountFilter}|${page}|${search}|${scope}|${yearFilter}`;
+  const txCacheKey = `${accountFilter}|${page}|${search}|${scope}|${yearFilter}|${monthFilter}`;
   const invCacheKey = `inv|${accountFilter}`;
   const [prevTxKey, setPrevTxKey] = useState('');
   const [prevInvKey, setPrevInvKey] = useState('');
@@ -177,13 +178,15 @@ export default function Transactions() {
       setLoading(true);
     }
 
+    const effectivePageSize = monthFilter ? 500 : PAGE_SIZE;
     const params = new URLSearchParams({
-      limit: String(PAGE_SIZE),
-      offset: String(page * PAGE_SIZE),
+      limit: String(effectivePageSize),
+      offset: String(page * effectivePageSize),
     });
     if (accountFilter) params.set('account_id', accountFilter);
     if (search) params.set('search', search);
     if (yearFilter) params.set('year', yearFilter);
+    if (monthFilter) params.set('month', monthFilter);
     if (scope === 'personal') params.set('usage', 'personal');
     else if (scope === 'pro') params.set('usage', 'professional');
     else if (typeof scope === 'number') params.set('company_id', String(scope));
@@ -204,7 +207,7 @@ export default function Transactions() {
       });
 
     return () => controller.abort();
-  }, [page, accountFilter, search, yearFilter, scope, fetchVersion]);
+  }, [page, accountFilter, search, yearFilter, monthFilter, scope, fetchVersion]);
 
   // Fetch accounts
   useEffect(() => {
@@ -343,7 +346,7 @@ export default function Transactions() {
           {availableYears.length > 0 && (
             <select
               value={yearFilter}
-              onChange={e => { setYearFilter(e.target.value); setPage(0); }}
+              onChange={e => { setYearFilter(e.target.value); setMonthFilter(''); setPage(0); }}
               className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-500"
             >
               <option value="">{t('all_years', 'All years')}</option>
@@ -352,10 +355,26 @@ export default function Transactions() {
               ))}
             </select>
           )}
+          <div className="flex flex-wrap gap-1">
+            {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => {
+              const keys = ['month_jan','month_feb','month_mar','month_apr','month_may','month_jun','month_jul','month_aug','month_sep','month_oct','month_nov','month_dec'];
+              return (
+                <button
+                  key={m}
+                  onClick={() => { setMonthFilter(monthFilter === String(m) ? '' : String(m)); setPage(0); }}
+                  className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
+                    monthFilter === String(m) ? 'bg-accent-500/25 text-accent-400' : 'bg-white/5 text-muted hover:text-white'
+                  }`}
+                >
+                  {t(keys[m - 1])}
+                </button>
+              );
+            })}
+          </div>
           <ScopeSelect />
           {hasActiveFilters && (
             <button
-              onClick={() => { setAccountFilter(''); setYearFilter(''); setSearch(''); setSearchInput(''); setPage(0); }}
+              onClick={() => { setAccountFilter(''); setYearFilter(''); setMonthFilter(''); setSearch(''); setSearchInput(''); setPage(0); }}
               className="flex items-center gap-1 text-xs text-muted hover:text-white"
             >
               <X size={12} /> {t('clear_filters')}
@@ -393,7 +412,7 @@ export default function Transactions() {
         {availableYears.length > 0 && (
           <select
             value={yearFilter}
-            onChange={e => { setYearFilter(e.target.value); setPage(0); }}
+            onChange={e => { setYearFilter(e.target.value); setMonthFilter(''); setPage(0); }}
             className="bg-surface border border-border rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-accent-500"
           >
             <option value="">{t('all_years', 'All years')}</option>
@@ -402,6 +421,24 @@ export default function Transactions() {
             ))}
           </select>
         )}
+      </div>
+
+      {/* Month pills (desktop) */}
+      <div className="hidden md:flex flex-wrap gap-1 mb-2">
+        {[1,2,3,4,5,6,7,8,9,10,11,12].map(m => {
+          const keys = ['month_jan','month_feb','month_mar','month_apr','month_may','month_jun','month_jul','month_aug','month_sep','month_oct','month_nov','month_dec'];
+          return (
+            <button
+              key={m}
+              onClick={() => { setMonthFilter(monthFilter === String(m) ? '' : String(m)); setPage(0); }}
+              className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                monthFilter === String(m) ? 'bg-accent-500/25 text-accent-400' : 'bg-surface text-muted hover:text-white'
+              }`}
+            >
+              {t(keys[m - 1])}
+            </button>
+          );
+        })}
       </div>
 
       {/* Content: positions for investment accounts, transactions for others */}
