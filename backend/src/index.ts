@@ -2603,14 +2603,32 @@ app.get('/api/drive/status', async (c) => {
   const userId = await getUserId(c);
   const companyId = c.req.query('company_id');
 
-  const sql = companyId
-    ? 'SELECT id, company_id, folder_id, folder_path, status, created_at FROM drive_connections WHERE user_id = ? AND company_id = ? AND status = ? LIMIT 1'
-    : 'SELECT id, company_id, folder_id, folder_path, status, created_at FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1';
+  if (companyId) {
+    // Try company-specific first, fall back to global
+    const specific = await db.execute({
+      sql: 'SELECT id, company_id, folder_id, folder_path, status, created_at FROM drive_connections WHERE user_id = ? AND company_id = ? AND status = ? LIMIT 1',
+      args: [userId, parseInt(companyId), 'active'],
+    });
+    if (specific.rows.length > 0) {
+      const conn: any = specific.rows[0];
+      return c.json({ connected: true, ...conn });
+    }
+    // Fall back to global connection
+    const global = await db.execute({
+      sql: 'SELECT id, company_id, folder_id, folder_path, status, created_at FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1',
+      args: [userId, 'active'],
+    });
+    if (global.rows.length > 0) {
+      const conn: any = global.rows[0];
+      return c.json({ connected: true, ...conn });
+    }
+    return c.json({ connected: false });
+  }
 
-  const args = companyId ? [userId, parseInt(companyId), 'active'] : [userId, 'active'];
-
-  const result = await db.execute({ sql, args });
-
+  const result = await db.execute({
+    sql: 'SELECT id, company_id, folder_id, folder_path, status, created_at FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1',
+    args: [userId, 'active'],
+  });
   if (result.rows.length === 0) return c.json({ connected: false });
   const conn: any = result.rows[0];
   return c.json({ connected: conn.status === 'active', ...conn });
