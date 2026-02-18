@@ -3022,31 +3022,105 @@ app.post('/api/invoices/:id/unmatch', async (c) => {
   return c.json({ ok: true });
 });
 
-// Invoice stats
+// Invoice stats — transaction-centric for companies, file-centric for personal
 app.get('/api/invoices/stats', async (c) => {
   const userId = await getUserId(c);
   const companyId = c.req.query('company_id');
+  const year = parseInt(c.req.query('year') || String(new Date().getFullYear() - 1));
 
-  let whereClause = 'WHERE user_id = ?';
-  const args: any[] = [userId];
   if (companyId) {
-    whereClause += ' AND company_id = ?';
-    args.push(Number(companyId));
+    const start = `${year}-01-01`, end = `${year + 1}-01-01`;
+    const cid = Number(companyId);
+    const totalRes = await db.execute({
+      sql: `SELECT COUNT(*) as c FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE ba.company_id = ? AND t.date >= ? AND t.date < ?`,
+      args: [cid, start, end]
+    });
+    const matchedRes = await db.execute({
+      sql: `SELECT COUNT(*) as c FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE ba.company_id = ? AND t.date >= ? AND t.date < ? AND EXISTS (SELECT 1 FROM invoice_cache ic WHERE ic.transaction_id = t.id)`,
+      args: [cid, start, end]
+    });
+    const total = Number(totalRes.rows[0]?.c || 0);
+    const matched = Number(matchedRes.rows[0]?.c || 0);
+    return c.json({ total, matched, unmatched: total - matched, match_rate: total > 0 ? Math.round((matched / total) * 100) : 0, year });
   }
 
-  const total = await db.execute({ sql: `SELECT COUNT(*) as c FROM invoice_cache ${whereClause}`, args });
-  const matchedCount = await db.execute({ sql: `SELECT COUNT(*) as c FROM invoice_cache ${whereClause} AND transaction_id IS NOT NULL`, args });
-  const unmatchedCount = await db.execute({ sql: `SELECT COUNT(*) as c FROM invoice_cache ${whereClause} AND transaction_id IS NULL`, args });
-
+  const args: any[] = [userId];
+  const total = await db.execute({ sql: `SELECT COUNT(*) as c FROM invoice_cache WHERE user_id = ?`, args });
+  const matchedCount = await db.execute({ sql: `SELECT COUNT(*) as c FROM invoice_cache WHERE user_id = ? AND transaction_id IS NOT NULL`, args });
+  const unmatchedCount = await db.execute({ sql: `SELECT COUNT(*) as c FROM invoice_cache WHERE user_id = ? AND transaction_id IS NULL`, args });
   const totalVal = Number(total.rows[0]?.c || 0);
   const matchedVal = Number(matchedCount.rows[0]?.c || 0);
+  return c.json({ total: totalVal, matched: matchedVal, unmatched: Number(unmatchedCount.rows[0]?.c || 0), match_rate: totalVal > 0 ? Math.round((matchedVal / totalVal) * 100) : 0 });
+});
 
-  return c.json({
-    total: totalVal,
-    matched: matchedVal,
-    unmatched: Number(unmatchedCount.rows[0]?.c || 0),
-    match_rate: totalVal > 0 ? Math.round((matchedVal / totalVal) * 100) : 0
+// Transactions with invoice status (for company rapprochement view)
+app.get('/api/invoices/transactions', async (c) => {
+  const companyId = c.req.query('company_id');
+  const year = parseInt(c.req.query('year') || String(new Date().getFullYear() - 1));
+  const matched = c.req.query('matched');
+  if (!companyId) return c.json([]);
+  const start = `${year}-01-01`, end = `${year + 1}-01-01`;
+  let sql = `SELECT t.id, t.label, t.amount, t.date, t.category,
+    ic.id as invoice_id, ic.filename, ic.drive_file_id, ic.vendor, ic.amount_ht, ic.date as invoice_date
+    FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id
+    LEFT JOIN invoice_cache ic ON ic.transaction_id = t.id
+    WHERE ba.company_id = ? AND t.date >= ? AND t.date < ?`;
+  const args: any[] = [Number(companyId), start, end];
+  if (matched === 'true') sql += ' AND ic.id IS NOT NULL';
+  else if (matched === 'false') sql += ' AND ic.id IS NULL';
+  sql += ' ORDER BY t.date DESC';
+  const result = await db.execute({ sql, args });
+  return c.json(result.rows);
+});
+
+// Upload invoice file to Drive and link to transaction
+app.post('/api/invoices/upload', async (c) => {
+  const userId = await getUserId(c);
+  const formData = await c.req.formData();
+  const file = formData.get('file') as File;
+  const transactionId = Number(formData.get('transaction_id'));
+  const companyId = formData.get('company_id') ? Number(formData.get('company_id')) : null;
+  if (!file || !transactionId) return c.json({ error: 'Missing file or transaction_id' }, 400);
+
+  const connSql = companyId
+    ? 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id = ? AND status = ? LIMIT 1'
+    : 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1';
+  const connArgs = companyId ? [userId, companyId, 'active'] : [userId, 'active'];
+  const conn = await db.execute({ sql: connSql, args: connArgs });
+  if (conn.rows.length === 0) return c.json({ error: 'No Drive connection' }, 400);
+
+  const driveConn: any = conn.rows[0];
+  const accessToken = driveConn.access_token;
+  const folderId = driveConn.folder_id;
+
+  const arrayBuffer = await file.arrayBuffer();
+  const buffer = Buffer.from(arrayBuffer);
+  const metadata = JSON.stringify({ name: file.name, ...(folderId ? { parents: [folderId] } : {}) });
+  const boundary = 'konto_upload_boundary';
+  const body = Buffer.concat([
+    Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${file.type || 'application/pdf'}\r\n\r\n`),
+    buffer,
+    Buffer.from(`\r\n--${boundary}--`)
+  ]);
+
+  const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': `multipart/related; boundary="${boundary}"` },
+    body
   });
+  if (!uploadRes.ok) {
+    const err = await uploadRes.text();
+    return c.json({ error: 'Drive upload failed', details: err }, 502);
+  }
+  const uploaded: any = await uploadRes.json();
+
+  // Remove any existing invoice link for this transaction then insert new one
+  await db.execute({ sql: 'DELETE FROM invoice_cache WHERE transaction_id = ? AND user_id = ?', args: [transactionId, userId] });
+  await db.execute({
+    sql: `INSERT INTO invoice_cache (user_id, company_id, transaction_id, drive_file_id, filename, match_confidence) VALUES (?, ?, ?, ?, ?, 1.0)`,
+    args: [userId, companyId, transactionId, uploaded.id, file.name]
+  });
+  return c.json({ ok: true, drive_file_id: uploaded.id, filename: file.name });
 });
 
 // ========== BILAN ANNUEL ==========
@@ -3433,6 +3507,7 @@ function classifyTransaction(label: string): string {
 app.get('/api/trends', async (c) => {
   const months = parseInt(c.req.query('months') || '6');
   const scope = c.req.query('usage') || c.req.query('scope') || 'personal'; // personal or professional
+  const companyId = c.req.query('company_id') ? parseInt(c.req.query('company_id')!) : null;
   const userId = await getUserId(c);
 
   // Get date range
@@ -3440,13 +3515,17 @@ app.get('/api/trends', async (c) => {
   const fromDate = new Date(now.getFullYear(), now.getMonth() - months + 1, 1);
   const fromStr = fromDate.toISOString().split('T')[0];
 
+  const companyFilter = companyId ? ' AND ba.company_id = ?' : '';
+  const args: (string | number)[] = [fromStr, scope, userId];
+  if (companyId) args.push(companyId);
+
   const result = await db.execute({
     sql: `SELECT t.date, t.amount, t.label, ba.usage
           FROM transactions t
           LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
-          WHERE t.date >= ? AND ba.usage = ? AND t.amount < 0 AND ba.user_id = ?
+          WHERE t.date >= ? AND ba.usage = ? AND t.amount < 0 AND ba.user_id = ?${companyFilter}
           ORDER BY t.date`,
-    args: [fromStr, scope, userId]
+    args
   });
 
   // Group by category + month

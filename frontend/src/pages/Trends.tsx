@@ -87,11 +87,10 @@ export default function Trends() {
       return `${url}${sep}usage=personal`;
     }
     if (isPro) {
-      if (typeof selectedCompany === 'number') {
-        const sep = url.includes('?') ? '&' : '?';
-        return `${url}${sep}company_id=${selectedCompany}`;
-      }
       const sep = url.includes('?') ? '&' : '?';
+      if (typeof selectedCompany === 'number') {
+        return `${url}${sep}usage=professional&company_id=${selectedCompany}`;
+      }
       return `${url}${sep}usage=professional`;
     }
     return globalAppendScope(url);
@@ -118,6 +117,7 @@ export default function Trends() {
           <button onClick={() => navigate('/more')} className="md:hidden p-1"><ArrowLeft className="w-5 h-5" /></button>
           <TrendingUp className="w-5 h-5 text-primary" />
           <h1 className="text-lg font-bold">{t('nav_trends', 'Tendances')}</h1>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
         <div className="flex items-center gap-2">
           {isPro && companies.length > 1 && (
@@ -129,7 +129,7 @@ export default function Trends() {
                 setSelectedCompany(val);
                 setScope(val);
               }}
-              className="bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-accent-500 transition-colors max-w-[120px] truncate min-h-[36px]"
+              className="bg-surface border border-border rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-accent-500 transition-colors max-w-[120px] sm:max-w-none min-h-[36px]"
             >
               <option value="pro">Toutes</option>
               {companies.map(c => (
@@ -137,7 +137,6 @@ export default function Trends() {
               ))}
             </select>
           )}
-          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
       </div>
 

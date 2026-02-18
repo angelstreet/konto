@@ -125,7 +125,10 @@ function allPaths(children: NavChild[]): string[] {
 }
 
 function isActive(path: string, pathname: string) {
-  return pathname === path || (path !== '/' && pathname.startsWith(path));
+  if (pathname === path) return true;
+  if (path === '/') return false;
+  const rest = pathname.slice(path.length);
+  return rest.startsWith('/') || rest.startsWith('?');
 }
 
 function childContainsActive(children: NavChild[], pathname: string): boolean {
