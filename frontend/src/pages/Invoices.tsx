@@ -77,6 +77,7 @@ export default function Invoices() {
   const [scanDone, setScanDone] = useState(false);
   const [filter, setFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
   const [year, setYear] = useState(new Date().getFullYear());
+  const [month, setMonth] = useState(0); // 0 = all
   const [uploadingTxId, setUploadingTxId] = useState<number | null>(null);
   const [linkingTx, setLinkingTx] = useState<TxRow | null>(null);
   const [driveFiles, setDriveFiles] = useState<DriveFile[]>([]);
@@ -296,16 +297,28 @@ export default function Invoices() {
                 <div className="text-[10px] text-muted uppercase tracking-wide">Total</div>
               </div>
             </div>
-            <select
-              value={year}
-              onChange={e => setYear(Number(e.target.value))}
-              className="text-xs px-2 py-1.5 bg-surface border border-border rounded-lg"
-            >
-              {[0, 1, 2, 3].map(i => {
-                const y = new Date().getFullYear() - i;
-                return <option key={y} value={y}>{y}</option>;
-              })}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={year}
+                onChange={e => { setYear(Number(e.target.value)); setMonth(0); }}
+                className="text-xs px-2 py-1.5 bg-surface border border-border rounded-lg"
+              >
+                {[0, 1].map(i => {
+                  const y = new Date().getFullYear() - i;
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+              <select
+                value={month}
+                onChange={e => setMonth(Number(e.target.value))}
+                className="text-xs px-2 py-1.5 bg-surface border border-border rounded-lg"
+              >
+                <option value={0}>Tous</option>
+                {['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'].map((m, i) => (
+                  <option key={i + 1} value={i + 1}>{m}</option>
+                ))}
+              </select>
+            </div>
           </div>
 
           {/* Per-year folder row */}
@@ -355,14 +368,16 @@ export default function Invoices() {
 
           {/* Transaction list */}
           <div className="bg-surface rounded-xl border border-border overflow-hidden">
-            {txRows.length === 0 && (
-              <div className="p-8 text-center text-muted">
-                <Search size={28} className="mx-auto mb-2 opacity-30" />
-                <p className="text-sm">{filter === 'matched' ? 'Aucune transaction justifiée' : filter === 'unmatched' ? 'Toutes les transactions sont justifiées' : 'Aucune transaction'}</p>
-              </div>
-            )}
-            {txRows.map((tx, i) => (
-              <div key={tx.id} className={`flex items-center gap-3 px-4 py-3 ${i < txRows.length - 1 ? 'border-b border-border/50' : ''} hover:bg-white/[0.02] transition-colors`}>
+            {(() => {
+              const visibleRows = month ? txRows.filter(tx => parseInt(tx.date?.slice(5, 7) || '0') === month) : txRows;
+              if (visibleRows.length === 0) return (
+                <div className="p-8 text-center text-muted">
+                  <Search size={28} className="mx-auto mb-2 opacity-30" />
+                  <p className="text-sm">{filter === 'matched' ? 'Aucune transaction justifiée' : filter === 'unmatched' ? 'Toutes les transactions sont justifiées' : 'Aucune transaction'}</p>
+                </div>
+              );
+              return visibleRows.map((tx, i) => (
+              <div key={tx.id} className={`flex items-center gap-3 px-4 py-3 ${i < visibleRows.length - 1 ? 'border-b border-border/50' : ''} hover:bg-white/[0.02] transition-colors`}>
                 {/* Status dot */}
                 <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tx.invoice_id ? 'bg-green-400' : 'bg-yellow-400/60'}`} />
 
@@ -418,7 +433,8 @@ export default function Invoices() {
                   </div>
                 )}
               </div>
-            ))}
+            ));
+            })()}
           </div>
         </>
       )}
