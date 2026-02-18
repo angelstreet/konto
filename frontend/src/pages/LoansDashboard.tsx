@@ -33,7 +33,7 @@ export default function LoansDashboard() {
   const loans = (allAccounts || []).filter(a => a.type === 'loan');
   const totalDebt = loans.reduce((sum, loan) => sum + Math.abs(loan.balance || 0), 0);
 
-  const bankDebts = loans.reduce((acc: Record<string, number>, loan) => {
+  const loanDebts = loans.reduce((acc: Record<string, number>, loan) => {
     const bank = loan.bank_name || 'Non spécifié';
     acc[bank] = (acc[bank] || 0) + Math.abs(loan.balance || 0);
     return acc;
@@ -212,8 +212,8 @@ export default function LoansDashboard() {
             <div>
               <p className="text-sm font-semibold text-muted uppercase tracking-wide mb-6">Répartition par banque</p>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 h-48 p-4 bg-gray-900/30 rounded-xl border border-gray-700/50 overflow-auto">
-                {Object.entries(bankDebts)
-                  .sort(([,a], [,b]) => b - a)
+                {Object.entries(loanDebts)
+                  .sort(([,a]:[string,number], [,b]:[string,number]) => b - a)
                   .map(([bank, debt]) => {
                     const pct = Math.round((debt / totalDebt) * 100);
                     const colSpan = Math.max(1, Math.ceil(pct / 25));
