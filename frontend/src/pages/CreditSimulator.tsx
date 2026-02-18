@@ -1,6 +1,6 @@
 import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { ComposedChart, Bar, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 import { ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
@@ -24,6 +24,7 @@ export default function CreditSimulator() {
   const authFetch = useAuthFetch();
   const [amount, setAmount] = useState(200000);
   const [duration, setDuration] = useState(20);
+  const [differe, setDiffere] = useState(0);
   const [rate, setRate] = useState(3.35);
   const [insuranceRate, setInsuranceRate] = useState(0.34);
   const [rates, setRates] = useState<Rate[]>([]);
@@ -50,27 +51,38 @@ export default function CreditSimulator() {
   const months = duration * 12;
   const insuranceMonthly = (amount * insuranceRate / 100) / 12;
 
+  // Deferred period: interest-only payments for `differe` months, then regular amortization
+  const interestOnlyPayment = amount * monthlyRate;
+  const activeMonths = months - differe;
+
   const monthlyPayment = useMemo(() => {
-    if (monthlyRate === 0) return amount / months;
-    return (amount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -months));
-  }, [amount, monthlyRate, months]);
+    if (activeMonths <= 0) return interestOnlyPayment;
+    if (monthlyRate === 0) return amount / activeMonths;
+    return (amount * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -activeMonths));
+  }, [amount, monthlyRate, activeMonths, interestOnlyPayment]);
 
-  const totalCost = monthlyPayment * months - amount;
+  const totalCost = interestOnlyPayment * differe + (monthlyPayment * activeMonths - amount);
   const totalInsurance = insuranceMonthly * months;
-  const totalRepaid = monthlyPayment * months + totalInsurance;
+  const totalRepaid = interestOnlyPayment * differe + monthlyPayment * activeMonths + totalInsurance;
 
-  // Amortization schedule
+  // Amortization schedule (with optional deferred period)
   const schedule = useMemo(() => {
-    const rows: { month: number; payment: number; interest: number; capital: number; remaining: number }[] = [];
+    const rows: { month: number; payment: number; interest: number; capital: number; remaining: number; deferred?: boolean }[] = [];
     let remaining = amount;
     for (let m = 1; m <= months; m++) {
-      const interest = remaining * monthlyRate;
-      const capital = monthlyPayment - interest;
-      remaining = Math.max(0, remaining - capital);
-      rows.push({ month: m, payment: monthlyPayment, interest, capital, remaining });
+      if (m <= differe) {
+        // Deferred: interest only, no capital repayment
+        const interest = remaining * monthlyRate;
+        rows.push({ month: m, payment: interest, interest, capital: 0, remaining, deferred: true });
+      } else {
+        const interest = remaining * monthlyRate;
+        const capital = monthlyPayment - interest;
+        remaining = Math.max(0, remaining - capital);
+        rows.push({ month: m, payment: monthlyPayment, interest, capital, remaining });
+      }
     }
     return rows;
-  }, [amount, monthlyRate, months, monthlyPayment]);
+  }, [amount, monthlyRate, months, monthlyPayment, differe]);
 
   // Chart data (yearly summary)
   const chartData = useMemo(() => {
@@ -102,7 +114,7 @@ export default function CreditSimulator() {
       </div>
 
       {/* Input sliders */}
-      <div className="bg-surface rounded-xl border border-border p-4 mb-4 space-y-4">
+      <div className="bg-surface rounded-xl border border-border p-4 mb-4 space-y-3">
         <div>
           <div className="flex items-center justify-between mb-1">
             <label className="text-sm text-muted">Montant emprunté</label>
@@ -110,7 +122,6 @@ export default function CreditSimulator() {
           </div>
           <input type="range" min={10000} max={1000000} step={5000} value={amount} onChange={e => setAmount(+e.target.value)}
             className="w-full accent-amber-500" />
-          <div className="flex justify-between text-[10px] text-muted"><span>10k€</span><span>1M€</span></div>
         </div>
 
         <div>
@@ -120,7 +131,28 @@ export default function CreditSimulator() {
           </div>
           <input type="range" min={5} max={30} step={1} value={duration} onChange={e => setDuration(+e.target.value)}
             className="w-full accent-amber-500" />
-          <div className="flex justify-between text-[10px] text-muted"><span>5 ans</span><span>30 ans</span></div>
+        </div>
+
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className="text-sm text-muted">Différé</label>
+            <span className="text-sm font-bold text-accent-400">{differe === 0 ? 'Aucun' : `${differe} mois`}</span>
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            {[0, 1, 2, 3, 6, 9, 12].map(v => (
+              <button
+                key={v}
+                onClick={() => setDiffere(v)}
+                className={`text-xs px-2.5 py-1 rounded-lg border transition-colors ${
+                  differe === v
+                    ? 'bg-accent-500 text-black border-accent-500 font-medium'
+                    : 'bg-black/20 border-border text-muted hover:text-white hover:border-white/20'
+                }`}
+              >
+                {v === 0 ? 'Aucun' : `${v}m`}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3">
@@ -141,8 +173,19 @@ export default function CreditSimulator() {
       <div className="grid grid-cols-2 gap-3 mb-4">
         <div className="bg-surface rounded-xl border border-border p-3 text-center">
           <p className="text-xs text-muted mb-1">Mensualité</p>
-          <p className="text-lg font-bold text-accent-400">{formatCurrency(monthlyPayment)}</p>
-          <p className="text-[10px] text-muted">ass. {formatCurrency(insuranceMonthly)}</p>
+          {differe > 0 ? (
+            <>
+              <p className="text-[10px] text-muted">Différé (intérêts)</p>
+              <p className="text-sm font-bold text-amber-400">{formatCurrency(interestOnlyPayment + insuranceMonthly)}</p>
+              <p className="text-[10px] text-muted mt-0.5">Normal (avec ass.)</p>
+              <p className="text-lg font-bold text-accent-400">{formatCurrency(monthlyPayment + insuranceMonthly)}</p>
+            </>
+          ) : (
+            <p className="text-lg font-bold text-accent-400">
+              {formatCurrency(monthlyPayment + insuranceMonthly)}
+              <span className="text-[10px] font-normal text-muted ml-1">({formatCurrency(insuranceMonthly)} ass.)</span>
+            </p>
+          )}
         </div>
         <div className="bg-surface rounded-xl border border-border p-3 text-center">
           <p className="text-xs text-muted mb-1">Coût crédit</p>
@@ -158,22 +201,30 @@ export default function CreditSimulator() {
         </div>
       </div>
 
-      {/* Chart: capital vs interest over time */}
+      {/* Chart: stacked bar — capital vs interest per year */}
       <div className="bg-surface rounded-xl border border-border p-4 mb-4">
-        <h3 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">Capital vs Intérêts par année</h3>
-        <ResponsiveContainer width="100%" height={220}>
-          <LineChart data={chartData} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
+        <div className="mb-3">
+          <h3 className="text-sm font-medium text-muted uppercase tracking-wide">Répartition annuelle des paiements</h3>
+        </div>
+        <ResponsiveContainer width="100%" height={200}>
+          <ComposedChart data={chartData} margin={{ top: 0, right: 5, bottom: 0, left: 5 }} barCategoryGap="20%">
             <XAxis dataKey="year" tick={{ fontSize: 10, fill: '#888' }} axisLine={false} tickLine={false} />
-            <YAxis tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: '#888' }} axisLine={false} tickLine={false} width={40} />
+            <YAxis yAxisId="bars" tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: '#888' }} axisLine={false} tickLine={false} width={36} />
+            <YAxis yAxisId="line" orientation="right" tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: '#888' }} axisLine={false} tickLine={false} width={36} />
             <Tooltip
-              formatter={(value: any, name: any) => [formatCurrency(value as number), name === 'capital' ? 'Capital' : name === 'interest' ? 'Intérêts' : 'Restant dû']}
+              cursor={{ fill: 'rgba(255,255,255,0.04)' }}
               contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+              formatter={(value: any, name: any) => [
+                formatCurrency(value as number),
+                name === 'capital' ? '🟢 Capital remboursé' : name === 'interest' ? '🟠 Intérêts payés' : '⬜ Restant dû',
+              ]}
+              labelFormatter={(label: any) => `Année ${label}`}
             />
-            <Legend formatter={(v: string) => v === 'capital' ? 'Capital' : v === 'interest' ? 'Intérêts' : 'Restant dû'} />
-            <Line type="monotone" dataKey="capital" stroke="#22c55e" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="interest" stroke="#f97316" strokeWidth={2} dot={false} />
-            <Line type="monotone" dataKey="remaining" stroke="#6b7280" strokeWidth={1.5} dot={false} strokeDasharray="4 4" />
-          </LineChart>
+            <Legend formatter={(v: string) => v === 'capital' ? 'Capital remboursé' : v === 'interest' ? 'Intérêts payés' : 'Restant dû'} wrapperStyle={{ fontSize: 11 }} />
+            <Bar yAxisId="bars" dataKey="interest" stackId="a" fill="#f97316" radius={[0, 0, 0, 0]} />
+            <Bar yAxisId="bars" dataKey="capital" stackId="a" fill="#22c55e" radius={[3, 3, 0, 0]} />
+            <Line yAxisId="line" type="monotone" dataKey="remaining" stroke="#6b7280" strokeWidth={1.5} dot={false} strokeDasharray="4 4" />
+          </ComposedChart>
         </ResponsiveContainer>
       </div>
 
@@ -186,7 +237,7 @@ export default function CreditSimulator() {
       </button>
 
       {showTable && (
-        <div className="bg-surface rounded-xl border border-border max-h-96 overflow-y-auto">
+        <div className="bg-surface rounded-xl border border-border">
           <table className="w-full text-[11px] md:text-xs">
             <thead className="sticky top-0 bg-surface">
               <tr className="text-muted uppercase border-b border-border">
@@ -198,9 +249,16 @@ export default function CreditSimulator() {
               </tr>
             </thead>
             <tbody>
-              {schedule.filter((_, i) => i % 12 === 0 || i === schedule.length - 1).map(row => (
-                <tr key={row.month} className="border-b border-border/50 hover:bg-surface-hover">
-                  <td className="px-1 py-1 md:px-3 md:py-1.5">An {Math.ceil(row.month / 12)}</td>
+              {schedule.filter((row, i) => {
+                if (row.deferred) return i === differe - 1; // only show last deferred month
+                return (row.month - differe) % 12 === 1 || i === schedule.length - 1; // yearly after deferral
+              }).map(row => (
+                <tr key={row.month} className={`border-b border-border/50 hover:bg-surface-hover ${row.deferred ? 'opacity-60' : ''}`}>
+                  <td className="px-1 py-1 md:px-3 md:py-1.5">
+                    {row.deferred
+                      ? <span>M1–{differe} <span className="text-[9px] text-amber-400">diff.</span></span>
+                      : `An ${Math.ceil((row.month - differe) / 12)}`}
+                  </td>
                   <td className="px-1 py-1 md:px-3 md:py-1.5 text-right">{isMobile ? formatMobile(row.payment) : formatCurrency(row.payment)}</td>
                   <td className="px-1 py-1 md:px-3 md:py-1.5 text-right text-green-400">{isMobile ? formatMobile(row.capital) : formatCurrency(row.capital)}</td>
                   <td className="px-1 py-1 md:px-3 md:py-1.5 text-right text-orange-400">{isMobile ? formatMobile(row.interest) : formatCurrency(row.interest)}</td>

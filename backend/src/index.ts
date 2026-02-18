@@ -2754,19 +2754,36 @@ app.get('/api/drive-callback', async (c) => {
       args: [userId, companyId, access_token, refresh_token || null, expiry]
     });
 
-    return c.html(`<html><head><meta http-equiv="refresh" content="3;url=/konto/invoices"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
-      <h1 style="color:#10b981;">✅ Drive connected!</h1>
-      <p>Tokens saved. Redirecting to Invoices...</p>
-      <a href="/konto/invoices" style="color:#d4a812;">← Go to Invoices</a>
+    return c.html(`<html><head><meta http-equiv="refresh" content="2;url=${returnTo}"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#10b981;">✅ Drive connecté !</h1>
+      <p>Redirection en cours...</p>
+      <a href="${returnTo}" style="color:#d4a812;">← Retour</a>
     </body></html>`);
   } catch (err: any) {
     console.error('Drive callback error:', err);
     return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">Error</h1><p>${err.message}</p>
-      <a href="/konto/invoices" style="color:#d4a812;">← Back to Invoices</a>
+      <a href="${returnTo}" style="color:#d4a812;">← Retour</a>
     </body></html>`);
   }
 });
+
+// Recursively collect all subfolder IDs under a given Drive folder (max 5 levels)
+async function collectDriveFolderIds(rootId: string, token: string, depth = 0): Promise<string[]> {
+  if (depth > 4) return [rootId];
+  const ids = [rootId];
+  const q = encodeURIComponent(`mimeType='application/vnd.google-apps.folder' and '${rootId}' in parents and trashed=false`);
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id)&pageSize=100`, {
+    headers: { Authorization: `Bearer ${token}` }
+  });
+  if (!res.ok) return ids;
+  const data: any = await res.json();
+  for (const sub of (data.files || [])) {
+    const subIds = await collectDriveFolderIds(sub.id, token, depth + 1);
+    ids.push(...subIds);
+  }
+  return ids;
+}
 
 // Scan invoices from Drive folder (simulated — real OCR needs pdf-parse/tesseract)
 app.post('/api/invoices/scan', async (c) => {
@@ -2774,11 +2791,12 @@ app.post('/api/invoices/scan', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const companyId = body.company_id || null;
 
-  // Check drive connection
-  const conn = await db.execute({
-    sql: 'SELECT * FROM drive_connections WHERE user_id = ? AND status = ?',
-    args: [userId, 'active']
-  });
+  // Check drive connection — scope by company_id like all other drive queries
+  const connSql = companyId
+    ? 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id = ? AND status = ? LIMIT 1'
+    : 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1';
+  const connArgs = companyId ? [userId, companyId, 'active'] : [userId, 'active'];
+  const conn = await db.execute({ sql: connSql, args: connArgs });
   if (conn.rows.length === 0) {
     return c.json({ error: 'No active Google Drive connection. Connect in Settings first.' }, 400);
   }
@@ -2792,9 +2810,14 @@ app.post('/api/invoices/scan', async (c) => {
   }
 
   try {
-    // List PDF files in Drive folder
-    let query = "mimeType='application/pdf'";
-    if (folderId) query += ` and '${folderId}' in parents`;
+    // Build PDF query — if a folder is configured, collect all subfolder IDs recursively
+    // (Drive API v3 has no native recursive search, so we walk the tree first)
+    let query = "mimeType='application/pdf' and trashed=false";
+    if (folderId) {
+      const allFolderIds = await collectDriveFolderIds(folderId, accessToken);
+      const parentClause = allFolderIds.map(id => `'${id}' in parents`).join(' or ');
+      query += ` and (${parentClause})`;
+    }
 
     const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=100`;
     const listRes = await fetch(listUrl, {

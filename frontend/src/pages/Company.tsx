@@ -1,6 +1,6 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
-import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, ChevronRight, Info, X, MoreVertical, RefreshCw } from 'lucide-react';
+import { Building2, Plus, Pencil, Trash2, Link, Unlink, Search, ChevronDown, ChevronRight, Info, X, MoreVertical, RefreshCw, Cloud } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
 import { useApi, invalidateApi, useAuthFetch } from '../useApi';
 import ConfirmDialog from '../components/ConfirmDialog';
@@ -216,6 +216,72 @@ export default function CompanyPage() {
     });
   };
 
+  const loadDriveStatuses = async (companyList: Company[]) => {
+    if (!companyList.length) return;
+    const results = await Promise.all(
+      companyList.map(async (c) => {
+        const res = await authFetch(`${API}/drive/status?company_id=${c.id}`);
+        const data = await res.json();
+        return [c.id, data] as [number, any];
+      })
+    );
+    setDriveStatuses(Object.fromEntries(results));
+  };
+
+  useEffect(() => {
+    if (companies?.length) loadDriveStatuses(companies);
+  }, [companies]);
+
+  const linkDrive = async (companyId: number) => {
+    const res = await authFetch(`${API}/drive/connect`, {
+      method: 'POST',
+      body: JSON.stringify({ company_id: companyId, return_to: window.location.pathname }),
+    });
+    const data = await res.json();
+    if (data.url) window.location.href = data.url;
+    else if (companies) loadDriveStatuses(companies);
+  };
+
+  const disconnectDrive = async (companyId: number) => {
+    if (!confirm('Déconnecter Drive pour cette entreprise ?')) return;
+    await authFetch(`${API}/drive/disconnect?company_id=${companyId}`, { method: 'DELETE' });
+    setManagingDriveId(null);
+    if (companies) loadDriveStatuses(companies);
+  };
+
+  const openFolderPicker = async (companyId: number, parentId: string | null = null, parentName: string = 'Mon Drive') => {
+    setLoadingFolders(true);
+    try {
+      const params = [`company_id=${companyId}`, ...(parentId ? [`parent_id=${parentId}`] : [])].join('&');
+      const res = await authFetch(`${API}/drive/folders?${params}`);
+      const data = await res.json();
+      setFolders(data.folders || []);
+      setCurrentFolderId(parentId);
+      if (parentId) {
+        const existingIndex = folderPath.findIndex(f => f.id === parentId);
+        if (existingIndex >= 0) setFolderPath(folderPath.slice(0, existingIndex + 1));
+        else setFolderPath([...folderPath, { id: parentId, name: parentName }]);
+      } else {
+        setFolderPath([{ id: null, name: 'Mon Drive' }]);
+      }
+      setShowFolderPickerFor(companyId);
+    } finally {
+      setLoadingFolders(false);
+    }
+  };
+
+  const selectDriveFolder = async (companyId: number, folderId: string | null, folderName: string | null) => {
+    const fullPath = folderId ? folderPath.map(f => f.name).join(' / ') + (folderName ? ` / ${folderName}` : '') : null;
+    await authFetch(`${API}/drive/folder`, {
+      method: 'PATCH',
+      body: JSON.stringify({ company_id: companyId, folder_id: folderId, folder_name: fullPath }),
+    });
+    setShowFolderPickerFor(null);
+    setFolderPath([{ id: null, name: 'Mon Drive' }]);
+    setCurrentFolderId(null);
+    if (companies) loadDriveStatuses(companies);
+  };
+
   const toggleViewDetails = async (c: Company) => {
     if (viewingCompanyId === c.id) {
       setViewingCompanyId(null);
@@ -245,6 +311,14 @@ export default function CompanyPage() {
   };
 
   const [expandedAccounts, setExpandedAccounts] = useState<Set<number>>(new Set());
+  const [driveStatuses, setDriveStatuses] = useState<Record<number, { connected: boolean; folder_path?: string | null }>>({});
+  const [managingDriveId, setManagingDriveId] = useState<number | null>(null);
+  const [showFolderPickerFor, setShowFolderPickerFor] = useState<number | null>(null);
+  const [folders, setFolders] = useState<any[]>([]);
+  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
+  const [folderPath, setFolderPath] = useState<Array<{ id: string | null; name: string }>>([{ id: null, name: 'Mon Drive' }]);
+
   const toggleAccount = (id: number) => {
     setExpandedAccounts(prev => {
       const next = new Set(prev);
@@ -270,8 +344,8 @@ export default function CompanyPage() {
 
   const legalForms = ['SARL', 'SAS', 'SASU', 'EURL', 'SA', 'SCI', 'Auto-entrepreneur', 'EI', 'Autre'];
 
-  function CompanyOverflowMenu({ onDetails, onEdit, onLinkAccount, onUnlinkAll, onDelete, hasLinked, t: tr }: {
-    onDetails: () => void; onEdit: () => void; onLinkAccount: () => void; onUnlinkAll: () => void; onDelete: () => void; hasLinked: boolean; t: (k: string) => string;
+  function CompanyOverflowMenu({ onDetails, onEdit, onLinkAccount, onUnlinkAll, onDelete, onLinkDrive, hasLinked, driveConnected, t: tr }: {
+    onDetails: () => void; onEdit: () => void; onLinkAccount: () => void; onUnlinkAll: () => void; onDelete: () => void; onLinkDrive: () => void; hasLinked: boolean; driveConnected: boolean; t: (k: string) => string;
   }) {
     const [open, setOpen] = useState(false);
     const ref = useRef<HTMLDivElement>(null);
@@ -285,6 +359,7 @@ export default function CompanyPage() {
       { label: tr('details'), onClick: onDetails, icon: <Info size={14} /> },
       { label: tr('edit'), onClick: onEdit, icon: <Pencil size={14} /> },
       { label: tr('link_account') || 'Lier un compte', onClick: onLinkAccount, icon: <Link size={14} /> },
+      { label: driveConnected ? 'Drive ✅' : (tr('link_drive') || 'Lier Drive'), onClick: onLinkDrive, icon: <Cloud size={14} /> },
       ...(hasLinked ? [{ label: tr('unlink_all') || 'Tout détacher', onClick: onUnlinkAll, icon: <Unlink size={14} /> }] : []),
       { label: tr('delete'), onClick: onDelete, icon: <Trash2 size={14} />, danger: true },
     ];
@@ -562,7 +637,9 @@ export default function CompanyPage() {
                     onLinkAccount={() => setLinkingCompanyId(linkingCompanyId === c.id ? null : c.id)}
                     onUnlinkAll={() => unlinkAllAccounts(c.id)}
                     onDelete={() => deleteCompany(c.id)}
+                    onLinkDrive={() => driveStatuses[c.id]?.connected ? setManagingDriveId(managingDriveId === c.id ? null : c.id) : linkDrive(c.id)}
                     hasLinked={linkedAccounts(c.id).length > 0}
+                    driveConnected={!!driveStatuses[c.id]?.connected}
                     t={t}
                   />
                 </div>
@@ -581,7 +658,9 @@ export default function CompanyPage() {
                       onLinkAccount={() => setLinkingCompanyId(linkingCompanyId === c.id ? null : c.id)}
                       onUnlinkAll={() => unlinkAllAccounts(c.id)}
                       onDelete={() => deleteCompany(c.id)}
+                      onLinkDrive={() => driveStatuses[c.id]?.connected ? setManagingDriveId(managingDriveId === c.id ? null : c.id) : linkDrive(c.id)}
                       hasLinked={linkedAccounts(c.id).length > 0}
+                      driveConnected={!!driveStatuses[c.id]?.connected}
                       t={t}
                     />
                   </div>
@@ -716,6 +795,87 @@ export default function CompanyPage() {
                   </div>
                 </div>
                 )}
+
+                  {/* Drive management panel */}
+                  {managingDriveId === c.id && driveStatuses[c.id]?.connected && (
+                    <div className="mt-2 border border-border rounded-lg bg-black/30 p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2 text-green-400">
+                          <Cloud size={14} />
+                          <span className="text-xs">
+                            Drive connecté{driveStatuses[c.id].folder_path ? ` — ${driveStatuses[c.id].folder_path}` : ' — Tous les dossiers'}
+                          </span>
+                        </div>
+                        <button onClick={() => { setManagingDriveId(null); setShowFolderPickerFor(null); }} className="text-muted hover:text-white p-0.5">
+                          <X size={14} />
+                        </button>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => openFolderPicker(c.id)}
+                          disabled={loadingFolders}
+                          className="text-xs px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-muted hover:text-white rounded border border-border transition-colors disabled:opacity-50"
+                        >
+                          {loadingFolders ? '...' : '📂 Choisir dossier'}
+                        </button>
+                        <button
+                          onClick={() => disconnectDrive(c.id)}
+                          className="text-xs px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded border border-red-500/20 transition-colors"
+                        >
+                          🔌 Déconnecter
+                        </button>
+                      </div>
+                      {showFolderPickerFor === c.id && (
+                        <div className="mt-3 border-t border-border pt-3">
+                          <div className="flex items-center gap-1 text-xs text-muted mb-2 flex-wrap">
+                            {folderPath.map((p, i) => (
+                              <span key={i} className="flex items-center gap-1">
+                                {i > 0 && <span>/</span>}
+                                <button
+                                  onClick={() => openFolderPicker(c.id, p.id, p.name)}
+                                  className={`hover:text-white transition-colors ${i === folderPath.length - 1 ? 'text-white' : ''}`}
+                                >
+                                  {p.name}
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                          <button
+                            onClick={() => selectDriveFolder(c.id, null, null)}
+                            className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-white/5 text-muted hover:text-white mb-1 transition-colors"
+                          >
+                            📁 Tous les dossiers (scan complet)
+                          </button>
+                          {currentFolderId && (
+                            <button
+                              onClick={() => selectDriveFolder(c.id, currentFolderId, folderPath[folderPath.length - 1]?.name || null)}
+                              className="w-full text-left text-xs px-2 py-1.5 rounded bg-accent-500/10 hover:bg-accent-500/20 text-accent-400 mb-2 transition-colors"
+                            >
+                              ✓ Choisir ce dossier
+                            </button>
+                          )}
+                          <div className="space-y-0.5 max-h-40 overflow-y-auto">
+                            {loadingFolders ? (
+                              <p className="text-xs text-muted text-center py-2">Chargement...</p>
+                            ) : folders.length > 0 ? (
+                              folders.map((f: any) => (
+                                <button
+                                  key={f.id}
+                                  onClick={() => openFolderPicker(c.id, f.id, f.name)}
+                                  className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-white/5 flex items-center justify-between transition-colors"
+                                >
+                                  <span>📁 {f.name}</span>
+                                  <span className="text-muted">Ouvrir →</span>
+                                </button>
+                              ))
+                            ) : (
+                              <p className="text-xs text-muted text-center py-2">Aucun sous-dossier</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  )}
 
                   {/* Link account multi-select */}
                   {linkingCompanyId === c.id && unlinkedAccounts.length > 0 && (
