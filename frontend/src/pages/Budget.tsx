@@ -154,8 +154,10 @@ export default function Budget() {
                     width={40}
                   />
                   <Tooltip
+                    cursor={{ fill: 'rgba(255,255,255,0.04)' }}
                     formatter={(value: any, name: any) => [hideAmounts ? <span className="amount-masked">{formatCurrency(value as number)}</span> : formatCurrency(value as number), name === 'income' ? 'Entrées' : 'Sorties']}
-                    contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+                    contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12, color: '#e5e5e5' }}
+                    itemStyle={{ color: '#e5e5e5' }}
                   />
                   <Bar dataKey="income" fill="#22c55e" radius={[4, 4, 0, 0]} />
                   <Bar dataKey="expense" fill="#ef4444" radius={[4, 4, 0, 0]} />
@@ -188,7 +190,8 @@ export default function Budget() {
                       </Pie>
                       <Tooltip
                         formatter={(value: any) => [hideAmounts ? <span className="amount-masked">{formatCurrency(value as number)}</span> : formatCurrency(value as number)]}
-                        contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+                        contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12, color: '#e5e5e5' }}
+                        itemStyle={{ color: '#e5e5e5' }}
                       />
                     </PieChart>
                   </ResponsiveContainer>

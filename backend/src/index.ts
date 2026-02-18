@@ -2144,12 +2144,20 @@ app.get('/api/dashboard/history', async (c) => {
 app.get('/api/budget/cashflow', async (c) => {
   const from = c.req.query('from') || new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
   const to = c.req.query('to') || new Date().toISOString().split('T')[0];
+  const usage = c.req.query('usage');
+  const company_id = c.req.query('company_id');
+
+  let where = 't.date >= ? AND t.date <= ?';
+  const args: any[] = [from, to];
+  if (usage === 'personal') { where += " AND (ba.usage = 'personal' OR ba.usage IS NULL)"; }
+  else if (usage === 'professional') { where += " AND ba.usage = 'professional'"; }
+  else if (company_id) { where += ' AND ba.company_id = ?'; args.push(company_id); }
 
   const result = await db.execute({
     sql: `SELECT t.date, t.amount, t.label, t.category, ba.usage
           FROM transactions t LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
-          WHERE t.date >= ? AND t.date <= ? ORDER BY t.date`,
-    args: [from, to]
+          WHERE ${where} ORDER BY t.date`,
+    args
   });
 
   let totalIncome = 0, totalExpense = 0;

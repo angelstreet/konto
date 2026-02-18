@@ -389,7 +389,7 @@ export default function Income() {
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis dataKey="year" tick={{ fill: '#888', fontSize: 12 }} />
                 <YAxis tick={{ fill: '#888', fontSize: 12 }} tickFormatter={v => hideAmounts ? '' : `${Math.round(v / 1000)}k`} />
-                <Tooltip formatter={(v: any) => mask(fmt(v))} contentStyle={{ background: '#1a1a2e', border: '1px solid #333', borderRadius: 8 }} />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,0.04)' }} formatter={(v: any) => mask(fmt(v))} contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid #333', borderRadius: 8, color: '#e5e5e5' }} itemStyle={{ color: '#e5e5e5' }} />
                 <Bar dataKey="total" fill="#6366f1" radius={[4, 4, 0, 0]} name="Salaire brut" />
               </BarChart>
             </ResponsiveContainer>

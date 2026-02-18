@@ -220,7 +220,9 @@ export default function Trends() {
                         <Tooltip
                           formatter={(v: any) => hideAmounts ? '•••' : formatCurrency(Number(v))}
                           labelFormatter={(l: any) => String(l)}
-                          contentStyle={{ fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6 }}
+                          cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                          contentStyle={{ fontSize: 11, backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: '#e5e5e5' }}
+                          itemStyle={{ color: '#e5e5e5' }}
                         />
                         <Bar dataKey="amount" fill={color} radius={[2, 2, 0, 0]} />
                       </BarChart>

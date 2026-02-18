@@ -62,7 +62,8 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
               </Pie>
               <Tooltip
                 formatter={(value: any, name: any) => [fc(value as number), LABELS[name as string] || name]}
-                contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+                contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12, color: '#e5e5e5' }}
+                itemStyle={{ color: '#e5e5e5' }}
               />
             </PieChart>
           </ResponsiveContainer>

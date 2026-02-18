@@ -177,7 +177,9 @@ export default function PropertyROI() {
                           <Tooltip
                             formatter={(v: any) => h ? '•••' : fmt(v)}
                             labelFormatter={(l: any) => String(l)}
-                            contentStyle={{ fontSize: 11, background: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6 }}
+                            cursor={{ fill: 'rgba(255,255,255,0.04)' }}
+                            contentStyle={{ fontSize: 11, backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: '#e5e5e5' }}
+                            itemStyle={{ color: '#e5e5e5' }}
                           />
                           <Bar dataKey="revenue" name="Revenus" fill="#22c55e" radius={[2, 2, 0, 0]} />
                           <Bar dataKey="costs" name="Charges" fill="#ef4444" radius={[2, 2, 0, 0]} />

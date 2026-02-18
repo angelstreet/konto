@@ -207,7 +207,7 @@ export default function Analytics() {
               <BarChart data={d.trends.map(t => ({ ...t, label: monthLabel(t.period) }))}>
                 <XAxis dataKey="label" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => hideAmounts ? '' : `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip formatter={(v: any) => hideAmounts ? <span className="amount-masked">{`${fmt(v)} €`}</span> : `${fmt(v)} €`} contentStyle={{ background: '#1f2937', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }} />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,0.04)' }} formatter={(v: any) => hideAmounts ? <span className="amount-masked">{`${fmt(v)} €`}</span> : `${fmt(v)} €`} contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }} itemStyle={{ color: '#fff' }} />
                 <Bar dataKey="income" name="Revenus" fill="#22c55e" radius={[4, 4, 0, 0]} />
                 <Bar dataKey="expenses" name="Dépenses" fill="#ef4444" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -227,7 +227,7 @@ export default function Analytics() {
                   <Pie data={d.topCategories} dataKey="amount" nameKey="category" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2}>
                     {d.topCategories.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip formatter={(v: any) => hideAmounts ? <span className="amount-masked">{`${fmt(v)} €`}</span> : `${fmt(v)} €`} contentStyle={{ background: '#1f2937', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }} />
+                  <Tooltip formatter={(v: any) => hideAmounts ? <span className="amount-masked">{`${fmt(v)} €`}</span> : `${fmt(v)} €`} contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }} itemStyle={{ color: '#fff' }} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex-1 space-y-1.5">

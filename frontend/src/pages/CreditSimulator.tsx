@@ -213,7 +213,8 @@ export default function CreditSimulator() {
             <YAxis yAxisId="line" orientation="right" tickFormatter={(v: number) => `${(v / 1000).toFixed(0)}k`} tick={{ fontSize: 10, fill: '#888' }} axisLine={false} tickLine={false} width={36} />
             <Tooltip
               cursor={{ fill: 'rgba(255,255,255,0.04)' }}
-              contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+              contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12, color: '#e5e5e5' }}
+              itemStyle={{ color: '#e5e5e5' }}
               formatter={(value: any, name: any) => [
                 formatCurrency(value as number),
                 name === 'capital' ? '🟢 Capital remboursé' : name === 'interest' ? '🟠 Intérêts payés' : '⬜ Restant dû',

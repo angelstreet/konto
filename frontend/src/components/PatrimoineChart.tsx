@@ -101,7 +101,8 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
             <Tooltip
               formatter={(value: any) => [hideAmounts ? <span className="amount-masked">{formatCurrency(value as number)}</span> : formatCurrency(value as number), 'Patrimoine']}
               labelFormatter={(l: any) => new Date(String(l)).toLocaleDateString('fr-FR')}
-              contentStyle={{ background: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12 }}
+              contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12, color: '#e5e5e5' }}
+              itemStyle={{ color: '#e5e5e5' }}
             />
             <Area
               type="monotone"
