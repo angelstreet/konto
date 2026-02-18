@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, SlidersHorizontal, X, RefreshCw, AlertTriangle, TrendingUp, TrendingDown, ChevronDown, Bitcoin } from 'lucide-react';
+import { ArrowLeftRight, Search, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownLeft, SlidersHorizontal, X, RefreshCw, AlertTriangle, TrendingUp, TrendingDown, ChevronDown, Bitcoin, ArrowUp } from 'lucide-react';
 import { useFilter } from '../FilterContext';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
@@ -723,9 +723,17 @@ export default function Transactions() {
           >
             <ChevronLeft size={16} />
           </button>
-          <span className="text-sm text-muted">
-            {page + 1} / {totalPages}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-muted">{page + 1} / {totalPages}</span>
+            <button
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              className="flex items-center gap-1 text-xs text-muted hover:text-white transition-colors px-2 py-1 rounded-lg hover:bg-surface-hover"
+              title="Haut de page"
+            >
+              <ArrowUp size={13} />
+              <span className="hidden sm:inline">Haut</span>
+            </button>
+          </div>
           <button
             onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))}
             disabled={page >= totalPages - 1}
