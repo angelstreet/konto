@@ -43,7 +43,7 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
       .finally(() => setLoading(false));
   }, [url]);
 
-  // When URL changes, immediately sync state with cache for the new URL
+  // When URL changes, show cached data immediately then always re-fetch
   useEffect(() => {
     urlRef.current = url;
     const cached = cache.get(url);
@@ -52,8 +52,8 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
       setLoading(false);
     } else {
       setData(null);
-      fetchData();
     }
+    fetchData();
   }, [url, fetchData]);
 
   const updateData = useCallback((d: T) => {

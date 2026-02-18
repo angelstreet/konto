@@ -7,8 +7,6 @@ import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
-import { useFilter } from '../FilterContext';
-import ScopeSelect from '../components/ScopeSelect';
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Alimentation': '#22c55e',
@@ -48,17 +46,11 @@ export default function Budget() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const authFetch = useAuthFetch();
-  const { scope, setScope, appendScope } = useFilter();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
   const [range, setRange] = useState('3m');
   const [data, setData] = useState<CashflowData | null>(null);
   const [loading, setLoading] = useState(true);
-
-  // Auto-scope: budget page is always personal
-  useEffect(() => {
-    if (scope !== 'personal') setScope('personal');
-  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -67,11 +59,11 @@ export default function Budget() {
       ? '2020-01-01'
       : new Date(Date.now() - days * 86400000).toISOString().split('T')[0];
     const to = new Date().toISOString().split('T')[0];
-    authFetch(appendScope(`${API}/budget/cashflow?from=${from}&to=${to}`))
+    authFetch(`${API}/budget/cashflow?from=${from}&to=${to}&usage=personal`)
       .then(r => r.json())
       .then(d => setData(d))
       .finally(() => setLoading(false));
-  }, [range, scope, appendScope]);
+  }, [range]);
 
   const expenseCategories = data
     ? Object.entries(data.byCategory)
@@ -91,7 +83,6 @@ export default function Budget() {
           <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
         <div className="flex items-center gap-2">
-          <ScopeSelect />
           <div className="flex gap-1">
           {RANGES.map(r => (
             <button
