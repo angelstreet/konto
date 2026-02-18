@@ -3992,6 +3992,7 @@ app.post('/api/payslips/upload', async (c) => {
   });
   if (conn.rows.length === 0) return c.json({ error: 'No Drive connection' }, 400);
   const driveConn: any = conn.rows[0];
+  const uploadToken = await getDriveAccessToken(driveConn);
 
   // Get payslips folder mapping
   const mapping = await db.execute({
@@ -4026,7 +4027,7 @@ app.post('/api/payslips/upload', async (c) => {
     const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name', {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${driveConn.access_token}`,
+        Authorization: `Bearer ${uploadToken}`,
         'Content-Type': `multipart/related; boundary=${boundary}`,
       },
       body,
@@ -4049,7 +4050,7 @@ app.post('/api/payslips/upload', async (c) => {
 
     // Try extraction
     try {
-      const extracted = await extractPayslipFromDrive(uploaded.id, driveConn.access_token);
+      const extracted = await extractPayslipFromDrive(uploaded.id, uploadToken);
       if (extracted.gross || extracted.net) {
         await db.execute({
           sql: `UPDATE payslips SET gross = ?, net = ?, employer = ?, status = 'extracted' WHERE user_id = ? AND year = ? AND month = ?`,
@@ -4082,6 +4083,7 @@ app.post('/api/payslips/scan', async (c) => {
   });
   if (conn.rows.length === 0) return c.json({ error: 'No Drive connection' }, 400);
   const driveConn: any = conn.rows[0];
+  const scanToken = await getDriveAccessToken(driveConn);
 
   // Get payslips folder mapping
   const mapping = await db.execute({
@@ -4093,13 +4095,13 @@ app.post('/api/payslips/scan', async (c) => {
 
   try {
     // List all PDFs in the payslips folder (and subfolders)
-    const allFolderIds = await collectDriveFolderIds(folderId, driveConn.access_token);
+    const allFolderIds = await collectDriveFolderIds(folderId, scanToken);
     const parentClause = allFolderIds.map(id => `'${id}' in parents`).join(' or ');
     const query = `mimeType='application/pdf' and trashed=false and (${parentClause})`;
 
     const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,createdTime,modifiedTime)&orderBy=name&pageSize=200`;
     const listRes = await fetch(listUrl, {
-      headers: { Authorization: `Bearer ${driveConn.access_token}` }
+      headers: { Authorization: `Bearer ${scanToken}` }
     });
 
     if (!listRes.ok) {
@@ -4184,7 +4186,7 @@ app.post('/api/payslips/scan', async (c) => {
       const payslip: any = existing.rows[0];
       if (payslip && payslip.status !== 'confirmed') {
         try {
-          const data = await extractPayslipFromDrive(match.file_id, driveConn.access_token);
+          const data = await extractPayslipFromDrive(match.file_id, scanToken);
           if (data.gross || data.net) {
             await db.execute({
               sql: `UPDATE payslips SET gross = ?, net = ?, employer = ?, status = 'extracted' WHERE user_id = ? AND year = ? AND month = ?`,
