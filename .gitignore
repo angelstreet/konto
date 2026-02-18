@@ -7,3 +7,6 @@ backend/.env.bak
 backend/.env.local
 backups/
 frontend/.env.local.backup
+*.db-shm
+*.db-wal
+*.db-journal
