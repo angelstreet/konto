@@ -2576,6 +2576,7 @@ app.get('/api/drive/status', async (c) => {
 app.post('/api/drive/connect', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const companyId = body.company_id || null;
+  const returnTo = body.return_to || null;
 
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
   const DRIVE_REDIRECT_URI = process.env.GOOGLE_DRIVE_REDIRECT_URI || 'https://65.108.14.251:8080/konto/api/drive-callback';
@@ -2584,8 +2585,11 @@ app.post('/api/drive/connect', async (c) => {
     return c.json({ error: 'Google Drive not configured' }, 500);
   }
 
-  // Encode company_id in state parameter for OAuth callback
-  const state = companyId ? Buffer.from(JSON.stringify({ company_id: companyId })).toString('base64') : '';
+  // Encode company_id and return_to in state parameter for OAuth callback
+  const stateData: any = {};
+  if (companyId) stateData.company_id = companyId;
+  if (returnTo) stateData.return_to = returnTo;
+  const state = Object.keys(stateData).length > 0 ? Buffer.from(JSON.stringify(stateData)).toString('base64') : '';
 
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -2688,31 +2692,33 @@ app.get('/api/drive-callback', async (c) => {
   const state = c.req.query('state');
   const error = c.req.query('error');
 
+  // Extract company_id and return_to from state parameter
+  let companyId = null;
+  let returnTo = '/konto/invoices';
+  if (state) {
+    try {
+      const decoded = JSON.parse(Buffer.from(state, 'base64').toString());
+      companyId = decoded.company_id || null;
+      returnTo = decoded.return_to || '/konto/invoices';
+    } catch (e) {
+      console.error('Failed to decode state:', e);
+    }
+  }
+
   if (error) {
     return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">Drive connection failed</h1><p>${error}</p>
-      <a href="/konto/invoices" style="color:#d4a812;">← Back to Invoices</a>
+      <a href="${returnTo}" style="color:#d4a812;">← Retour</a>
     </body></html>`);
   }
   if (!code) {
     return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">No code received</h1>
-      <a href="/konto/invoices" style="color:#d4a812;">← Back to Invoices</a>
+      <a href="${returnTo}" style="color:#d4a812;">← Retour</a>
     </body></html>`);
   }
 
   const userId = await getUserId(c);
-
-  // Extract company_id from state parameter
-  let companyId = null;
-  if (state) {
-    try {
-      const decoded = JSON.parse(Buffer.from(state, 'base64').toString());
-      companyId = decoded.company_id || null;
-    } catch (e) {
-      console.error('Failed to decode state:', e);
-    }
-  }
 
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
   const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;

@@ -147,11 +147,11 @@ export default function Sidebar({ onLogout }: Props) {
     return stored === null ? true : stored === 'true';
   });
 
-  // Track open groups (lvl1) and subgroups (lvl2)
-  const [openGroups, setOpenGroups] = useState<Set<number>>(() => {
-    const active = new Set<number>([0]);
+  // Track open group (lvl1) — accordion: only one at a time
+  const [openGroup, setOpenGroup] = useState<number | null>(() => {
+    let active: number | null = null;
     navGroups.forEach((g, gi) => {
-      if (childContainsActive(g.children, pathname)) active.add(gi);
+      if (childContainsActive(g.children, pathname)) active = gi;
     });
     return active;
   });
@@ -168,16 +168,11 @@ export default function Sidebar({ onLogout }: Props) {
     return active;
   });
 
-  // Auto-open groups/subgroups when navigating
+  // Auto-open group/subgroups when navigating
   useEffect(() => {
     navGroups.forEach((g, gi) => {
       if (childContainsActive(g.children, pathname)) {
-        setOpenGroups(prev => {
-          if (prev.has(gi)) return prev;
-          const next = new Set(prev);
-          next.add(gi);
-          return next;
-        });
+        setOpenGroup(gi);
       }
       g.children.forEach((c, ci) => {
         if (c.kind === 'subgroup' && childContainsActive(c.children, pathname)) {
@@ -194,12 +189,7 @@ export default function Sidebar({ onLogout }: Props) {
   }, [pathname]);
 
   const toggleGroup = (gi: number) => {
-    setOpenGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(gi)) next.delete(gi);
-      else next.add(gi);
-      return next;
-    });
+    setOpenGroup(prev => prev === gi ? null : gi);
   };
 
   const toggleSubGroup = (key: string) => {
@@ -313,7 +303,7 @@ export default function Sidebar({ onLogout }: Props) {
       {/* Navigation */}
       <nav className="flex-1 overflow-y-auto px-2 py-3 space-y-1 scrollbar-thin">
         {navGroups.map((group, gi) => {
-          const isOpen = openGroups.has(gi);
+          const isOpen = openGroup === gi;
           const hasActiveItem = childContainsActive(group.children, pathname);
 
           return (
