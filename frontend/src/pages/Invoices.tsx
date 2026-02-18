@@ -296,38 +296,33 @@ export default function Invoices() {
                 <div className="text-[10px] text-muted uppercase tracking-wide">Total</div>
               </div>
             </div>
-            <div className="flex items-center gap-2">
-              <select
-                value={year}
-                onChange={e => setYear(Number(e.target.value))}
-                className="text-xs px-2 py-1.5 bg-surface border border-border rounded-lg"
-              >
-                {[0, 1, 2, 3].map(i => {
-                  const y = new Date().getFullYear() - i;
-                  return <option key={y} value={y}>{y}</option>;
-                })}
-              </select>
-              {yearFolderMapping ? (
-                <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg border border-accent-500/50 bg-accent-500/10 text-accent-400">
-                  <FolderOpen size={13} className="shrink-0" />
-                  <span className="text-xs max-w-[120px] truncate">{yearFolderMapping.folder_path?.split('/').pop()?.trim() || String(year)}</span>
-                  <button onClick={() => setShowYearFolderPicker(true)} className="p-0.5 hover:text-white transition-colors" title="Modifier le dossier">
-                    <Pencil size={11} />
-                  </button>
-                  <button onClick={unlinkYearFolder} className="p-0.5 hover:text-red-400 transition-colors" title="Délier le dossier">
-                    <X size={11} />
-                  </button>
-                </div>
-              ) : (
-                <button
-                  onClick={() => setShowYearFolderPicker(true)}
-                  className="flex items-center gap-1.5 text-xs px-2 py-1.5 rounded-lg border border-border text-muted hover:text-white hover:border-border/80 transition-colors"
-                >
-                  <FolderOpen size={13} />
-                  <span>Lier un dossier</span>
-                </button>
-              )}
-            </div>
+            <select
+              value={year}
+              onChange={e => setYear(Number(e.target.value))}
+              className="text-xs px-2 py-1.5 bg-surface border border-border rounded-lg"
+            >
+              {[0, 1, 2, 3].map(i => {
+                const y = new Date().getFullYear() - i;
+                return <option key={y} value={y}>{y}</option>;
+              })}
+            </select>
+          </div>
+
+          {/* Per-year folder row */}
+          <div className={`flex items-center gap-3 px-3 py-2.5 rounded-lg mb-3 text-sm ${yearFolderMapping ? 'bg-surface border border-border' : 'bg-surface-hover border border-dashed border-border'}`}>
+            <FolderOpen size={15} className={yearFolderMapping ? 'text-accent-400 shrink-0' : 'text-muted shrink-0'} />
+            {yearFolderMapping ? (
+              <>
+                <span className="flex-1 truncate text-xs text-white/80">{yearFolderMapping.folder_path || yearFolderMapping.folder_id}</span>
+                <button onClick={() => setShowYearFolderPicker(true)} className="text-xs text-muted hover:text-white transition-colors shrink-0">Modifier</button>
+                <button onClick={unlinkYearFolder} className="text-xs text-muted hover:text-red-400 transition-colors shrink-0">Unlink</button>
+              </>
+            ) : (
+              <>
+                <span className="flex-1 text-xs text-muted">Aucun dossier pour {year}</span>
+                <button onClick={() => setShowYearFolderPicker(true)} className="text-xs text-accent-400 hover:text-accent-300 transition-colors shrink-0">Sélectionner →</button>
+              </>
+            )}
           </div>
 
           {showYearFolderPicker && (
