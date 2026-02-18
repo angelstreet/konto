@@ -2945,7 +2945,7 @@ app.post('/api/invoices/scan', async (c) => {
   }
 
   const driveConn: any = conn.rows[0];
-  const accessToken = driveConn.access_token;
+  const accessToken = await getDriveAccessToken(driveConn);
   // Check for year-specific folder override in drive_folder_mappings
   let folderId = driveConn.folder_id;
   const scanYear = body.year || null;
@@ -3270,7 +3270,7 @@ app.post('/api/invoices/upload', async (c) => {
   if (conn.rows.length === 0) return c.json({ error: 'No Drive connection' }, 400);
 
   const driveConn: any = conn.rows[0];
-  const accessToken = driveConn.access_token;
+  const accessToken = await getDriveAccessToken(driveConn);
   const folderId = driveConn.folder_id;
 
   const arrayBuffer = await file.arrayBuffer();
@@ -3953,7 +3953,8 @@ app.post('/api/payslips/link', async (c) => {
   if (conn.rows.length > 0) {
     const driveConn: any = conn.rows[0];
     try {
-      const extracted = await extractPayslipFromDrive(drive_file_id, driveConn.access_token);
+      const driveToken = await getDriveAccessToken(driveConn);
+      const extracted = await extractPayslipFromDrive(drive_file_id, driveToken);
       if (extracted.gross || extracted.net) {
         await db.execute({
           sql: `UPDATE payslips SET gross = ?, net = ?, employer = ?, status = 'extracted' WHERE user_id = ? AND year = ? AND month = ?`,
