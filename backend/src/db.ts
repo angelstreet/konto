@@ -375,6 +375,13 @@ export async function migrateDatabase() {
     await db.execute("ALTER TABLE transactions ADD COLUMN tx_hash TEXT");
     await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_tx_hash ON transactions(bank_account_id, tx_hash)");
   }
+
+  // Add folder_path to drive_connections (stores human-readable path label)
+  try {
+    await db.execute("SELECT folder_path FROM drive_connections LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE drive_connections ADD COLUMN folder_path TEXT");
+  }
 }
 
 // Find or create user by Clerk ID. On first login, migrates existing user_id=1 data.

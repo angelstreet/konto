@@ -3416,7 +3416,33 @@ app.get('/api/bilan-pro/:year', async (c) => {
     resultat: Math.round(summaries.reduce((s, c) => s + c.resultat, 0) * 100) / 100,
   };
 
-  return c.json({ year, companies: summaries, total });
+  // Monthly breakdown — consolidated across all company accounts
+  const companyIds = companiesRes.rows.map((row: any) => Number(row.id));
+  const monthly_breakdown = [];
+  for (let m = 1; m <= 12; m++) {
+    const mStart = `${year}-${String(m).padStart(2, '0')}-01`;
+    const mEnd = m === 12 ? `${year + 1}-01-01` : `${year}-${String(m + 1).padStart(2, '0')}-01`;
+    if (companyIds.length === 0) {
+      monthly_breakdown.push({ month: m, income: 0, expenses: 0 });
+      continue;
+    }
+    const placeholders = companyIds.map(() => '?').join(',');
+    const incRes = await db.execute({
+      sql: `SELECT COALESCE(SUM(t.amount), 0) as t FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE t.date >= ? AND t.date < ? AND ba.company_id IN (${placeholders}) AND t.amount > 0`,
+      args: [mStart, mEnd, ...companyIds],
+    });
+    const expRes = await db.execute({
+      sql: `SELECT COALESCE(SUM(ABS(t.amount)), 0) as t FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE t.date >= ? AND t.date < ? AND ba.company_id IN (${placeholders}) AND t.amount < 0`,
+      args: [mStart, mEnd, ...companyIds],
+    });
+    monthly_breakdown.push({
+      month: m,
+      income: Math.round(Number(incRes.rows[0]?.t || 0) * 100) / 100,
+      expenses: Math.round(Number(expRes.rows[0]?.t || 0) * 100) / 100,
+    });
+  }
+
+  return c.json({ year, companies: summaries, total, monthly_breakdown });
 });
 
 // ========== USER PREFERENCES ==========
@@ -3756,6 +3782,14 @@ app.put('/api/drive/folder-mapping', async (c) => {
           ON CONFLICT(user_id, purpose) DO UPDATE SET folder_id = excluded.folder_id, folder_path = excluded.folder_path`,
     args: [userId, purpose, folder_id, folder_path || null]
   });
+  return c.json({ ok: true });
+});
+
+app.delete('/api/drive/folder-mapping', async (c) => {
+  const userId = await getUserId(c);
+  const purpose = c.req.query('purpose');
+  if (!purpose) return c.json({ error: 'purpose required' }, 400);
+  await db.execute({ sql: 'DELETE FROM drive_folder_mappings WHERE user_id = ? AND purpose = ?', args: [userId, purpose] });
   return c.json({ ok: true });
 });
 
