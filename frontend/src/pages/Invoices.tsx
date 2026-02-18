@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, RefreshCw, CheckCircle, AlertTriangle, Link2, Unlink, Trash2, CloudOff, ArrowLeft, FolderOpen, Folder, ChevronRight, Check } from 'lucide-react';
+import { Search, RefreshCw, CheckCircle, Unlink, CloudOff, ArrowLeft, FolderOpen, Folder, ChevronRight, Check, Paperclip, Upload } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch, useApi } from '../useApi';
 
@@ -35,6 +35,19 @@ interface Company {
   name: string;
 }
 
+interface TxRow {
+  id: number;
+  label: string;
+  amount: number;
+  date: string;
+  category: string | null;
+  invoice_id: number | null;
+  filename: string | null;
+  drive_file_id: string | null;
+  vendor: string | null;
+  amount_ht: number | null;
+}
+
 export default function Invoices() {
   const { t: _t } = useTranslation();
   const navigate = useNavigate();
@@ -46,11 +59,14 @@ export default function Invoices() {
     return isNaN(num) ? null : num;
   });
   const { data: companies } = useApi<Company[]>(`${API}/companies`);
-  const [invoices, setInvoices] = useState<Invoice[]>([]);
+  const [_invoices, _setInvoices] = useState<Invoice[]>([]);
+  const [txRows, setTxRows] = useState<TxRow[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [scanning, setScanning] = useState(false);
   const [scanDone, setScanDone] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
+  const [filter, setFilter] = useState<'matched' | 'unmatched'>('matched');
+  const [year, setYear] = useState(new Date().getFullYear());
+  const [uploadingTxId, setUploadingTxId] = useState<number | null>(null);
   const [scanResult, setScanResult] = useState<any>(null);
   const [driveStatus, setDriveStatus] = useState<any>(null);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
@@ -60,17 +76,27 @@ export default function Invoices() {
   const [folderPath, setFolderPath] = useState<Array<{id: string | null, name: string}>>([{id: null, name: 'Mon Drive'}]);
 
   const load = useCallback(async () => {
-    const matchParam = filter === 'all' ? '' : `?matched=${filter === 'matched'}`;
-    const driveParam = selectedCompanyId ? `?company_id=${selectedCompanyId}` : '';
-    const [invRes, statsRes, driveRes] = await Promise.all([
-      authFetch(`${API}/invoices${matchParam}`),
-      authFetch(`${API}/invoices/stats`),
-      authFetch(`${API}/drive/status${driveParam}`),
-    ]);
-    setInvoices(await invRes.json());
-    setStats(await statsRes.json());
-    setDriveStatus(await driveRes.json());
-  }, [filter, selectedCompanyId]);
+    const cid = selectedCompanyId;
+    const driveParam = cid ? `?company_id=${cid}` : '';
+    const statsParam = cid ? `?company_id=${cid}&year=${year}` : '';
+    if (cid) {
+      const [txRes, statsRes, driveRes] = await Promise.all([
+        authFetch(`${API}/invoices/transactions?company_id=${cid}&year=${year}&matched=${filter === 'matched'}`),
+        authFetch(`${API}/invoices/stats${statsParam}`),
+        authFetch(`${API}/drive/status${driveParam}`),
+      ]);
+      setTxRows(await txRes.json());
+      setStats(await statsRes.json());
+      setDriveStatus(await driveRes.json());
+    } else {
+      const [driveRes] = await Promise.all([
+        authFetch(`${API}/drive/status`),
+      ]);
+      setTxRows([]);
+      setStats(null);
+      setDriveStatus(await driveRes.json());
+    }
+  }, [filter, selectedCompanyId, year]);
 
   useEffect(() => { load(); }, [load]);
 
@@ -93,14 +119,24 @@ export default function Invoices() {
     }
   };
 
-  const deleteInvoice = async (id: number) => {
-    await authFetch(`${API}/invoices/${id}`, { method: 'DELETE' });
-    await load();
-  };
 
   const unmatch = async (id: number) => {
     await authFetch(`${API}/invoices/${id}/unmatch`, { method: 'POST', body: '{}' });
     await load();
+  };
+
+  const uploadInvoice = async (txId: number, file: File) => {
+    setUploadingTxId(txId);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      fd.append('transaction_id', String(txId));
+      if (selectedCompanyId) fd.append('company_id', String(selectedCompanyId));
+      await authFetch(`${API}/invoices/upload`, { method: 'POST', body: fd });
+      await load();
+    } finally {
+      setUploadingTxId(null);
+    }
   };
 
   const loadFolders = async (parentId: string | null = null, parentName: string = 'Mon Drive') => {
@@ -140,7 +176,7 @@ export default function Invoices() {
     loadFolders(folderId, folderName);
   };
 
-  const selectFolder = async (folderId: string | null, folderName: string | null) => {
+  const selectFolder = async (folderId: string | null, _folderName: string | null) => {
     try {
       // Build full path for display
       const fullPath = folderId ? folderPath.map(f => f.name).join(' / ') : null;
@@ -174,7 +210,6 @@ export default function Invoices() {
     }
   };
 
-  const fmt = (n: number | null) => n != null ? `${n.toFixed(2)} €` : '—';
 
   const selectedCompany = companies?.find(c => c.id === selectedCompanyId);
   const companyName = selectedCompany?.name || 'Personnel';
@@ -274,96 +309,122 @@ export default function Invoices() {
       )}
 
       {scanResult && (scanResult.scanned > 0 || scanResult.matched > 0 || scanResult.errors?.length > 0) && (
-        <div className="bg-surface rounded-xl border border-border p-4 mb-4 text-sm">
-          <p>✅ Scan terminé: {scanResult.scanned} nouveaux fichiers, {scanResult.matched} rapprochés</p>
-          {scanResult.errors?.length > 0 && (
-            <p className="text-red-400 mt-1">⚠️ {scanResult.errors.length} erreurs</p>
-          )}
+        <div className="bg-surface rounded-xl border border-border p-3 mb-3 text-xs text-muted">
+          {scanResult.scanned} nouveaux fichiers trouvés, {scanResult.matched} rapprochés automatiquement
+          {scanResult.errors?.length > 0 && <span className="text-red-400 ml-2">· {scanResult.errors.length} erreurs</span>}
         </div>
       )}
 
-      {/* Stats */}
-      {stats && stats.total > 0 && (
-        <div className="grid grid-cols-3 gap-3 mb-6">
-          <div className="bg-surface rounded-xl border border-border p-4 text-center">
-            <div className="text-2xl font-bold">{stats.total}</div>
-            <div className="text-xs text-muted">Total</div>
-          </div>
-          <div className="bg-surface rounded-xl border border-border p-4 text-center">
-            <div className="text-2xl font-bold text-green-400">{stats.matched}</div>
-            <div className="text-xs text-muted">Rapprochés</div>
-          </div>
-          <div className="bg-surface rounded-xl border border-border p-4 text-center">
-            <div className="text-2xl font-bold text-yellow-400">{stats.unmatched}</div>
-            <div className="text-xs text-muted">Non rapprochés</div>
-          </div>
+      {!selectedCompanyId ? (
+        <div className="bg-surface rounded-xl border border-border p-10 text-center text-muted">
+          <Paperclip size={28} className="mx-auto mb-3 opacity-30" />
+          <p className="text-sm">Sélectionnez une entreprise pour voir le rapprochement</p>
         </div>
-      )}
-
-      {/* Filter tabs */}
-      <div className="flex gap-2 mb-4">
-        {(['all', 'matched', 'unmatched'] as const).map(f => (
-          <button
-            key={f}
-            onClick={() => setFilter(f)}
-            className={`px-3 py-2.5 rounded-lg text-xs font-medium transition-colors min-h-[44px] ${
-              filter === f ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-foreground'
-            }`}
-          >
-            {f === 'all' ? 'Tous' : f === 'matched' ? '✅ Rapprochés' : '⚠️ Manquants'}
-          </button>
-        ))}
-      </div>
-
-      {/* Invoice list */}
-      <div className="space-y-2">
-        {invoices.length === 0 && (
-          <div className="bg-surface rounded-xl border border-border p-8 text-center text-muted">
-            <Search size={32} className="mx-auto mb-2 opacity-40" />
-            <p className="text-sm">Aucun justificatif trouvé. Lancez un scan pour commencer.</p>
-          </div>
-        )}
-        {invoices.map(inv => (
-          <div key={inv.id} className="bg-surface rounded-xl border border-border p-4">
-            <div className="flex items-start justify-between">
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  {inv.transaction_id ? (
-                    <CheckCircle size={14} className="text-green-400 shrink-0" />
-                  ) : (
-                    <AlertTriangle size={14} className="text-yellow-400 shrink-0" />
-                  )}
-                  <span className="text-sm font-medium truncate">{inv.filename}</span>
-                </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted">
-                  {inv.vendor && <span>🏢 {inv.vendor}</span>}
-                  {inv.amount_ht != null && <span>💰 {fmt(inv.amount_ht)} HT</span>}
-                  {inv.tva_amount != null && <span>📊 TVA {fmt(inv.tva_amount)}</span>}
-                  {inv.date && <span>📅 {inv.date}</span>}
-                  {inv.invoice_number && <span>📄 {inv.invoice_number}</span>}
-                </div>
-                {inv.transaction_id && inv.tx_label && (
-                  <div className="mt-2 text-xs text-green-400/80 flex items-center gap-1">
-                    <Link2 size={12} />
-                    Lié à: {inv.tx_label} ({fmt(inv.tx_amount ?? null)}, {inv.tx_date})
-                    {inv.match_confidence && <span className="ml-1 opacity-60">({Math.round(inv.match_confidence * 100)}%)</span>}
-                  </div>
-                )}
+      ) : (
+        <>
+          {/* Stats + year selector */}
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex gap-3">
+              <div className="text-center">
+                <div className="text-xl font-bold text-green-400">{stats?.matched ?? '—'}</div>
+                <div className="text-[10px] text-muted uppercase tracking-wide">Justifiés</div>
               </div>
-              <div className="flex gap-1 ml-2 shrink-0">
-                {inv.transaction_id && (
-                  <button onClick={() => unmatch(inv.id)} className="p-1.5 rounded-lg hover:bg-surface-hover text-muted" title="Délier">
-                    <Unlink size={14} />
-                  </button>
-                )}
-                <button onClick={() => deleteInvoice(inv.id)} className="p-1.5 rounded-lg hover:bg-surface-hover text-red-400/60" title="Supprimer">
-                  <Trash2 size={14} />
-                </button>
+              <div className="text-center">
+                <div className="text-xl font-bold text-yellow-400">{stats?.unmatched ?? '—'}</div>
+                <div className="text-[10px] text-muted uppercase tracking-wide">Manquants</div>
+              </div>
+              <div className="text-center">
+                <div className="text-xl font-bold text-white/40">{stats?.total ?? '—'}</div>
+                <div className="text-[10px] text-muted uppercase tracking-wide">Total</div>
               </div>
             </div>
+            <select
+              value={year}
+              onChange={e => setYear(Number(e.target.value))}
+              className="text-xs px-2 py-1.5 bg-surface border border-border rounded-lg"
+            >
+              {[0, 1].map(i => {
+                const y = new Date().getFullYear() - i;
+                return <option key={y} value={y}>{y}</option>;
+              })}
+            </select>
           </div>
-        ))}
-      </div>
+
+          {/* Tabs */}
+          <div className="flex gap-2 mb-3">
+            {(['matched', 'unmatched'] as const).map(f => (
+              <button
+                key={f}
+                onClick={() => setFilter(f)}
+                className={`px-3 py-2 rounded-lg text-xs font-medium transition-colors ${
+                  filter === f ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-foreground'
+                }`}
+              >
+                {f === 'matched'
+                  ? `Justifiés${stats ? ` · ${stats.matched}` : ''}`
+                  : `Manquants${stats ? ` · ${stats.unmatched}` : ''}`}
+              </button>
+            ))}
+          </div>
+
+          {/* Transaction list */}
+          <div className="bg-surface rounded-xl border border-border overflow-hidden">
+            {txRows.length === 0 && (
+              <div className="p-8 text-center text-muted">
+                <Search size={28} className="mx-auto mb-2 opacity-30" />
+                <p className="text-sm">{filter === 'matched' ? 'Aucune transaction justifiée' : 'Toutes les transactions sont justifiées'}</p>
+              </div>
+            )}
+            {txRows.map((tx, i) => (
+              <div key={tx.id} className={`flex items-center gap-3 px-4 py-3 ${i < txRows.length - 1 ? 'border-b border-border/50' : ''} hover:bg-white/[0.02] transition-colors`}>
+                {/* Status dot */}
+                <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${tx.invoice_id ? 'bg-green-400' : 'bg-yellow-400/60'}`} />
+
+                {/* Main info */}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-sm truncate">{tx.label}</span>
+                    <span className="text-xs text-muted shrink-0">{tx.date?.slice(0, 10)}</span>
+                  </div>
+                  {tx.filename && (
+                    <div className="flex items-center gap-1 mt-0.5">
+                      <Paperclip size={10} className="text-green-400/70 shrink-0" />
+                      <span className="text-xs text-green-400/70 truncate">{tx.filename}</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Amount */}
+                <span className="text-sm font-mono text-red-400 shrink-0">{Math.abs(tx.amount).toFixed(2)} €</span>
+
+                {/* Action */}
+                {filter === 'matched' ? (
+                  <button
+                    onClick={() => tx.invoice_id && unmatch(tx.invoice_id)}
+                    className="p-1.5 rounded-lg text-muted hover:text-red-400 hover:bg-red-500/10 transition-colors shrink-0"
+                    title="Retirer le justificatif"
+                  >
+                    <Unlink size={13} />
+                  </button>
+                ) : (
+                  <label className="cursor-pointer p-1.5 rounded-lg text-muted hover:text-accent-400 hover:bg-accent-500/10 transition-colors shrink-0" title="Joindre un justificatif">
+                    {uploadingTxId === tx.id
+                      ? <RefreshCw size={13} className="animate-spin" />
+                      : <Upload size={13} />
+                    }
+                    <input
+                      type="file"
+                      accept=".pdf,.jpg,.jpeg,.png,.heic"
+                      className="hidden"
+                      onChange={e => { const f = e.target.files?.[0]; if (f) uploadInvoice(tx.id, f); e.target.value = ''; }}
+                    />
+                  </label>
+                )}
+              </div>
+            ))}
+          </div>
+        </>
+      )}
 
       {/* Folder Picker Modal */}
       {showFolderPicker && (

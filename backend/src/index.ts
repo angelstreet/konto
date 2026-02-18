@@ -862,19 +862,33 @@ app.post('/api/bank/accounts/:id/sync', async (c) => {
       }
     } catch {}
 
-    const txRes = await fetch(`${POWENS_API}/users/me/accounts/${account.provider_account_id}/transactions?limit=50`, {
-      headers: { 'Authorization': `Bearer ${connectionToken}` },
-    });
-    const txData = await txRes.json() as any;
-    const transactions = txData.transactions || [];
-    console.log(`Sync account ${accountId}: provider_id=${account.provider_account_id}, powens_status=${txRes.status}, tx_count=${transactions.length}, sca=${connectionNeedsSCA}`, txRes.ok ? '' : JSON.stringify(txData));
+    // Fetch all available transactions — no date limit, paginate until bank returns nothing
+    let allTransactions: any[] = [];
+    let txOffset = 0;
+    const txPageSize = 500;
+    let firstPageRes: Response | null = null;
+    while (true) {
+      const txPageRes = await fetch(
+        `${POWENS_API}/users/me/accounts/${account.provider_account_id}/transactions?limit=${txPageSize}&offset=${txOffset}`,
+        { headers: { 'Authorization': `Bearer ${connectionToken}` } }
+      );
+      if (txOffset === 0) firstPageRes = txPageRes;
+      if (!txPageRes.ok) break;
+      const pageData = await txPageRes.json() as any;
+      const pageTxs = pageData.transactions || [];
+      allTransactions = allTransactions.concat(pageTxs);
+      if (pageTxs.length < txPageSize) break;
+      txOffset += txPageSize;
+    }
+    const transactions = allTransactions;
+    console.log(`Sync account ${accountId}: provider_id=${account.provider_account_id}, powens_status=${firstPageRes?.status}, tx_count=${transactions.length}, sca=${connectionNeedsSCA}`);
 
     // If Powens returns an error but we know it's SCA — don't fail, just use whatever cached data we got
-    if (!txRes.ok && !connectionNeedsSCA) {
+    if (firstPageRes && !firstPageRes.ok && !connectionNeedsSCA) {
       return c.json({
         error: 'Bank sync failed',
         reconnect_required: true,
-        debug: { powens_status: txRes.status, provider_account_id: account.provider_account_id }
+        debug: { powens_status: firstPageRes.status, provider_account_id: account.provider_account_id }
       }, 502);
     }
 
@@ -1017,22 +1031,28 @@ app.post('/api/bank/sync-all', async (c) => {
           });
         }
 
-        // Fetch transactions
+        // Fetch all transactions with pagination — no date limit, take everything the bank provides
         try {
-          const txRes = await fetch(`${POWENS_API}/users/me/accounts/${providerId}/transactions?limit=50`, {
-            headers: { 'Authorization': `Bearer ${token}` },
-          });
-          if (txRes.ok) {
-            const txData = await txRes.json() as any;
-            const transactions = txData.transactions || [];
-            for (const tx of transactions) {
-              await db.execute({
-                sql: 'INSERT OR IGNORE INTO transactions (bank_account_id, date, amount, label, category) VALUES (?, ?, ?, ?, ?)',
-                args: [localAcc.id, tx.date || tx.rdate, tx.value, tx.original_wording || tx.wording, tx.category?.name || null]
-              });
-            }
-            totalSynced += transactions.length;
+          let bulkAll: any[] = [], bulkOffset = 0;
+          while (true) {
+            const bRes = await fetch(
+              `${POWENS_API}/users/me/accounts/${providerId}/transactions?limit=500&offset=${bulkOffset}`,
+              { headers: { 'Authorization': `Bearer ${token}` } }
+            );
+            if (!bRes.ok) break;
+            const bData = await bRes.json() as any;
+            const bTxs = bData.transactions || [];
+            bulkAll = bulkAll.concat(bTxs);
+            if (bTxs.length < 500) break;
+            bulkOffset += 500;
           }
+          for (const tx of bulkAll) {
+            await db.execute({
+              sql: 'INSERT OR IGNORE INTO transactions (bank_account_id, date, amount, label, category) VALUES (?, ?, ?, ?, ?)',
+              args: [localAcc.id, tx.date || tx.rdate, tx.value, tx.original_wording || tx.wording, tx.category?.name || null]
+            });
+          }
+          totalSynced += bulkAll.length;
         } catch {}
 
         // Fetch investments for investment accounts
@@ -3136,6 +3156,7 @@ app.post('/api/invoices/upload', async (c) => {
 app.get('/api/bilan/:year', async (c) => {
   const year = parseInt(c.req.param('year'));
   const companyId = c.req.query('company_id');
+  const usage = c.req.query('usage'); // 'personal' or 'professional'
   const userId = await getUserId(c);
 
   const startDate = `${year}-01-01`;
@@ -3145,8 +3166,12 @@ app.get('/api/bilan/:year', async (c) => {
   let accountFilter = '';
   const baseArgs: any[] = [startDate, endDate];
   if (companyId) {
-    accountFilter = 'AND ba.company_id = ?';
+    accountFilter += ' AND ba.company_id = ?';
     baseArgs.push(Number(companyId));
+  }
+  if (usage) {
+    accountFilter += ' AND ba.usage = ?';
+    baseArgs.push(usage);
   }
 
   // Chiffre d'affaires (income)
@@ -3206,8 +3231,9 @@ app.get('/api/bilan/:year', async (c) => {
   for (let m = 1; m <= 12; m++) {
     const mStart = `${year}-${String(m).padStart(2, '0')}-01`;
     const mEnd = m === 12 ? `${year + 1}-01-01` : `${year}-${String(m + 1).padStart(2, '0')}-01`;
-    const mArgs = [mStart, mEnd];
-    if (companyId) mArgs.push(companyId as any);
+    const mArgs: any[] = [mStart, mEnd];
+    if (companyId) mArgs.push(Number(companyId));
+    if (usage) mArgs.push(usage);
 
     const inc = await db.execute({
       sql: `SELECT COALESCE(SUM(t.amount), 0) as t FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE t.date >= ? AND t.date < ? ${accountFilter} AND t.amount > 0`,
@@ -3235,12 +3261,16 @@ app.get('/api/bilan/:year', async (c) => {
   const invMatched = Number(invStats.rows[0]?.matched || 0);
 
   // Account balances at year end (simplified bilan actif/passif)
+  const accountsWhere = ['ba.user_id = ?'];
+  const accountsArgs: any[] = [userId];
+  if (companyId) { accountsWhere.push('ba.company_id = ?'); accountsArgs.push(Number(companyId)); }
+  if (usage) { accountsWhere.push('ba.usage = ?'); accountsArgs.push(usage); }
   const accountsRes = await db.execute({
     sql: `SELECT ba.name, ba.type, ba.balance, ba.currency
           FROM bank_accounts ba
-          WHERE ba.user_id = ? ${companyId ? 'AND ba.company_id = ?' : ''}
+          WHERE ${accountsWhere.join(' AND ')}
           ORDER BY ba.type, ba.name`,
-    args: companyId ? [userId, Number(companyId)] : [userId]
+    args: accountsArgs
   });
 
   const actif = accountsRes.rows

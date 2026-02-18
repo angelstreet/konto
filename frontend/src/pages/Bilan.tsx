@@ -5,6 +5,7 @@ import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Receipt, Building2
 import { useNavigate } from 'react-router-dom';
 import { useApi } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
+import { useFilter } from '../FilterContext';
 import EyeToggle from '../components/EyeToggle';
 
 interface BilanData {
@@ -30,9 +31,10 @@ export default function Bilan() {
   const { t: _t } = useTranslation();
   const navigate = useNavigate();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
+  const { appendScope } = useFilter();
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
   const [year, setYear] = useState(new Date().getFullYear());
-  const { data, loading } = useApi<BilanData>(`${API}/bilan/${year}`);
+  const { data, loading } = useApi<BilanData>(appendScope(`${API}/bilan/${year}`));
 
   const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
 
@@ -196,22 +198,6 @@ export default function Bilan() {
         </div>
       </div>
 
-      {/* Justificatifs status */}
-      {data.justificatifs.total > 0 && (
-        <div className="bg-surface rounded-xl border border-border p-3">
-          <h2 className="text-sm font-semibold mb-2">📎 Justificatifs</h2>
-          <div className="text-xs text-muted">
-            {data.justificatifs.matched}/{data.justificatifs.total} rapprochés
-            {data.justificatifs.match_rate != null && ` (${data.justificatifs.match_rate}%)`}
-          </div>
-          <div className="h-2 bg-white/5 rounded-full mt-2 overflow-hidden">
-            <div
-              className="h-full bg-green-500/60 rounded-full"
-              style={{ width: `${data.justificatifs.match_rate || 0}%` }}
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 }
