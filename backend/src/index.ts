@@ -2327,6 +2327,40 @@ app.delete('/api/income/:id', async (c) => {
   return c.json({ success: true });
 });
 
+// ========== SALARY BENCHMARKS ==========
+
+const SALARY_BENCHMARKS: Record<string, Record<number, { p: number; gross: number }[]>> = {
+  FR: {
+    2021: [{ p: 10, gross: 13000 }, { p: 25, gross: 18800 }, { p: 50, gross: 25600 }, { p: 75, gross: 36200 }, { p: 90, gross: 50000 }, { p: 95, gross: 62000 }, { p: 99, gross: 95000 }],
+    2022: [{ p: 10, gross: 13300 }, { p: 25, gross: 19100 }, { p: 50, gross: 26100 }, { p: 75, gross: 36900 }, { p: 90, gross: 51000 }, { p: 95, gross: 63500 }, { p: 99, gross: 98000 }],
+    2023: [{ p: 10, gross: 13500 }, { p: 25, gross: 19500 }, { p: 50, gross: 26400 }, { p: 75, gross: 37500 }, { p: 90, gross: 52000 }, { p: 95, gross: 65000 }, { p: 99, gross: 100000 }],
+  },
+  CH: {
+    2021: [{ p: 10, gross: 37000 }, { p: 25, gross: 54500 }, { p: 50, gross: 79200 }, { p: 75, gross: 107000 }, { p: 90, gross: 136000 }, { p: 95, gross: 160000 }, { p: 99, gross: 205000 }],
+    2022: [{ p: 10, gross: 38000 }, { p: 25, gross: 56000 }, { p: 50, gross: 81456 }, { p: 75, gross: 110000 }, { p: 90, gross: 140000 }, { p: 95, gross: 165000 }, { p: 99, gross: 210000 }],
+    2023: [{ p: 10, gross: 39000 }, { p: 25, gross: 57500 }, { p: 50, gross: 83000 }, { p: 75, gross: 112000 }, { p: 90, gross: 143000 }, { p: 95, gross: 168000 }, { p: 99, gross: 215000 }],
+  },
+  US: {
+    2021: [{ p: 10, gross: 20000 }, { p: 25, gross: 32000 }, { p: 50, gross: 52000 }, { p: 75, gross: 82000 }, { p: 90, gross: 118000 }, { p: 95, gross: 150000 }, { p: 99, gross: 230000 }],
+    2022: [{ p: 10, gross: 21000 }, { p: 25, gross: 33500 }, { p: 50, gross: 54000 }, { p: 75, gross: 86000 }, { p: 90, gross: 124000 }, { p: 95, gross: 157000 }, { p: 99, gross: 240000 }],
+    2023: [{ p: 10, gross: 22000 }, { p: 25, gross: 35000 }, { p: 50, gross: 58000 }, { p: 75, gross: 90000 }, { p: 90, gross: 130000 }, { p: 95, gross: 165000 }, { p: 99, gross: 250000 }],
+  },
+  UK: {
+    2021: [{ p: 10, gross: 14200 }, { p: 25, gross: 21800 }, { p: 50, gross: 31285 }, { p: 75, gross: 47000 }, { p: 90, gross: 68000 }, { p: 95, gross: 87000 }, { p: 99, gross: 150000 }],
+    2022: [{ p: 10, gross: 14800 }, { p: 25, gross: 22500 }, { p: 50, gross: 32300 }, { p: 75, gross: 49000 }, { p: 90, gross: 71000 }, { p: 95, gross: 91000 }, { p: 99, gross: 155000 }],
+    2023: [{ p: 10, gross: 15000 }, { p: 25, gross: 23000 }, { p: 50, gross: 35000 }, { p: 75, gross: 52000 }, { p: 90, gross: 75000 }, { p: 95, gross: 95000 }, { p: 99, gross: 160000 }],
+  },
+  DE: {
+    2021: [{ p: 10, gross: 19200 }, { p: 25, gross: 28800 }, { p: 50, gross: 42600 }, { p: 75, gross: 58500 }, { p: 90, gross: 78000 }, { p: 95, gross: 97000 }, { p: 99, gross: 145000 }],
+    2022: [{ p: 10, gross: 19600 }, { p: 25, gross: 29400 }, { p: 50, gross: 43200 }, { p: 75, gross: 59200 }, { p: 90, gross: 79000 }, { p: 95, gross: 98500 }, { p: 99, gross: 147000 }],
+    2023: [{ p: 10, gross: 20000 }, { p: 25, gross: 30000 }, { p: 50, gross: 43750 }, { p: 75, gross: 60000 }, { p: 90, gross: 80000 }, { p: 95, gross: 100000 }, { p: 99, gross: 150000 }],
+  },
+};
+
+app.get('/api/salary-benchmarks', (c) => {
+  return c.json(SALARY_BENCHMARKS);
+});
+
 // ========== TAX ESTIMATION ==========
 
 app.post('/api/tax/estimate', async (c) => {
@@ -2587,6 +2621,7 @@ app.post('/api/drive/connect', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const companyId = body.company_id || null;
   const returnTo = body.return_to || null;
+  const withUpload = body.with_upload || false;
 
   const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
   const DRIVE_REDIRECT_URI = process.env.GOOGLE_DRIVE_REDIRECT_URI || 'https://65.108.14.251:8080/konto/api/drive-callback';
@@ -2601,10 +2636,15 @@ app.post('/api/drive/connect', async (c) => {
   if (returnTo) stateData.return_to = returnTo;
   const state = Object.keys(stateData).length > 0 ? Buffer.from(JSON.stringify(stateData)).toString('base64') : '';
 
+  // Use broader scope if upload is needed (for payslip uploads to Drive)
+  const scope = withUpload
+    ? 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly'
+    : 'https://www.googleapis.com/auth/drive.readonly';
+
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
     redirect_uri: DRIVE_REDIRECT_URI,
-    scope: 'https://www.googleapis.com/auth/drive.readonly',
+    scope,
     response_type: 'code',
     access_type: 'offline',
     prompt: 'consent',
@@ -3631,6 +3671,428 @@ app.get('/api/trends', async (c) => {
 
   return c.json({ categories: categories.slice(0, 6), allMonths, scope });
 });
+
+// ========== PAYSLIPS (Global Drive + Monthly Payslips) ==========
+
+// --- Drive folder mappings (per purpose) ---
+
+app.get('/api/drive/folder-mapping', async (c) => {
+  const userId = await getUserId(c);
+  const purpose = c.req.query('purpose');
+  if (!purpose) return c.json({ error: 'purpose required' }, 400);
+
+  const result = await db.execute({
+    sql: 'SELECT * FROM drive_folder_mappings WHERE user_id = ? AND purpose = ?',
+    args: [userId, purpose]
+  });
+  if (result.rows.length === 0) return c.json({ mapping: null });
+  return c.json({ mapping: result.rows[0] });
+});
+
+app.put('/api/drive/folder-mapping', async (c) => {
+  const userId = await getUserId(c);
+  const { purpose, folder_id, folder_path } = await c.req.json();
+  if (!purpose || !folder_id) return c.json({ error: 'purpose and folder_id required' }, 400);
+
+  await db.execute({
+    sql: `INSERT INTO drive_folder_mappings (user_id, purpose, folder_id, folder_path)
+          VALUES (?, ?, ?, ?)
+          ON CONFLICT(user_id, purpose) DO UPDATE SET folder_id = excluded.folder_id, folder_path = excluded.folder_path`,
+    args: [userId, purpose, folder_id, folder_path || null]
+  });
+  return c.json({ ok: true });
+});
+
+// --- Payslips CRUD ---
+
+app.get('/api/payslips', async (c) => {
+  const userId = await getUserId(c);
+  const year = parseInt(c.req.query('year') || String(new Date().getFullYear()));
+
+  const result = await db.execute({
+    sql: 'SELECT * FROM payslips WHERE user_id = ? AND year = ? ORDER BY month',
+    args: [userId, year]
+  });
+  return c.json({ payslips: result.rows });
+});
+
+app.patch('/api/payslips/:id', async (c) => {
+  const userId = await getUserId(c);
+  const id = parseInt(c.req.param('id'));
+  const body = await c.req.json();
+
+  const fields: string[] = [];
+  const args: any[] = [];
+
+  for (const key of ['gross', 'net', 'employer', 'status', 'drive_file_id', 'filename']) {
+    if (body[key] !== undefined) {
+      fields.push(`${key} = ?`);
+      args.push(body[key]);
+    }
+  }
+
+  if (fields.length === 0) return c.json({ error: 'No fields to update' }, 400);
+  args.push(id, userId);
+
+  await db.execute({
+    sql: `UPDATE payslips SET ${fields.join(', ')} WHERE id = ? AND user_id = ?`,
+    args
+  });
+  return c.json({ ok: true });
+});
+
+app.delete('/api/payslips/:id', async (c) => {
+  const userId = await getUserId(c);
+  const id = parseInt(c.req.param('id'));
+  await db.execute({ sql: 'DELETE FROM payslips WHERE id = ? AND user_id = ?', args: [id, userId] });
+  return c.json({ ok: true });
+});
+
+// --- Payslip link (link existing Drive file to a month) ---
+
+app.post('/api/payslips/link', async (c) => {
+  const userId = await getUserId(c);
+  const { year, month, drive_file_id, filename } = await c.req.json();
+  if (!year || !month || !drive_file_id) return c.json({ error: 'year, month, drive_file_id required' }, 400);
+
+  await db.execute({
+    sql: `INSERT INTO payslips (user_id, year, month, drive_file_id, filename, status)
+          VALUES (?, ?, ?, ?, ?, 'pending')
+          ON CONFLICT(user_id, year, month) DO UPDATE SET drive_file_id = excluded.drive_file_id, filename = excluded.filename, status = 'pending'`,
+    args: [userId, year, month, drive_file_id, filename || null]
+  });
+
+  // Try to extract from this PDF
+  const conn = await db.execute({
+    sql: 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1',
+    args: [userId, 'active']
+  });
+  if (conn.rows.length > 0) {
+    const driveConn: any = conn.rows[0];
+    try {
+      const extracted = await extractPayslipFromDrive(drive_file_id, driveConn.access_token);
+      if (extracted.gross || extracted.net) {
+        await db.execute({
+          sql: `UPDATE payslips SET gross = ?, net = ?, employer = ?, status = 'extracted' WHERE user_id = ? AND year = ? AND month = ?`,
+          args: [extracted.gross || null, extracted.net || null, extracted.employer || null, userId, year, month]
+        });
+      }
+    } catch (e: any) {
+      console.error('Payslip extraction error:', e.message);
+    }
+  }
+
+  const result = await db.execute({
+    sql: 'SELECT * FROM payslips WHERE user_id = ? AND year = ? AND month = ?',
+    args: [userId, year, month]
+  });
+  return c.json({ payslip: result.rows[0] || null });
+});
+
+// --- Payslip upload (upload local file to Drive folder + link) ---
+
+app.post('/api/payslips/upload', async (c) => {
+  const userId = await getUserId(c);
+
+  const formData = await c.req.formData();
+  const file = formData.get('file') as File;
+  const year = parseInt(formData.get('year') as string);
+  const month = parseInt(formData.get('month') as string);
+
+  if (!file || !year || !month) return c.json({ error: 'file, year, month required' }, 400);
+
+  // Get global drive connection
+  const conn = await db.execute({
+    sql: 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1',
+    args: [userId, 'active']
+  });
+  if (conn.rows.length === 0) return c.json({ error: 'No Drive connection' }, 400);
+  const driveConn: any = conn.rows[0];
+
+  // Get payslips folder mapping
+  const mapping = await db.execute({
+    sql: 'SELECT * FROM drive_folder_mappings WHERE user_id = ? AND purpose = ?',
+    args: [userId, 'payslips']
+  });
+  if (mapping.rows.length === 0) return c.json({ error: 'No payslips folder configured' }, 400);
+  const folderId = (mapping.rows[0] as any).folder_id;
+
+  try {
+    // Upload to Google Drive
+    const fileBuffer = await file.arrayBuffer();
+    const metadata = {
+      name: file.name,
+      parents: [folderId],
+    };
+
+    const boundary = '-------314159265358979323846';
+    const delimiter = `\r\n--${boundary}\r\n`;
+    const closeDelimiter = `\r\n--${boundary}--`;
+
+    const body = new Uint8Array(await new Blob([
+      delimiter,
+      'Content-Type: application/json; charset=UTF-8\r\n\r\n',
+      JSON.stringify(metadata),
+      delimiter,
+      `Content-Type: ${file.type || 'application/pdf'}\r\n\r\n`,
+      new Uint8Array(fileBuffer),
+      closeDelimiter,
+    ]).arrayBuffer());
+
+    const uploadRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${driveConn.access_token}`,
+        'Content-Type': `multipart/related; boundary=${boundary}`,
+      },
+      body,
+    });
+
+    if (!uploadRes.ok) {
+      const err = await uploadRes.text();
+      return c.json({ error: 'Upload failed', details: err }, 502);
+    }
+
+    const uploaded: any = await uploadRes.json();
+
+    // Link the uploaded file to the payslip
+    await db.execute({
+      sql: `INSERT INTO payslips (user_id, year, month, drive_file_id, filename, status)
+            VALUES (?, ?, ?, ?, ?, 'pending')
+            ON CONFLICT(user_id, year, month) DO UPDATE SET drive_file_id = excluded.drive_file_id, filename = excluded.filename, status = 'pending'`,
+      args: [userId, year, month, uploaded.id, uploaded.name]
+    });
+
+    // Try extraction
+    try {
+      const extracted = await extractPayslipFromDrive(uploaded.id, driveConn.access_token);
+      if (extracted.gross || extracted.net) {
+        await db.execute({
+          sql: `UPDATE payslips SET gross = ?, net = ?, employer = ?, status = 'extracted' WHERE user_id = ? AND year = ? AND month = ?`,
+          args: [extracted.gross || null, extracted.net || null, extracted.employer || null, userId, year, month]
+        });
+      }
+    } catch {}
+
+    const result = await db.execute({
+      sql: 'SELECT * FROM payslips WHERE user_id = ? AND year = ? AND month = ?',
+      args: [userId, year, month]
+    });
+    return c.json({ payslip: result.rows[0] || null });
+  } catch (e: any) {
+    return c.json({ error: e.message }, 500);
+  }
+});
+
+// --- Scan payslips from Drive folder ---
+
+app.post('/api/payslips/scan', async (c) => {
+  const userId = await getUserId(c);
+  const body = await c.req.json().catch(() => ({}));
+  const year = parseInt(body.year || String(new Date().getFullYear()));
+
+  // Get global drive connection
+  const conn = await db.execute({
+    sql: 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1',
+    args: [userId, 'active']
+  });
+  if (conn.rows.length === 0) return c.json({ error: 'No Drive connection' }, 400);
+  const driveConn: any = conn.rows[0];
+
+  // Get payslips folder mapping
+  const mapping = await db.execute({
+    sql: 'SELECT * FROM drive_folder_mappings WHERE user_id = ? AND purpose = ?',
+    args: [userId, 'payslips']
+  });
+  if (mapping.rows.length === 0) return c.json({ error: 'No payslips folder configured' }, 400);
+  const folderId = (mapping.rows[0] as any).folder_id;
+
+  try {
+    // List all PDFs in the payslips folder (and subfolders)
+    const allFolderIds = await collectDriveFolderIds(folderId, driveConn.access_token);
+    const parentClause = allFolderIds.map(id => `'${id}' in parents`).join(' or ');
+    const query = `mimeType='application/pdf' and trashed=false and (${parentClause})`;
+
+    const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,createdTime,modifiedTime)&orderBy=name&pageSize=200`;
+    const listRes = await fetch(listUrl, {
+      headers: { Authorization: `Bearer ${driveConn.access_token}` }
+    });
+
+    if (!listRes.ok) {
+      const err = await listRes.text();
+      return c.json({ error: 'Drive API error', details: err }, 502);
+    }
+
+    const listData: any = await listRes.json();
+    const files = listData.files || [];
+
+    const MONTH_NAMES_FR: Record<string, number> = {
+      janvier: 1, fevrier: 2, février: 2, mars: 3, avril: 4, mai: 5, juin: 6,
+      juillet: 7, aout: 8, août: 8, septembre: 9, octobre: 10, novembre: 11, decembre: 12, décembre: 12,
+    };
+
+    const results: { month: number; file_id: string; filename: string }[] = [];
+
+    for (const file of files) {
+      const name = (file.name || '').toLowerCase();
+
+      // Try to match file to a month of the given year
+      let matchedMonth: number | null = null;
+
+      // Pattern 1: YYYY-MM in filename (e.g., "fiche-paie-2026-01.pdf")
+      const ymMatch = name.match(new RegExp(`${year}[\\-_\\s]?(0[1-9]|1[0-2])`));
+      if (ymMatch) matchedMonth = parseInt(ymMatch[1]);
+
+      // Pattern 2: MM-YYYY (e.g., "01-2026.pdf")
+      if (!matchedMonth) {
+        const myMatch = name.match(new RegExp(`(0[1-9]|1[0-2])[\\-_\\s]?${year}`));
+        if (myMatch) matchedMonth = parseInt(myMatch[1]);
+      }
+
+      // Pattern 3: French month name + year (e.g., "janvier-2026.pdf")
+      if (!matchedMonth) {
+        for (const [mName, mNum] of Object.entries(MONTH_NAMES_FR)) {
+          if (name.includes(mName) && name.includes(String(year))) {
+            matchedMonth = mNum;
+            break;
+          }
+        }
+      }
+
+      // Pattern 4: file created/modified in the target year — use month from that date
+      if (!matchedMonth && file.createdTime) {
+        const created = new Date(file.createdTime);
+        if (created.getFullYear() === year) {
+          matchedMonth = created.getMonth() + 1;
+        }
+      }
+
+      if (matchedMonth && matchedMonth >= 1 && matchedMonth <= 12) {
+        // Check if we already have a better match for this month
+        const existing = results.find(r => r.month === matchedMonth);
+        if (!existing) {
+          results.push({ month: matchedMonth, file_id: file.id, filename: file.name });
+        }
+      }
+    }
+
+    // For each matched file, create/update payslip entry and try extraction
+    let scanned = 0;
+    let extracted = 0;
+
+    for (const match of results) {
+      // Upsert payslip entry
+      await db.execute({
+        sql: `INSERT INTO payslips (user_id, year, month, drive_file_id, filename, status)
+              VALUES (?, ?, ?, ?, ?, 'pending')
+              ON CONFLICT(user_id, year, month) DO UPDATE SET
+                drive_file_id = CASE WHEN payslips.status = 'confirmed' THEN payslips.drive_file_id ELSE excluded.drive_file_id END,
+                filename = CASE WHEN payslips.status = 'confirmed' THEN payslips.filename ELSE excluded.filename END`,
+        args: [userId, year, match.month, match.file_id, match.filename]
+      });
+      scanned++;
+
+      // Try PDF extraction (skip if already confirmed)
+      const existing = await db.execute({
+        sql: 'SELECT * FROM payslips WHERE user_id = ? AND year = ? AND month = ?',
+        args: [userId, year, match.month]
+      });
+      const payslip: any = existing.rows[0];
+      if (payslip && payslip.status !== 'confirmed') {
+        try {
+          const data = await extractPayslipFromDrive(match.file_id, driveConn.access_token);
+          if (data.gross || data.net) {
+            await db.execute({
+              sql: `UPDATE payslips SET gross = ?, net = ?, employer = ?, status = 'extracted' WHERE user_id = ? AND year = ? AND month = ?`,
+              args: [data.gross || null, data.net || null, data.employer || null, userId, year, match.month]
+            });
+            extracted++;
+          }
+        } catch (e: any) {
+          console.error(`Extraction failed for ${match.filename}:`, e.message);
+        }
+      }
+    }
+
+    // Return updated payslips
+    const payslipsResult = await db.execute({
+      sql: 'SELECT * FROM payslips WHERE user_id = ? AND year = ? ORDER BY month',
+      args: [userId, year]
+    });
+
+    return c.json({
+      ok: true,
+      total_files: files.length,
+      matched: results.length,
+      scanned,
+      extracted,
+      payslips: payslipsResult.rows,
+    });
+  } catch (e: any) {
+    return c.json({ error: 'Scan failed', details: e.message }, 500);
+  }
+});
+
+// --- PDF extraction helper for payslips ---
+
+async function extractPayslipFromDrive(fileId: string, accessToken: string): Promise<{ gross: number | null; net: number | null; employer: string | null }> {
+  const dlRes = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { Authorization: `Bearer ${accessToken}` }
+  });
+  if (!dlRes.ok) throw new Error('Failed to download file');
+
+  const buffer = Buffer.from(await dlRes.arrayBuffer());
+
+  let text = '';
+  try {
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse(new Uint8Array(buffer));
+    const result = await parser.getText();
+    text = result.text || '';
+  } catch (e: any) {
+    console.error('pdf-parse error:', e.message);
+    return { gross: null, net: null, employer: null };
+  }
+
+  let gross: number | null = null;
+  let net: number | null = null;
+  let employer: string | null = null;
+
+  // French payslip patterns
+  // "Salaire brut" or "SALAIRE BRUT" followed by an amount
+  const grossMatch = text.match(/salaire\s+brut[^\d]*?([\d\s]+[.,]\d{2})/i);
+  if (grossMatch) {
+    gross = parseFloat(grossMatch[1].replace(/\s/g, '').replace(',', '.'));
+  }
+
+  // "Net à payer" or "NET A PAYER" or "Net à payer avant impôt"
+  const netMatch = text.match(/net\s+[àa]\s+payer(?:\s+avant\s+imp[ôo]t)?[^\d]*?([\d\s]+[.,]\d{2})/i);
+  if (netMatch) {
+    net = parseFloat(netMatch[1].replace(/\s/g, '').replace(',', '.'));
+  }
+
+  // If net not found, try "Net imposable"
+  if (!net) {
+    const netImpMatch = text.match(/net\s+imposable[^\d]*?([\d\s]+[.,]\d{2})/i);
+    if (netImpMatch) {
+      net = parseFloat(netImpMatch[1].replace(/\s/g, '').replace(',', '.'));
+    }
+  }
+
+  // Employer: often in the first few lines of the PDF
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 2);
+  if (lines.length > 0) {
+    // First non-numeric substantial line is often the employer
+    for (const line of lines.slice(0, 10)) {
+      if (line.length > 3 && !/^\d+$/.test(line) && !/bulletin/i.test(line) && !/fiche de paie/i.test(line)) {
+        employer = line.substring(0, 80);
+        break;
+      }
+    }
+  }
+
+  return { gross, net, employer };
+}
 
 // ========== START SERVER ==========
 

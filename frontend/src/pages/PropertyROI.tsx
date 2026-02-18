@@ -40,22 +40,29 @@ function monthLabel(m: string) {
   return `${names[parseInt(mo) - 1]} ${y.slice(2)}`;
 }
 
+const roiCache: Record<number, ROIData> = {};
+
 export default function PropertyROI() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const authFetch = useAuthFetch();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
-  const [data, setData] = useState<ROIData | null>(null);
-  const [loading, setLoading] = useState(true);
   const [months, setMonths] = useState(6);
+  const [data, setData] = useState<ROIData | null>(() => roiCache[6] ?? null);
+  const [loading, setLoading] = useState(!roiCache[6]);
   const [_showCharges, _setShowCharges] = useState(false);
   const [_selectedProp, _setSelectedProp] = useState<Property | null>(null);
 
   useEffect(() => {
+    if (roiCache[months]) {
+      setData(roiCache[months]);
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     authFetch(`${API}/properties/roi?months=${months}`)
       .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
+      .then(d => { roiCache[months] = d; setData(d); setLoading(false); })
       .catch(() => setLoading(false));
   }, [months]);
 

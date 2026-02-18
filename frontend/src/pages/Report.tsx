@@ -48,6 +48,7 @@ export default function Report() {
 
   const toggleCategory = (key: string) => {
     setSelected(prev => {
+      if (prev.has(key) && prev.size === 1) return prev;
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
@@ -55,12 +56,13 @@ export default function Report() {
   };
 
   const toggleAll = () => {
-    if (selected.size === CATEGORIES.length) setSelected(new Set());
+    if (selected.size === CATEGORIES.length) setSelected(new Set([CATEGORIES[0].key]));
     else setSelected(new Set(CATEGORIES.map(c => c.key)));
   };
 
   const toggleScope = (key: string) => {
     setSelectedScopes(prev => {
+      if (prev.has(key) && prev.size === 1) return prev;
       const next = new Set(prev);
       if (next.has(key)) next.delete(key); else next.add(key);
       return next;
@@ -69,7 +71,7 @@ export default function Report() {
 
   const toggleAllScopes = () => {
     const allScopes = ['personal', 'pro', ...companies.map(c => `company_${c.id}`)];
-    if (selectedScopes.size === allScopes.length) setSelectedScopes(new Set());
+    if (selectedScopes.size === allScopes.length) setSelectedScopes(new Set([allScopes[0]]));
     else setSelectedScopes(new Set(allScopes));
   };
 
@@ -135,7 +137,7 @@ export default function Report() {
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-sm font-medium text-muted">Catégories à inclure</h3>
           <button onClick={toggleAll} className="text-xs text-accent-400 hover:text-accent-300 py-2 min-h-[32px]">
-            {selected.size === CATEGORIES.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+            {selected.size === CATEGORIES.length ? 'Réduire' : 'Tout sélectionner'}
           </button>
         </div>
         <div className="grid grid-cols-2 gap-2">
@@ -160,7 +162,7 @@ export default function Report() {
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium text-muted">Périmètre</h3>
             <button onClick={toggleAllScopes} className="text-xs text-accent-400 hover:text-accent-300 py-2 min-h-[32px]">
-              {selectedScopes.size === 2 + companies.length ? 'Tout désélectionner' : 'Tout sélectionner'}
+              {selectedScopes.size === 2 + companies.length ? 'Réduire' : 'Tout sélectionner'}
             </button>
           </div>
           <div className="grid grid-cols-2 gap-2">

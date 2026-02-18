@@ -243,7 +243,7 @@ export default function CompanyPage() {
   };
 
   const disconnectDrive = async (companyId: number) => {
-    if (!confirm('Déconnecter Drive pour cette entreprise ?')) return;
+    if (!confirm(t('disconnect_drive_confirm'))) return;
     await authFetch(`${API}/drive/disconnect?company_id=${companyId}`, { method: 'DELETE' });
     setManagingDriveId(null);
     if (companies) loadDriveStatuses(companies);
@@ -359,7 +359,7 @@ export default function CompanyPage() {
       { label: tr('details'), onClick: onDetails, icon: <Info size={14} /> },
       { label: tr('edit'), onClick: onEdit, icon: <Pencil size={14} /> },
       { label: tr('link_account') || 'Lier un compte', onClick: onLinkAccount, icon: <Link size={14} /> },
-      { label: driveConnected ? 'Drive ✅' : (tr('link_drive') || 'Lier Drive'), onClick: onLinkDrive, icon: <Cloud size={14} /> },
+      { label: driveConnected ? 'Drive ✅' : tr('link_folder'), onClick: onLinkDrive, icon: <Cloud size={14} /> },
       ...(hasLinked ? [{ label: tr('unlink_all') || 'Tout détacher', onClick: onUnlinkAll, icon: <Unlink size={14} /> }] : []),
       { label: tr('delete'), onClick: onDelete, icon: <Trash2 size={14} />, danger: true },
     ];
@@ -803,7 +803,7 @@ export default function CompanyPage() {
                         <div className="flex items-center gap-2 text-green-400">
                           <Cloud size={14} />
                           <span className="text-xs">
-                            Drive connecté{driveStatuses[c.id].folder_path ? ` — ${driveStatuses[c.id].folder_path}` : ' — Tous les dossiers'}
+                            {t('drive_connected')}{driveStatuses[c.id].folder_path ? ` — ${driveStatuses[c.id].folder_path}` : ` — ${t('all_folders_full_scan')}`}
                           </span>
                         </div>
                         <button onClick={() => { setManagingDriveId(null); setShowFolderPickerFor(null); }} className="text-muted hover:text-white p-0.5">
@@ -816,13 +816,13 @@ export default function CompanyPage() {
                           disabled={loadingFolders}
                           className="text-xs px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-muted hover:text-white rounded border border-border transition-colors disabled:opacity-50"
                         >
-                          {loadingFolders ? '...' : '📂 Choisir dossier'}
+                          {loadingFolders ? '...' : `📂 ${t('choose_folder')}`}
                         </button>
                         <button
                           onClick={() => disconnectDrive(c.id)}
                           className="text-xs px-2.5 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded border border-red-500/20 transition-colors"
                         >
-                          🔌 Déconnecter
+                          🔌 {t('disconnect')}
                         </button>
                       </div>
                       {showFolderPickerFor === c.id && (
@@ -844,19 +844,19 @@ export default function CompanyPage() {
                             onClick={() => selectDriveFolder(c.id, null, null)}
                             className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-white/5 text-muted hover:text-white mb-1 transition-colors"
                           >
-                            📁 Tous les dossiers (scan complet)
+                            📁 {t('all_folders_full_scan')}
                           </button>
                           {currentFolderId && (
                             <button
                               onClick={() => selectDriveFolder(c.id, currentFolderId, folderPath[folderPath.length - 1]?.name || null)}
                               className="w-full text-left text-xs px-2 py-1.5 rounded bg-accent-500/10 hover:bg-accent-500/20 text-accent-400 mb-2 transition-colors"
                             >
-                              ✓ Choisir ce dossier
+                              ✓ {t('select_this_folder')}
                             </button>
                           )}
                           <div className="space-y-0.5 max-h-40 overflow-y-auto">
                             {loadingFolders ? (
-                              <p className="text-xs text-muted text-center py-2">Chargement...</p>
+                              <p className="text-xs text-muted text-center py-2">{t('loading')}</p>
                             ) : folders.length > 0 ? (
                               folders.map((f: any) => (
                                 <button
@@ -865,11 +865,11 @@ export default function CompanyPage() {
                                   className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-white/5 flex items-center justify-between transition-colors"
                                 >
                                   <span>📁 {f.name}</span>
-                                  <span className="text-muted">Ouvrir →</span>
+                                  <span className="text-muted">{t('open')} →</span>
                                 </button>
                               ))
                             ) : (
-                              <p className="text-xs text-muted text-center py-2">Aucun sous-dossier</p>
+                              <p className="text-xs text-muted text-center py-2">{t('no_subfolders')}</p>
                             )}
                           </div>
                         </div>

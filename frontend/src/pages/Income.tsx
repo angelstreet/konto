@@ -1,17 +1,12 @@
 import { API } from '../config';
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Plus, Trash2, Edit3, X, Check, TrendingUp, ChevronDown, ArrowLeft } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Check, TrendingUp, ChevronDown, ArrowLeft, FolderOpen, RefreshCw, Upload, FileText, ChevronRight } from 'lucide-react';
 import EyeToggle from '../components/EyeToggle';
 import { useNavigate } from 'react-router-dom';
 import { useApi, useAuthFetch } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
-
-interface Company {
-  id: number;
-  name: string;
-}
 
 interface IncomeEntry {
   id: number;
@@ -33,15 +28,29 @@ function fmt(v: number, currency = 'EUR') {
 
 function fmtCHF(v: number) { return fmt(v, 'CHF'); }
 
-// Benchmark data — INSEE 2023 (FR), OFS 2022 (CH) — brut annuel
-const FR_PERCENTILES = [
-  { p: 10, gross: 13500 }, { p: 25, gross: 19500 }, { p: 50, gross: 26400 },
-  { p: 75, gross: 37500 }, { p: 90, gross: 52000 }, { p: 95, gross: 65000 }, { p: 99, gross: 100000 },
+const BENCHMARK_COUNTRIES = [
+  { value: 'FR', label: 'France', flag: '🇫🇷', currency: 'EUR' },
+  { value: 'CH', label: 'Suisse', flag: '🇨🇭', currency: 'CHF' },
+  { value: 'US', label: 'USA', flag: '🇺🇸', currency: 'USD' },
+  { value: 'UK', label: 'UK', flag: '🇬🇧', currency: 'GBP' },
+  { value: 'DE', label: 'Allemagne', flag: '🇩🇪', currency: 'EUR' },
 ];
-const CH_PERCENTILES = [
-  { p: 10, gross: 38000 }, { p: 25, gross: 56000 }, { p: 50, gross: 81456 },
-  { p: 75, gross: 110000 }, { p: 90, gross: 140000 }, { p: 95, gross: 165000 }, { p: 99, gross: 210000 },
+
+// "Wealth app users" distribution — finance tracking app users skew higher (EUR equiv.)
+const APP_USERS_PERCENTILES = [
+  { p: 10, gross: 32000 }, { p: 25, gross: 48000 }, { p: 50, gross: 70000 },
+  { p: 75, gross: 100000 }, { p: 90, gross: 145000 }, { p: 95, gross: 180000 }, { p: 99, gross: 280000 },
 ];
+
+// Currency conversion (approximate, 1 unit = X EUR)
+const RATE_TO_EUR: Record<string, number> = { EUR: 1, CHF: 1.04, USD: 0.92, GBP: 1.16 };
+function toEUR(v: number, currency: string) { return v * (RATE_TO_EUR[currency] ?? 1); }
+function fromEUR(v: number, currency: string) { return v / (RATE_TO_EUR[currency] ?? 1); }
+function convertSalary(v: number, from: string, to: string) { return fromEUR(toEUR(v, from), to); }
+function fmtCurrency(v: number, currency: string) {
+  const locale = currency === 'USD' || currency === 'GBP' ? 'en-US' : 'fr-FR';
+  return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(v);
+}
 
 function getPercentile(gross: number, data: { p: number; gross: number }[]): number {
   if (gross <= data[0].gross) return Math.max(1, Math.round(data[0].p * gross / data[0].gross));
@@ -64,15 +73,15 @@ export default function Income() {
 
   // Income tracking state - using cache
   const { data: incomeData, setData: setIncomeData } = useApi<{ entries: IncomeEntry[] }>(`${API}/income`);
-  const { data: companiesData } = useApi<Company[]>(`${API}/companies`);
+  const { data: benchmarkDb } = useApi<Record<string, Record<number, { p: number; gross: number }[]>>>(`${API}/salary-benchmarks`);
 
   const entries = incomeData?.entries || [];
-  const companies = Array.isArray(companiesData) ? companiesData : [];
 
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
-  const [form, setForm] = useState({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' });
+  const [form, setForm] = useState({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '' });
   const [expandedYears, setExpandedYears] = useState<Set<number> | null>(null); // null = default (last 3 years expanded)
+  const [benchmarkCountry, setBenchmarkCountry] = useState<string | null>(null); // null = auto from entries
 
   // Collapsible sections
   const [incomeOpen, setIncomeOpen] = useState(true);
@@ -84,7 +93,6 @@ export default function Income() {
       net_annual: form.net_annual ? parseFloat(form.net_annual) : null,
       start_date: form.start_date || null,
       end_date: form.end_date || null,
-      company_id: form.company_id ? parseInt(form.company_id) : null,
     };
     if (!body.employer || !body.gross_annual) return;
     if (editId) {
@@ -94,13 +102,13 @@ export default function Income() {
     }
     setShowForm(false);
     setEditId(null);
-    setForm({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' });
+    setForm({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '' });
     // Refetch to update cache
     const updated = await authFetch(`${API}/income`).then(r => r.json());
     setIncomeData(updated);
   };
 
-  const handleDelete = async (id: number) => {
+  const handleDeleteIncome = async (id: number) => {
     await authFetch(`${API}/income/${id}`, { method: 'DELETE' });
     // Refetch to update cache
     const updated = await authFetch(`${API}/income`).then(r => r.json());
@@ -113,7 +121,6 @@ export default function Income() {
       year: e.year, employer: e.employer, job_title: e.job_title || '', country: e.country,
       gross_annual: String(e.gross_annual), net_annual: e.net_annual ? String(e.net_annual) : '',
       start_date: e.start_date || '', end_date: e.end_date || '',
-      company_id: e.company_id ? String(e.company_id) : '',
     });
     setShowForm(true);
   };
@@ -126,21 +133,37 @@ export default function Income() {
   }, [entries]);
 
   const benchmarkData = useMemo(() => {
-    if (entries.length === 0) return null;
-    const maxYear = Math.max(...entries.map(e => e.year));
-    const latestEntries = entries.filter(e => e.year === maxYear);
-    const latestGross = latestEntries.reduce((s, e) => s + e.gross_annual, 0);
-    const latestCountry = latestEntries[0]?.country || 'FR';
-    if (latestCountry === 'OTHER') return null;
-    const isCH = latestCountry === 'CH';
-    const percentileData = isCH ? CH_PERCENTILES : FR_PERCENTILES;
-    const median = isCH ? 81456 : 26400;
-    const percentile = getPercentile(latestGross, percentileData);
-    const diffPct = Math.round((latestGross - median) / median * 100);
-    // CAGR & best YoY from all entries
-    const byYear: Record<number, number> = {};
-    entries.forEach(e => { byYear[e.year] = (byYear[e.year] || 0) + e.gross_annual; });
-    const yearTotals = Object.entries(byYear).map(([y, t]) => ({ year: Number(y), total: t })).sort((a, b) => a.year - b.year);
+    if (entries.length === 0 || !benchmarkDb) return null;
+    // Group entries by year, take last 3 years
+    const byYear: Record<number, { total: number; country: string }> = {};
+    entries.forEach(e => {
+      if (!byYear[e.year]) byYear[e.year] = { total: 0, country: e.country };
+      byYear[e.year].total += e.gross_annual;
+    });
+    const allYears = Object.keys(byYear).map(Number).sort((a, b) => b - a);
+    const maxYear = allYears[0];
+    const latestCountry = byYear[maxYear]?.country || 'FR';
+    const incomeCurrency = latestCountry === 'CH' ? 'CHF' : 'EUR';
+    // Selected benchmark country
+    const autoCountry = BENCHMARK_COUNTRIES.some(c => c.value === latestCountry) ? latestCountry : 'FR';
+    const selectedCountry = benchmarkCountry ?? autoCountry;
+    const selectedConfig = BENCHMARK_COUNTRIES.find(c => c.value === selectedCountry)!;
+    const benchCurrency = selectedConfig.currency;
+    // Compute progression for last 3 years
+    const progression = allYears.slice(0, 3).map(year => {
+      const gross = byYear[year].total;
+      const comparable = convertSalary(gross, incomeCurrency, benchCurrency);
+      const yearData = benchmarkDb[selectedCountry]?.[year] ?? benchmarkDb[selectedCountry]?.[Math.max(...Object.keys(benchmarkDb[selectedCountry] || {}).map(Number))];
+      if (!yearData) return null;
+      const popPercentile = getPercentile(comparable, yearData);
+      const appPercentile = getPercentile(toEUR(gross, incomeCurrency), APP_USERS_PERCENTILES);
+      const median = yearData.find(d => d.p === 50)?.gross ?? yearData[Math.floor(yearData.length / 2)].gross;
+      return { year, gross, comparable, benchCurrency, popPercentile, appPercentile, median };
+    }).filter(Boolean) as { year: number; gross: number; comparable: number; benchCurrency: string; popPercentile: number; appPercentile: number; median: number }[];
+    if (progression.length === 0) return null;
+    const latest = progression[0];
+    // CAGR & best YoY
+    const yearTotals = allYears.map(y => ({ year: y, total: byYear[y].total })).sort((a, b) => a.year - b.year);
     let cagr: number | null = null;
     let bestYoY: { year: number; pct: number } | null = null;
     if (yearTotals.length >= 2) {
@@ -153,8 +176,185 @@ export default function Income() {
       }
       if (best.year > 0) bestYoY = { year: best.year, pct: Math.round(best.pct) };
     }
-    return { latestYear: maxYear, isCH, percentile, median, diffPct, cagr, bestYoY };
-  }, [entries]);
+    return { latestYear: maxYear, selectedCountry, benchCurrency, incomeCurrency, progression, latest, cagr, bestYoY };
+  }, [entries, benchmarkCountry, benchmarkDb]);
+
+  // ===== PAYSLIPS STATE =====
+  interface Payslip {
+    id: number;
+    year: number;
+    month: number;
+    drive_file_id: string | null;
+    filename: string | null;
+    gross: number | null;
+    net: number | null;
+    employer: string | null;
+    status: string;
+  }
+
+  const currentYear = new Date().getFullYear();
+  const [payslips, setPayslips] = useState<Payslip[]>([]);
+  const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
+  const [folderMapping, setFolderMapping] = useState<{ folder_id: string; folder_path: string | null } | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [payslipsExpanded, setPayslipsExpanded] = useState(false);
+
+  // Folder picker state
+  const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
+  const [folderBreadcrumbs, setFolderBreadcrumbs] = useState<{ id: string; name: string }[]>([]);
+  const [foldersLoading, setFoldersLoading] = useState(false);
+
+  // Edit payslip state
+  const [editingPayslip, setEditingPayslip] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState({ gross: '', net: '', employer: '' });
+
+  const uploadRef = useRef<HTMLInputElement>(null);
+  const [uploadingMonth, setUploadingMonth] = useState<number | null>(null);
+
+  const MONTH_KEYS = ['month_jan', 'month_feb', 'month_mar', 'month_apr', 'month_may', 'month_jun', 'month_jul', 'month_aug', 'month_sep', 'month_oct', 'month_nov', 'month_dec'];
+
+  // Load Drive status + folder mapping + payslips for current year
+  const loadPayslipsData = useCallback(async () => {
+    try {
+      const [statusRes, mappingRes, payslipsRes] = await Promise.all([
+        authFetch(`${API}/drive/status`).then(r => r.json()),
+        authFetch(`${API}/drive/folder-mapping?purpose=payslips`).then(r => r.json()),
+        authFetch(`${API}/payslips?year=${currentYear}`).then(r => r.json()),
+      ]);
+      setDriveConnected(statusRes.connected);
+      setFolderMapping(mappingRes.mapping);
+      setPayslips(payslipsRes.payslips || []);
+    } catch {
+      setDriveConnected(false);
+    }
+  }, [currentYear]);
+
+  useEffect(() => { loadPayslipsData(); }, [loadPayslipsData]);
+
+  // Folder picker navigation
+  const loadFolders = async (parentId?: string) => {
+    setFoldersLoading(true);
+    try {
+      const url = parentId ? `${API}/drive/folders?parent_id=${parentId}` : `${API}/drive/folders`;
+      const res = await authFetch(url).then(r => r.json());
+      setFolders(res.folders || []);
+    } catch { setFolders([]); }
+    setFoldersLoading(false);
+  };
+
+  const openFolderPicker = () => {
+    setShowFolderPicker(true);
+    setFolderBreadcrumbs([]);
+    loadFolders();
+  };
+
+  const navigateFolder = (folder: { id: string; name: string }) => {
+    setFolderBreadcrumbs(prev => [...prev, folder]);
+    loadFolders(folder.id);
+  };
+
+  const navigateBreadcrumb = (index: number) => {
+    if (index < 0) {
+      setFolderBreadcrumbs([]);
+      loadFolders();
+    } else {
+      const crumb = folderBreadcrumbs[index];
+      setFolderBreadcrumbs(prev => prev.slice(0, index + 1));
+      loadFolders(crumb.id);
+    }
+  };
+
+  const selectFolder = async (folder: { id: string; name: string }) => {
+    const fullPath = [...folderBreadcrumbs, folder].map(f => f.name).join(' / ');
+    await authFetch(`${API}/drive/folder-mapping`, {
+      method: 'PUT',
+      body: JSON.stringify({ purpose: 'payslips', folder_id: folder.id, folder_path: fullPath }),
+    });
+    setFolderMapping({ folder_id: folder.id, folder_path: fullPath });
+    setShowFolderPicker(false);
+    // Auto-scan after selecting folder
+    handleScan();
+  };
+
+  const handleScan = async () => {
+    setScanning(true);
+    try {
+      const res = await authFetch(`${API}/payslips/scan`, {
+        method: 'POST',
+        body: JSON.stringify({ year: currentYear }),
+      });
+      const data = await res.json();
+      setPayslips(data.payslips || []);
+    } catch {}
+    setScanning(false);
+  };
+
+  const handleConfirm = async (payslip: Payslip) => {
+    await authFetch(`${API}/payslips/${payslip.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status: 'confirmed' }),
+    });
+    setPayslips(prev => prev.map(p => p.id === payslip.id ? { ...p, status: 'confirmed' } : p));
+  };
+
+  const handleEditSave = async (payslip: Payslip) => {
+    await authFetch(`${API}/payslips/${payslip.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        gross: parseFloat(editForm.gross) || null,
+        net: parseFloat(editForm.net) || null,
+        employer: editForm.employer || null,
+        status: 'confirmed',
+      }),
+    });
+    setPayslips(prev => prev.map(p => p.id === payslip.id ? {
+      ...p,
+      gross: parseFloat(editForm.gross) || null,
+      net: parseFloat(editForm.net) || null,
+      employer: editForm.employer || null,
+      status: 'confirmed',
+    } : p));
+    setEditingPayslip(null);
+  };
+
+  const handleDeletePayslip = async (id: number) => {
+    await authFetch(`${API}/payslips/${id}`, { method: 'DELETE' });
+    setPayslips(prev => prev.filter(p => p.id !== id));
+  };
+
+  const handleUpload = async (month: number, file: File) => {
+    setUploadingMonth(month);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      formData.append('year', String(currentYear));
+      formData.append('month', String(month));
+
+      const res = await authFetch(`${API}/payslips/upload`, {
+        method: 'POST',
+        body: formData as any,
+      });
+      const data = await res.json();
+      if (data.payslip) {
+        setPayslips(prev => {
+          const existing = prev.findIndex(p => p.month === month);
+          if (existing >= 0) return prev.map(p => p.month === month ? data.payslip : p);
+          return [...prev, data.payslip].sort((a, b) => a.month - b.month);
+        });
+      }
+    } catch {}
+    setUploadingMonth(null);
+  };
+
+  // Payslip annual summary
+  const payslipSummary = useMemo(() => {
+    const confirmed = payslips.filter(p => p.status === 'confirmed' || p.status === 'extracted');
+    if (confirmed.length === 0) return null;
+    const totalGross = confirmed.reduce((s, p) => s + (p.gross || 0), 0);
+    const totalNet = confirmed.reduce((s, p) => s + (p.net || 0), 0);
+    return { count: confirmed.length, totalGross, totalNet };
+  }, [payslips]);
 
   const countries = [
     { value: 'FR', label: '🇫🇷 France' },
@@ -163,8 +363,8 @@ export default function Income() {
   ];
 
   return (
-    <div className="space-y-8 max-w-5xl">
-      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+    <div className="max-w-5xl">
+      <div className="flex items-center justify-between gap-2 mb-3 h-10">
         <div className="flex items-center gap-2 min-w-0">
           <button onClick={() => navigate('/more')} className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0">
             <ArrowLeft size={20} />
@@ -174,6 +374,7 @@ export default function Income() {
         </div>
       </div>
 
+      <div className="space-y-4">
       {/* ===== SECTION 1: Income Tracking ===== */}
       <section className="bg-surface rounded-xl border border-border p-4 space-y-2.5">
         <div className="flex items-center justify-between">
@@ -183,7 +384,7 @@ export default function Income() {
           </h2>
           {incomeOpen && (
             <button
-              onClick={() => { setShowForm(true); setEditId(null); setForm({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '', company_id: '' }); }}
+              onClick={() => { setShowForm(true); setEditId(null); setForm({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '' }); }}
               className="flex items-center gap-1.5 px-3 py-2.5 bg-accent-500 text-white rounded-lg text-sm min-h-[44px] font-medium hover:bg-accent-600 transition-colors"
             >
               <Plus size={16} /> <span className="hidden sm:inline">{t('add_employer')}</span>
@@ -228,7 +429,7 @@ export default function Income() {
               <div>
                 <label className="text-xs text-muted mb-1 block">{t('end_date')}</label>
                 <input type="date" value={form.end_date} onChange={e => setForm({ ...form, end_date: e.target.value })}
-                  placeholder="En cours" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+                  className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
               </div>
               <div>
                 <label className="text-xs text-muted mb-1 block">{t('gross_annual')}</label>
@@ -241,18 +442,6 @@ export default function Income() {
                   placeholder="42000" className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
               </div>
             </div>
-            {companies.length > 0 && (
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div>
-                  <label className="text-xs text-muted mb-1 block">{t('company')}</label>
-                  <select value={form.company_id} onChange={e => setForm({ ...form, company_id: e.target.value })}
-                    className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm">
-                    <option value="">—</option>
-                    {companies.map(co => <option key={co.id} value={co.id}>{co.name}</option>)}
-                  </select>
-                </div>
-              </div>
-            )}
             <div className="flex gap-2 justify-end">
               <button onClick={() => { setShowForm(false); setEditId(null); }}
                 className="px-3 py-1.5 text-sm text-muted hover:text-white transition-colors"><X size={16} /></button>
@@ -328,7 +517,7 @@ export default function Income() {
                                 <div className="flex items-center gap-1 flex-shrink-0">
                                   <span className="text-sm font-mono text-green-400">{mask(fmtE(e.gross_annual))}</span>
                                   <button onClick={(ev) => { ev.stopPropagation(); startEdit(e); }} className="p-1.5 text-muted hover:text-white"><Edit3 size={12} /></button>
-                                  <button onClick={(ev) => { ev.stopPropagation(); handleDelete(e.id); }} className="p-1.5 text-muted hover:text-red-400"><Trash2 size={12} /></button>
+                                  <button onClick={(ev) => { ev.stopPropagation(); handleDeleteIncome(e.id); }} className="p-1.5 text-muted hover:text-red-400"><Trash2 size={12} /></button>
                                 </div>
                               </div>
                             );
@@ -405,7 +594,6 @@ export default function Income() {
                                     <td className="py-2 px-2 text-xs text-muted">{period}</td>
                                     <td className="py-2 px-2">
                                       {e.employer}
-                                      {e.company_name && <span className="text-xs text-accent-400 ml-1">({e.company_name})</span>}
                                     </td>
                                     <td className="py-2 px-2 text-muted">{e.job_title || '—'}</td>
                                     <td className="py-2 px-2">{countries.find(c => c.value === e.country)?.label || e.country}</td>
@@ -413,7 +601,7 @@ export default function Income() {
                                     <td className="py-2 px-2 text-right font-mono text-emerald-300">{e.net_annual ? mask(fmtE(e.net_annual)) : '—'}</td>
                                     <td className="py-2 px-2 text-right">
                                       <button onClick={() => startEdit(e)} className="p-1 text-muted hover:text-white"><Edit3 size={14} /></button>
-                                      <button onClick={() => handleDelete(e.id)} className="p-1 text-muted hover:text-red-400 ml-1"><Trash2 size={14} /></button>
+                                      <button onClick={() => handleDeleteIncome(e.id)} className="p-1 text-muted hover:text-red-400 ml-1"><Trash2 size={14} /></button>
                                     </td>
                                   </tr>
                                 );
@@ -443,7 +631,7 @@ export default function Income() {
                 <XAxis dataKey="year" tick={{ fill: '#888', fontSize: 12 }} />
                 <YAxis tick={{ fill: '#888', fontSize: 12 }} tickFormatter={v => hideAmounts ? '' : `${Math.round(v / 1000)}k`} />
                 <Tooltip cursor={{ fill: 'rgba(255,255,255,0.04)' }} formatter={(v: any) => mask(fmt(v))} contentStyle={{ backgroundColor: '#1a1a2e', border: '1px solid #333', borderRadius: 8, color: '#e5e5e5' }} itemStyle={{ color: '#e5e5e5' }} />
-                <Bar dataKey="total" fill="#6366f1" radius={[4, 4, 0, 0]} name="Salaire brut" />
+                <Bar dataKey="total" fill="#6366f1" radius={[4, 4, 0, 0]} name={t('gross_annual')} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -454,40 +642,83 @@ export default function Income() {
       {/* ===== SECTION 2: Salary Benchmark ===== */}
       {benchmarkData && (
         <section className="bg-surface rounded-xl border border-border p-4 space-y-4">
-          <div>
-            <h2 className="text-base font-semibold">Positionnement salarial</h2>
-            <p className="text-xs text-muted mt-0.5">Basé sur votre salaire brut {benchmarkData.latestYear}</p>
+          {/* Header + country selector */}
+          <div className="space-y-3">
+            <div>
+              <h2 className="text-base font-semibold">Positionnement salarial</h2>
+              <p className="text-xs text-muted mt-0.5">Progression sur les {benchmarkData.progression.length} dernières années</p>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {BENCHMARK_COUNTRIES.map(c => (
+                <button
+                  key={c.value}
+                  onClick={() => setBenchmarkCountry(c.value)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                    benchmarkData.selectedCountry === c.value
+                      ? 'bg-accent-500 text-white'
+                      : 'bg-surface-hover text-muted hover:text-white'
+                  }`}
+                >
+                  {c.flag} {c.label}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Percentile bar */}
-          <div>
-            <div className="flex justify-between items-baseline mb-3">
-              <span className="text-xs text-muted">Parmi les salariés {benchmarkData.isCH ? 'suisses' : 'français'}</span>
-              <span className="text-3xl font-bold text-white leading-none">
-                {benchmarkData.percentile}<span className="text-base text-muted font-normal">e percentile</span>
-              </span>
-            </div>
-            <div className="relative h-2 rounded-full" style={{ background: 'linear-gradient(to right, #ef4444 0%, #f59e0b 35%, #22c55e 70%, #16a34a 100%)' }}>
-              <div
-                className="absolute top-1/2 w-4 h-4 bg-white rounded-full border-2 border-gray-800 shadow-lg"
-                style={{ left: `${Math.min(Math.max(benchmarkData.percentile, 2), 98)}%`, transform: 'translateX(-50%) translateY(-50%)' }}
-              />
-            </div>
-            <div className="flex justify-between text-[10px] text-muted mt-2">
-              <span>Bas</span>
-              <span>Médiane {benchmarkData.isCH ? fmtCHF(benchmarkData.median) : fmt(benchmarkData.median)}</span>
-              <span>Haut</span>
-            </div>
+          {/* 3-year progression */}
+          <div className="space-y-4">
+            {benchmarkData.progression.map((p, i) => (
+              <div key={p.year} className={i > 0 ? 'pt-4 border-t border-border/40' : ''}>
+                <div className="flex items-baseline justify-between mb-3">
+                  <span className="text-sm font-semibold text-white">{p.year}</span>
+                  <span className="text-xs text-muted font-mono">{mask(fmtCurrency(p.gross, benchmarkData.incomeCurrency))}</span>
+                </div>
+
+                {/* Slider: vs Population */}
+                <div className="mb-3">
+                  <div className="flex justify-between items-baseline mb-1.5">
+                    <span className="text-xs text-muted">
+                      {BENCHMARK_COUNTRIES.find(c => c.value === benchmarkData.selectedCountry)?.flag} Population {BENCHMARK_COUNTRIES.find(c => c.value === benchmarkData.selectedCountry)?.label}
+                    </span>
+                    <span className="text-base font-bold text-white leading-none">Top {100 - p.popPercentile}%</span>
+                  </div>
+                  <div className="relative h-1.5 rounded-full" style={{ background: 'linear-gradient(to right, #ef4444 0%, #f59e0b 35%, #22c55e 70%, #16a34a 100%)' }}>
+                    <div
+                      className="absolute top-1/2 w-3 h-3 bg-white rounded-full border-2 border-gray-800 shadow"
+                      style={{ left: `${Math.min(Math.max(p.popPercentile, 2), 98)}%`, transform: 'translateX(-50%) translateY(-50%)' }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted mt-1">
+                    <span>Bas</span>
+                    <span>Médiane {fmtCurrency(p.median, p.benchCurrency)}</span>
+                    <span>Haut</span>
+                  </div>
+                </div>
+
+                {/* Slider: vs App users */}
+                <div>
+                  <div className="flex justify-between items-baseline mb-1.5">
+                    <span className="text-xs text-muted">Utilisateurs de l'app</span>
+                    <span className="text-base font-bold text-white leading-none">Top {100 - p.appPercentile}%</span>
+                  </div>
+                  <div className="relative h-1.5 rounded-full" style={{ background: 'linear-gradient(to right, #ef4444 0%, #f59e0b 35%, #22c55e 70%, #16a34a 100%)' }}>
+                    <div
+                      className="absolute top-1/2 w-3 h-3 bg-white rounded-full border-2 border-gray-800 shadow"
+                      style={{ left: `${Math.min(Math.max(p.appPercentile, 2), 98)}%`, transform: 'translateX(-50%) translateY(-50%)' }}
+                    />
+                  </div>
+                  <div className="flex justify-between text-[10px] text-muted mt-1">
+                    <span>Bas</span>
+                    <span>Médiane ~{fmtCurrency(70000, 'EUR')}</span>
+                    <span>Haut</span>
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
 
           {/* Stat cards */}
-          <div className={`grid gap-3 ${benchmarkData.cagr !== null && benchmarkData.bestYoY ? 'grid-cols-3' : benchmarkData.cagr !== null ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            <div className="bg-surface-hover rounded-xl p-3 text-center">
-              <div className={`text-xl font-bold ${benchmarkData.diffPct >= 0 ? 'text-green-400' : 'text-red-400'}`}>
-                {benchmarkData.diffPct >= 0 ? '+' : ''}{benchmarkData.diffPct}%
-              </div>
-              <div className="text-xs text-muted mt-0.5">vs. médiane nationale</div>
-            </div>
+          <div className={`grid gap-3 ${benchmarkData.cagr !== null && benchmarkData.bestYoY ? 'grid-cols-2' : 'grid-cols-1'}`}>
             {benchmarkData.cagr !== null && (
               <div className="bg-surface-hover rounded-xl p-3 text-center">
                 <div className={`text-xl font-bold ${benchmarkData.cagr >= 0 ? 'text-green-400' : 'text-orange-400'}`}>
@@ -507,10 +738,213 @@ export default function Income() {
           </div>
 
           <p className="text-[10px] text-muted/60">
-            Source : {benchmarkData.isCH ? 'OFS 2022 (Suisse)' : 'INSEE 2023 (France)'} — salaires bruts annuels
+            Source : INSEE / OFS / BLS / ONS / Destatis — salaires bruts annuels
           </p>
         </section>
       )}
+
+      {/* ===== Fiches de paie (current year only, Drive connected) ===== */}
+      {driveConnected && (
+        <section className="bg-surface rounded-xl border border-border overflow-hidden">
+          {/* Header — always visible, compact */}
+          <button
+            onClick={() => setPayslipsExpanded(!payslipsExpanded)}
+            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-hover transition-colors"
+          >
+            <FileText size={18} className="text-accent-400 flex-shrink-0" />
+            <div className="flex-1 text-left min-w-0">
+              <span className="text-sm font-medium">{t('payslips')} {currentYear}</span>
+              {payslipSummary && (
+                <span className="text-xs text-muted ml-2">
+                  {payslipSummary.count}/12 {t('months').toLowerCase()} · {mask(fmt(payslipSummary.totalGross))} {t('gross').toLowerCase()}
+                </span>
+              )}
+            </div>
+            {!folderMapping && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-500/15 text-accent-400">{t('configure')}</span>
+            )}
+            <ChevronDown size={16} className={`text-muted transition-transform flex-shrink-0 ${payslipsExpanded ? '' : '-rotate-90'}`} />
+          </button>
+
+          {payslipsExpanded && (
+            <div className="px-4 pb-4 space-y-3 border-t border-border/50">
+              {/* No folder yet → picker */}
+              {!folderMapping && !showFolderPicker && (
+                <div className="flex items-center gap-3 pt-3">
+                  <span className="text-sm text-muted flex-1">{t('select_drive_folder_payslips')}</span>
+                  <button onClick={openFolderPicker} className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 px-3 py-1.5 rounded-lg bg-accent-500/10">
+                    <FolderOpen size={14} /> {t('choose')}
+                  </button>
+                </div>
+              )}
+
+              {/* Folder picker */}
+              {showFolderPicker && (
+                <div className="pt-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-medium">{t('select_folder')}</span>
+                    <button onClick={() => setShowFolderPicker(false)} className="text-muted hover:text-white"><X size={16} /></button>
+                  </div>
+                  <div className="flex items-center gap-1 text-xs text-muted flex-wrap">
+                    <button onClick={() => navigateBreadcrumb(-1)} className="hover:text-white">{t('my_drive')}</button>
+                    {folderBreadcrumbs.map((crumb, i) => (
+                      <span key={crumb.id} className="flex items-center gap-1">
+                        <ChevronRight size={12} />
+                        <button onClick={() => navigateBreadcrumb(i)} className="hover:text-white">{crumb.name}</button>
+                      </span>
+                    ))}
+                  </div>
+                  {foldersLoading ? (
+                    <div className="text-sm text-muted text-center py-3">{t('loading')}</div>
+                  ) : folders.length === 0 ? (
+                    <div className="text-sm text-muted text-center py-3">{t('no_subfolders')}</div>
+                  ) : (
+                    <div className="space-y-0.5 max-h-48 overflow-y-auto">
+                      {folders.map(f => (
+                        <div key={f.id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors">
+                          <FolderOpen size={14} className="text-accent-400 flex-shrink-0" />
+                          <button onClick={() => navigateFolder(f)} className="text-sm flex-1 text-left truncate">{f.name}</button>
+                          <button onClick={() => selectFolder(f)} className="text-[11px] text-accent-400 hover:text-accent-300 flex-shrink-0 px-2 py-0.5 rounded bg-accent-500/10">
+                            {t('choose')}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {folderBreadcrumbs.length > 0 && (
+                    <button
+                      onClick={() => selectFolder(folderBreadcrumbs[folderBreadcrumbs.length - 1])}
+                      className="w-full text-sm text-accent-400 hover:text-accent-300 py-2 rounded-lg bg-accent-500/10 transition-colors"
+                    >
+                      {t('use_this_folder')}
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* Folder selected → monthly grid */}
+              {folderMapping && (
+                <>
+                  {/* Toolbar */}
+                  <div className="flex items-center gap-2 pt-3 text-xs text-muted">
+                    <FolderOpen size={13} className="text-accent-400/60" />
+                    <span className="truncate flex-1">{folderMapping.folder_path || folderMapping.folder_id}</span>
+                    <button onClick={openFolderPicker} className="text-accent-400/70 hover:text-accent-300">{t('change')}</button>
+                    <button
+                      onClick={handleScan}
+                      disabled={scanning}
+                      className="flex items-center gap-1 text-accent-400 hover:text-accent-300 disabled:opacity-50 px-2 py-1 rounded bg-accent-500/10"
+                    >
+                      <RefreshCw size={12} className={scanning ? 'animate-spin' : ''} /> {t('scan')}
+                    </button>
+                  </div>
+
+                  {/* Monthly rows */}
+                  <div className="space-y-0.5">
+                    {Array.from({ length: 12 }, (_, i) => i + 1).map(month => {
+                      const payslip = payslips.find(p => p.month === month);
+                      const isFuture = month > new Date().getMonth() + 1;
+                      const isEditing = editingPayslip === payslip?.id;
+
+                      if (isFuture && !payslip) return (
+                        <div key={month} className="flex items-center gap-2 px-3 py-2 opacity-25">
+                          <span className="text-xs font-medium w-16 text-muted">{t(MONTH_KEYS[month - 1])}</span>
+                          <span className="text-xs text-muted/50 flex-1">—</span>
+                        </div>
+                      );
+
+                      if (isEditing && payslip) return (
+                        <div key={month} className="bg-surface-hover rounded-lg px-3 py-2.5 space-y-2">
+                          <div className="flex items-center gap-2">
+                            <span className="text-xs font-medium w-16">{t(MONTH_KEYS[month - 1])}</span>
+                            <span className="text-[11px] text-muted truncate">{payslip.filename}</span>
+                          </div>
+                          <div className="grid grid-cols-3 gap-2">
+                            <input type="number" value={editForm.gross} onChange={e => setEditForm(f => ({ ...f, gross: e.target.value }))}
+                              className="bg-background border border-border rounded px-2 py-1 text-xs" placeholder={t('gross')} />
+                            <input type="number" value={editForm.net} onChange={e => setEditForm(f => ({ ...f, net: e.target.value }))}
+                              className="bg-background border border-border rounded px-2 py-1 text-xs" placeholder={t('net')} />
+                            <input type="text" value={editForm.employer} onChange={e => setEditForm(f => ({ ...f, employer: e.target.value }))}
+                              className="bg-background border border-border rounded px-2 py-1 text-xs" placeholder={t('employer')} />
+                          </div>
+                          <div className="flex gap-2 justify-end">
+                            <button onClick={() => setEditingPayslip(null)} className="text-[11px] text-muted hover:text-white px-2 py-0.5">{t('cancel')}</button>
+                            <button onClick={() => handleEditSave(payslip)} className="text-[11px] text-accent-400 hover:text-accent-300 px-2 py-0.5">OK</button>
+                          </div>
+                        </div>
+                      );
+
+                      if (payslip) return (
+                        <div key={month} className="flex items-center gap-2 px-3 py-2 rounded-lg bg-surface-hover hover:bg-white/[0.04] transition-colors">
+                          <span className="text-xs font-medium w-16 flex-shrink-0">{t(MONTH_KEYS[month - 1])}</span>
+                          <span className="text-[11px] text-muted truncate flex-1 min-w-0">{payslip.filename || '—'}</span>
+                          <span className="text-xs font-mono text-green-400 flex-shrink-0">{payslip.gross ? mask(fmt(payslip.gross)) : '—'}</span>
+                          <span className="text-xs font-mono text-emerald-300 flex-shrink-0 hidden sm:block">{payslip.net ? mask(fmt(payslip.net)) : '—'}</span>
+                          <span className={`text-[9px] px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                            payslip.status === 'confirmed' ? 'bg-green-500/20 text-green-400' :
+                            payslip.status === 'extracted' ? 'bg-amber-500/20 text-amber-400' :
+                            'bg-white/10 text-muted'
+                          }`}>
+                            {payslip.status === 'confirmed' ? t('confirmed') : payslip.status === 'extracted' ? t('extracted') : '?'}
+                          </span>
+                          <div className="flex items-center flex-shrink-0">
+                            {payslip.status !== 'confirmed' && (
+                              <button onClick={() => handleConfirm(payslip)} className="p-0.5 text-green-400/70 hover:text-green-300"><Check size={13} /></button>
+                            )}
+                            <button
+                              onClick={() => { setEditingPayslip(payslip.id); setEditForm({ gross: String(payslip.gross || ''), net: String(payslip.net || ''), employer: payslip.employer || '' }); }}
+                              className="p-0.5 text-muted hover:text-white"
+                            ><Edit3 size={13} /></button>
+                            <button onClick={() => handleDeletePayslip(payslip.id)} className="p-0.5 text-muted hover:text-red-400"><Trash2 size={13} /></button>
+                          </div>
+                        </div>
+                      );
+
+                      // Missing month (past, no payslip)
+                      return (
+                        <div key={month} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-surface-hover/50 transition-colors">
+                          <span className="text-xs font-medium w-16 flex-shrink-0 text-muted/60">{t(MONTH_KEYS[month - 1])}</span>
+                          <span className="text-[11px] text-muted/30 flex-1">—</span>
+                          <button
+                            onClick={() => { if (uploadRef.current) { setUploadingMonth(month); uploadRef.current.click(); } }}
+                            className="flex items-center gap-1 text-[11px] text-muted/50 hover:text-accent-400 transition-colors"
+                          >
+                            <Upload size={11} /> {t('add')}
+                          </button>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Hidden upload input */}
+                  <input ref={uploadRef} type="file" accept=".pdf" className="hidden"
+                    onChange={(e) => { const file = e.target.files?.[0]; if (file && uploadingMonth) handleUpload(uploadingMonth, file); e.target.value = ''; }}
+                  />
+
+                  {/* Summary */}
+                  {payslipSummary && (
+                    <div className="grid grid-cols-3 gap-2 pt-2 border-t border-border/40">
+                      <div className="text-center py-2">
+                        <div className="text-[11px] text-muted">{t('months')}</div>
+                        <div className="text-sm font-bold">{payslipSummary.count}/12</div>
+                      </div>
+                      <div className="text-center py-2">
+                        <div className="text-[11px] text-muted">{t('gross_annual_total')}</div>
+                        <div className="text-sm font-bold font-mono text-green-400">{mask(fmt(payslipSummary.totalGross))}</div>
+                      </div>
+                      <div className="text-center py-2">
+                        <div className="text-[11px] text-muted">{t('net_annual_total')}</div>
+                        <div className="text-sm font-bold font-mono text-emerald-300">{mask(fmt(payslipSummary.totalNet))}</div>
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+      </div>
     </div>
   );
 }

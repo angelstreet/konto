@@ -1,8 +1,8 @@
 import { API } from '../config';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload, Type, EyeOff, Coins, Bitcoin, Home, ArrowLeft } from 'lucide-react';
+import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload, Type, EyeOff, Coins, Bitcoin, Home, ArrowLeft, CloudOff, Cloud } from 'lucide-react';
 import { usePreferences } from '../PreferencesContext';
 import { useAuthFetch } from '../useApi';
 
@@ -32,6 +32,33 @@ export default function Settings() {
   const { prefs, update: updatePrefs } = usePreferences();
   const [showCurrency, setShowCurrency] = useState(false);
   const [showCryptoMode, setShowCryptoMode] = useState(false);
+
+  // Google Drive global connection
+  const [driveStatus, setDriveStatus] = useState<{ connected: boolean; folder_path?: string } | null>(null);
+  const [driveLoading, setDriveLoading] = useState(false);
+
+  useEffect(() => {
+    authFetch(`${API}/drive/status`).then(r => r.json()).then(setDriveStatus).catch(() => setDriveStatus({ connected: false }));
+  }, []);
+
+  const connectDrive = async () => {
+    setDriveLoading(true);
+    try {
+      const res = await authFetch(`${API}/drive/connect`, {
+        method: 'POST',
+        body: JSON.stringify({ return_to: '/konto/settings', with_upload: true }),
+      });
+      const data = await res.json();
+      if (data.url) window.location.href = data.url;
+    } catch {
+      setDriveLoading(false);
+    }
+  };
+
+  const disconnectDrive = async () => {
+    await authFetch(`${API}/drive/disconnect`, { method: 'DELETE' });
+    setDriveStatus({ connected: false });
+  };
 
   const CURRENCIES = [
     { id: 'EUR', label: t('currency_eur') },
@@ -82,6 +109,35 @@ export default function Settings() {
           <Building2 size={18} className="text-muted" />
           <span className="text-sm">{t('nav_companies')}</span>
         </button>
+
+        {/* Google Drive connection */}
+        <div className="flex items-center gap-3 px-4 py-3.5">
+          {driveStatus?.connected ? (
+            <>
+              <Cloud size={18} className="text-green-400" />
+              <span className="text-sm flex-1">{t('google_drive')}</span>
+              <span className="text-xs text-green-400 mr-2">{t('connected')}</span>
+              <button
+                onClick={disconnectDrive}
+                className="text-xs text-red-400 hover:text-red-300 transition-colors"
+              >
+                {t('disconnect')}
+              </button>
+            </>
+          ) : (
+            <>
+              <CloudOff size={18} className="text-muted" />
+              <span className="text-sm flex-1">{t('google_drive')}</span>
+              <button
+                onClick={connectDrive}
+                disabled={driveLoading}
+                className="text-xs text-accent-400 hover:text-accent-300 transition-colors"
+              >
+                {driveLoading ? '...' : t('connect')}
+              </button>
+            </>
+          )}
+        </div>
 
         <button
           onClick={toggleLang}

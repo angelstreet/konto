@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Search, RefreshCw, CheckCircle, Unlink, CloudOff, ArrowLeft, FolderOpen, Folder, ChevronRight, Check, Paperclip, Upload, Link2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch, useApi } from '../useApi';
+import DriveFolderPickerModal from '../components/DriveFolderPickerModal';
 
 interface Invoice {
   id: number;
@@ -83,10 +84,6 @@ export default function Invoices() {
   const [scanResult, setScanResult] = useState<any>(null);
   const [driveStatus, setDriveStatus] = useState<any>(null);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
-  const [folders, setFolders] = useState<any[]>([]);
-  const [loadingFolders, setLoadingFolders] = useState(false);
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
-  const [folderPath, setFolderPath] = useState<Array<{id: string | null, name: string}>>([{id: null, name: 'Mon Drive'}]);
 
   const load = useCallback(async () => {
     const cid = selectedCompanyId;
@@ -173,67 +170,17 @@ export default function Invoices() {
     await load();
   };
 
-  const loadFolders = async (parentId: string | null = null, parentName: string = 'Mon Drive') => {
-    setLoadingFolders(true);
-    try {
-      const companyParam = selectedCompanyId ? `company_id=${selectedCompanyId}` : '';
-      const parentParam = parentId ? `parent_id=${parentId}` : '';
-      const params = [companyParam, parentParam].filter(Boolean).join('&');
-      const url = `${API}/drive/folders${params ? '?' + params : ''}`;
-
-      const res = await authFetch(url);
-      const data = await res.json();
-      setFolders(data.folders || []);
-      setCurrentFolderId(parentId);
-
-      // Update breadcrumb path
-      if (parentId) {
-        const existingIndex = folderPath.findIndex(f => f.id === parentId);
-        if (existingIndex >= 0) {
-          setFolderPath(folderPath.slice(0, existingIndex + 1));
-        } else {
-          setFolderPath([...folderPath, { id: parentId, name: parentName }]);
-        }
-      } else {
-        setFolderPath([{ id: null, name: 'Mon Drive' }]);
-      }
-
-      setShowFolderPicker(true);
-    } catch (err) {
-      console.error('Failed to load folders:', err);
-    } finally {
-      setLoadingFolders(false);
-    }
+  const handleFolderSelected = async (folderId: string | null, folderPath: string | null) => {
+    await authFetch(`${API}/drive/folder`, {
+      method: 'PATCH',
+      body: JSON.stringify({ company_id: selectedCompanyId, folder_id: folderId, folder_name: folderPath }),
+    });
+    setShowFolderPicker(false);
+    await load();
+    scan();
   };
 
-  const navigateToFolder = (folderId: string | null, folderName: string) => {
-    loadFolders(folderId, folderName);
-  };
-
-  const selectFolder = async (folderId: string | null, _folderName: string | null) => {
-    try {
-      // Build full path for display
-      const fullPath = folderId ? folderPath.map(f => f.name).join(' / ') : null;
-
-      await authFetch(`${API}/drive/folder`, {
-        method: 'PATCH',
-        body: JSON.stringify({
-          company_id: selectedCompanyId,
-          folder_id: folderId,
-          folder_name: fullPath
-        })
-      });
-      setShowFolderPicker(false);
-      setFolderPath([{ id: null, name: 'Mon Drive' }]);
-      setCurrentFolderId(null);
-      await load();
-      scan();
-    } catch (err) {
-      console.error('Failed to update folder:', err);
-    }
-  };
-
-  const disconnectDrive = async () => {
+    const disconnectDrive = async () => {
     if (!confirm(`Déconnecter Drive pour ${companyName} ?`)) return;
     try {
       const param = selectedCompanyId ? `?company_id=${selectedCompanyId}` : '';
@@ -323,7 +270,7 @@ export default function Invoices() {
           </span>
           <div className="flex items-center gap-1 shrink-0">
             <button
-              onClick={() => loadFolders()}
+              onClick={() => setShowFolderPicker(true)}
               disabled={loadingFolders}
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 text-green-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:opacity-40"
               title="Changer le dossier"

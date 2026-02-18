@@ -242,6 +242,31 @@ export async function initDatabase() {
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
 
+    CREATE TABLE IF NOT EXISTS drive_folder_mappings (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      purpose TEXT NOT NULL,
+      folder_id TEXT NOT NULL,
+      folder_path TEXT,
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(user_id, purpose)
+    );
+
+    CREATE TABLE IF NOT EXISTS payslips (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      drive_file_id TEXT,
+      filename TEXT,
+      gross REAL,
+      net REAL,
+      employer TEXT,
+      status TEXT DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      UNIQUE(user_id, year, month)
+    );
+
     CREATE TABLE IF NOT EXISTS drive_connections (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id),

@@ -40,7 +40,8 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
   const fc = (n: number): React.ReactNode => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
 
   return (
-    <div className="bg-surface rounded-xl border border-border p-4 mb-4">
+    <div className="bg-surface rounded-xl border border-border p-4">
+      <h3 className="text-sm font-medium text-muted tracking-wide mb-3">Répartition du patrimoine</h3>
       <div>
       <div className="flex flex-col sm:flex-row items-center gap-4">
         <div className="w-40 h-40 relative flex-shrink-0">

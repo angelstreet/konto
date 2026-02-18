@@ -87,9 +87,14 @@ export function useAuthFetch() {
 
   return useCallback(async (url: string, options: RequestInit = {}): Promise<Response> => {
     const headers = await getAuthHeaders(getTokenRef.current);
+    const isFormData = options.body instanceof FormData;
     return fetch(url, {
       ...options,
-      headers: { 'Content-Type': 'application/json', ...headers, ...(options.headers as Record<string, string> || {}) },
+      headers: {
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
+        ...headers,
+        ...(options.headers as Record<string, string> || {}),
+      },
     });
   }, []);
 }

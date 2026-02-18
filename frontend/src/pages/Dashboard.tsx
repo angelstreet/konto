@@ -189,13 +189,6 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <ScopeSelect />
-          <button
-            onClick={() => window.open(API + '/report/patrimoine?categories=all', '_blank')}
-            className="p-2 rounded-lg text-muted hover:text-accent-400 hover:bg-surface-hover transition-colors"
-            title="Télécharger rapport PDF"
-          >
-            <Download size={16} />
-          </button>
         </div>
       </div>
 
@@ -234,12 +227,7 @@ export default function Dashboard() {
 
             {/* Distribution donut */}
             {donutData.length > 0 && (
-              <div className="bg-surface rounded-xl border border-border p-4">
-                <h3 className="text-sm font-medium text-muted tracking-wide mb-3">
-                  {t('patrimoine_distribution')}
-                </h3>
-                <DistributionDonut data={donutData} total={showNet ? netTotal : posTotal} hideAmounts={hideAmounts} showNet={showNet} loans={loans} />
-              </div>
+              <DistributionDonut data={donutData} total={showNet ? netTotal : posTotal} hideAmounts={hideAmounts} showNet={showNet} loans={loans} />
             )}
           </div>
 
