@@ -10,3 +10,4 @@ frontend/.env.local.backup
 *.db-shm
 *.db-wal
 *.db-journal
+backend/db/backups/
