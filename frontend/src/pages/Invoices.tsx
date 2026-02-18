@@ -281,8 +281,8 @@ export default function Invoices() {
         </div>
       ) : (
         <>
-          {/* Stats + year selector */}
-          <div className="flex items-center justify-between mb-3">
+          {/* Stats + filters */}
+          <div className="flex items-center justify-between mb-2">
             <div className="flex gap-3">
               <div className="text-center">
                 <div className="text-xl font-bold text-green-400">{stats?.matched ?? '—'}</div>
@@ -297,6 +297,7 @@ export default function Invoices() {
                 <div className="text-[10px] text-muted uppercase tracking-wide">Total</div>
               </div>
             </div>
+            {/* Mobile: both dropdowns — Desktop: year only (month pills below) */}
             <div className="flex items-center gap-2">
               <select
                 value={year}
@@ -311,7 +312,7 @@ export default function Invoices() {
               <select
                 value={month}
                 onChange={e => setMonth(Number(e.target.value))}
-                className="text-xs px-2 py-1.5 bg-surface border border-border rounded-lg"
+                className="md:hidden text-xs px-2 py-1.5 bg-surface border border-border rounded-lg"
               >
                 <option value={0}>Tous</option>
                 {['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'].map((m, i) => (
@@ -319,6 +320,21 @@ export default function Invoices() {
                 ))}
               </select>
             </div>
+          </div>
+
+          {/* Month pills — desktop only */}
+          <div className="hidden md:flex flex-wrap gap-1 mb-3">
+            {[0,1,2,3,4,5,6,7,8,9,10,11,12].map(m => (
+              <button
+                key={m}
+                onClick={() => setMonth(m)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
+                  month === m ? 'bg-accent-500/25 text-accent-400' : 'bg-surface text-muted hover:text-white'
+                }`}
+              >
+                {m === 0 ? 'Tous' : ['Jan','Fév','Mar','Avr','Mai','Jun','Jul','Aoû','Sep','Oct','Nov','Déc'][m - 1]}
+              </button>
+            ))}
           </div>
 
           {/* Per-year folder row */}
