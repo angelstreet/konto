@@ -33,7 +33,10 @@ export default function Bilan() {
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const { appendScope } = useFilter();
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
-  const [year, setYear] = useState(new Date().getFullYear());
+  const [year, setYear] = useState(() => {
+    const stored = localStorage.getItem('konto_bilan_year');
+    return stored ? parseInt(stored) : new Date().getFullYear();
+  });
   const { data, loading } = useApi<BilanData>(appendScope(`${API}/bilan/${year}`));
 
   const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
@@ -56,11 +59,11 @@ export default function Bilan() {
           <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} size={16} />
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
-          <button onClick={() => setYear(y => y - 1)} className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center">
+          <button onClick={() => setYear(y => { const n = y - 1; localStorage.setItem('konto_bilan_year', String(n)); return n; })} className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ChevronLeft size={18} />
           </button>
           <span className="text-lg font-bold tabular-nums">{year}</span>
-          <button onClick={() => setYear(y => y + 1)} className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center">
+          <button onClick={() => setYear(y => { const n = y + 1; localStorage.setItem('konto_bilan_year', String(n)); return n; })} className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center">
             <ChevronRight size={18} />
           </button>
         </div>
