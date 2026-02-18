@@ -57,7 +57,7 @@ interface CachedInvestments {
   total_diff: number;
 }
 
-const PAGE_SIZE = 50;
+const PAGE_SIZE = 100;
 
 export default function Transactions() {
   const { t } = useTranslation();
