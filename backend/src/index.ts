@@ -620,13 +620,20 @@ app.get('/api/transactions', async (c) => {
   const usage = c.req.query('usage');
   const companyId = c.req.query('company_id');
   const year = c.req.query('year');
+  const month = c.req.query('month'); // 1-12
 
   let where = 'ba.user_id = ?';
   const params: any[] = [userId];
 
   if (accountId) { where += ' AND t.bank_account_id = ?'; params.push(accountId); }
   if (search) { where += ' AND t.label LIKE ?'; params.push(`%${search}%`); }
-  if (year) { where += " AND strftime('%Y', t.date) = ?"; params.push(year); }
+  if (year && month) {
+    const m = month.padStart(2, '0');
+    where += " AND t.date >= ? AND t.date < ?";
+    const startDate = `${year}-${m}-01`;
+    const nextMonth = parseInt(month) === 12 ? `${parseInt(year) + 1}-01-01` : `${year}-${String(parseInt(month) + 1).padStart(2, '0')}-01`;
+    params.push(startDate, nextMonth);
+  } else if (year) { where += " AND strftime('%Y', t.date) = ?"; params.push(year); }
   if (usage === 'personal') { where += ' AND ba.usage = ?'; params.push('personal'); }
   else if (usage === 'professional') { where += ' AND ba.usage = ?'; params.push('professional'); }
   else if (companyId) { where += ' AND ba.company_id = ?'; params.push(companyId); }
@@ -2700,18 +2707,22 @@ app.get('/api/drive/folders', async (c) => {
   const userId = await getUserId(c);
   const companyId = c.req.query('company_id');
 
-  const sql = companyId
-    ? 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id = ? AND status = ? LIMIT 1'
-    : 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1';
-
-  const args = companyId ? [userId, parseInt(companyId), 'active'] : [userId, 'active'];
-  const conn = await db.execute({ sql, args });
-
-  if (conn.rows.length === 0) {
-    return c.json({ error: 'No active Google Drive connection' }, 400);
+  let driveConn: any = null;
+  if (companyId) {
+    const specific = await db.execute({ sql: 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id = ? AND status = ? LIMIT 1', args: [userId, parseInt(companyId), 'active'] });
+    if (specific.rows.length > 0) driveConn = specific.rows[0];
+    else {
+      const global = await db.execute({ sql: 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1', args: [userId, 'active'] });
+      if (global.rows.length > 0) driveConn = global.rows[0];
+    }
+  } else {
+    const result = await db.execute({ sql: 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1', args: [userId, 'active'] });
+    if (result.rows.length > 0) driveConn = result.rows[0];
   }
 
-  const driveConn: any = conn.rows[0];
+  if (!driveConn) {
+    return c.json({ error: 'No active Google Drive connection' }, 400);
+  }
   const accessToken = driveConn.access_token;
 
   try {
@@ -3248,8 +3259,8 @@ app.get('/api/bilan/:year', async (c) => {
   const endDate = `${year + 1}-01-01`;
 
   // Base query filter
-  let accountFilter = '';
-  const baseArgs: any[] = [startDate, endDate];
+  let accountFilter = ' AND ba.user_id = ?';
+  const baseArgs: any[] = [startDate, endDate, userId];
   if (companyId) {
     accountFilter += ' AND ba.company_id = ?';
     baseArgs.push(Number(companyId));
@@ -3316,7 +3327,7 @@ app.get('/api/bilan/:year', async (c) => {
   for (let m = 1; m <= 12; m++) {
     const mStart = `${year}-${String(m).padStart(2, '0')}-01`;
     const mEnd = m === 12 ? `${year + 1}-01-01` : `${year}-${String(m + 1).padStart(2, '0')}-01`;
-    const mArgs: any[] = [mStart, mEnd];
+    const mArgs: any[] = [mStart, mEnd, userId];
     if (companyId) mArgs.push(Number(companyId));
     if (usage) mArgs.push(usage);
 
