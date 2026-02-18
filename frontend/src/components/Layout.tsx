@@ -1,4 +1,5 @@
-import { ReactNode, useState, useEffect } from 'react';
+import { ReactNode, useState, useEffect, useRef } from 'react';
+import { useLocation } from 'react-router-dom';
 import BottomNav from './BottomNav';
 import Sidebar from './Sidebar';
 import { isSandbox, disableSandbox } from '../sandbox';
@@ -9,6 +10,17 @@ interface Props {
 }
 
 export default function Layout({ children, onLogout }: Props) {
+  const location = useLocation();
+  const [transitionKey, setTransitionKey] = useState(location.pathname);
+  const prevPath = useRef(location.pathname);
+
+  useEffect(() => {
+    if (prevPath.current !== location.pathname) {
+      prevPath.current = location.pathname;
+      setTransitionKey(location.pathname);
+    }
+  }, [location.pathname]);
+
   const [collapsed, setCollapsed] = useState(
     () => {
       const stored = localStorage.getItem('konto_sidebar_collapsed');
@@ -55,7 +67,9 @@ export default function Layout({ children, onLogout }: Props) {
           collapsed ? 'md:ml-16' : 'md:ml-56'
         }`}
       >
-        {children}
+        <div key={transitionKey} className="page-transition">
+          {children}
+        </div>
       </main>
 
       <div className="md:hidden">

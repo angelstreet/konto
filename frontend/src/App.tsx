@@ -3,6 +3,7 @@ import { Routes, Route, Navigate } from 'react-router-dom';
 import { useUser, useClerk as useClerkHook, SignIn } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
 import Layout from './components/Layout';
+import SplashScreen from './components/SplashScreen';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Accounts from './pages/Accounts';
@@ -77,11 +78,7 @@ function ClerkApp() {
   const { signOut } = useClerkHook();
 
   if (!isLoaded) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted">Loading...</div>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   if (!isSignedIn) {
@@ -137,11 +134,7 @@ function ClerkAppInner({ onLogout }: { onLogout: () => void }) {
   const { prefs, loading, refresh } = usePreferences();
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted">Loading...</div>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   if (prefs && !prefs.onboarded) {
@@ -199,11 +192,7 @@ function LegacyAppInner({ onLogout }: { onLogout: () => void }) {
   const { prefs, loading, refresh } = usePreferences();
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted">Loading...</div>
-      </div>
-    );
+    return <SplashScreen />;
   }
 
   if (prefs && !prefs.onboarded) {

@@ -10,6 +10,7 @@ import { useAmountVisibility } from '../AmountVisibilityContext';
 import ScopeSelect from '../components/ScopeSelect';
 import PatrimoineChart from '../components/PatrimoineChart';
 import DistributionDonut from '../components/DistributionDonut';
+import SplashScreen from '../components/SplashScreen';
 
 
 interface DashboardAccount {
@@ -140,6 +141,11 @@ export default function Dashboard() {
   })() : [];
   const posTotal = donutData.filter(d => d.value > 0).reduce((s, d) => s + d.value, 0);
 
+  // Show branded splash while loading (prevents flash of empty/login state)
+  if (loading && !data) {
+    return <SplashScreen />;
+  }
+
   if (!data || data.accountCount === 0) {
     const connectBank = async () => {
       const res = await fetch(appendScope(`${API}/bank/connect`), { credentials: "include" });
@@ -235,8 +241,8 @@ export default function Dashboard() {
             })}
           </div>
 
-          {/* Summary blocks */}
-          <div className="mb-3">
+          {/* Comptes par banque — desktop only (too much space on mobile) */}
+          <div className="hidden md:block mb-3">
             <h3 className="text-xs font-medium text-muted mb-2 uppercase tracking-wider flex items-center gap-1">
               <Landmark size={12} />
               Comptes par banque

@@ -7,7 +7,33 @@
 body {
   font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
+  /* Prevent pull-to-refresh on mobile PWA */
+  overscroll-behavior: none;
 }
+
+/* PWA: safe area insets for notched phones */
+:root {
+  --safe-area-top: env(safe-area-inset-top);
+  --safe-area-bottom: env(safe-area-inset-bottom);
+}
+
+/* Page transition animations */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.page-transition {
+  animation: page-in 0.18s ease-out;
+}
+
+/* Native-feel tap highlight removal */
+* {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Touch targets: bottom-nav and main action buttons get 44px minimum via component classes */
+/* We don't blanket all buttons to avoid breaking icon-only inline elements */
 
 /* Fix dark mode select dropdowns: ensure options are readable */
 select {
