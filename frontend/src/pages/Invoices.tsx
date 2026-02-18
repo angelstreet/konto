@@ -74,6 +74,7 @@ export default function Invoices() {
   const [txRows, setTxRows] = useState<TxRow[]>([]);
   const [stats, setStats] = useState<Stats | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [scanProgress, setScanProgress] = useState<{ total: number; processed: number; scanned: number; matched: number } | null>(null);
   const [scanDone, setScanDone] = useState(false);
   const [filter, setFilter] = useState<'all' | 'matched' | 'unmatched'>('all');
   const [year, setYear] = useState(new Date().getFullYear());
@@ -121,17 +122,45 @@ export default function Invoices() {
     setScanning(true);
     setScanDone(false);
     setScanResult(null);
+    setScanProgress(null);
     try {
       const res = await authFetch(`${API}/invoices/scan`, {
         method: 'POST',
         body: JSON.stringify({ company_id: selectedCompanyId, year })
       });
       const data = await res.json();
-      setScanResult(data);
-      await load();
-      setScanDone(true);
-      setTimeout(() => setScanDone(false), 30000);
-    } finally {
+      if (data.error) {
+        setScanResult({ error: data.error });
+        setScanning(false);
+        return;
+      }
+
+      const scanId = data.scan_id;
+      if (!scanId) { setScanning(false); return; }
+
+      // Poll for progress
+      const poll = async () => {
+        try {
+          const pollRes = await authFetch(`${API}/invoices/scan/${scanId}`);
+          const status = await pollRes.json();
+          setScanProgress({ total: status.total, processed: status.processed, scanned: status.scanned, matched: status.matched });
+
+          if (status.status === 'running') {
+            setTimeout(poll, 1500);
+          } else {
+            // Done or error
+            setScanResult(status);
+            await load();
+            setScanDone(true);
+            setScanning(false);
+            setTimeout(() => setScanDone(false), 30000);
+          }
+        } catch {
+          setScanning(false);
+        }
+      };
+      setTimeout(poll, 1000);
+    } catch {
       setScanning(false);
     }
   };
@@ -236,12 +265,28 @@ export default function Invoices() {
             {scanDone
               ? <><Check size={14} />Terminé</>
               : scanning
-                ? <><RefreshCw size={14} className="animate-spin" />Scan en cours...</>
+                ? <><RefreshCw size={14} className="animate-spin" />{scanProgress && scanProgress.total > 0 ? `${scanProgress.processed}/${scanProgress.total}` : 'Scan...'}</>
                 : <><RefreshCw size={14} />Scanner</>
             }
           </button>
         </div>
       </div>
+
+      {/* Scan progress bar */}
+      {scanning && scanProgress && scanProgress.total > 0 && (
+        <div className="mb-3">
+          <div className="h-1 bg-border rounded-full overflow-hidden">
+            <div
+              className="h-full bg-accent-500 transition-all duration-500 ease-out"
+              style={{ width: `${Math.round((scanProgress.processed / scanProgress.total) * 100)}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[10px] text-muted mt-1">
+            <span>{scanProgress.scanned} nouveaux · {scanProgress.matched} rapprochés</span>
+            <span>{Math.round((scanProgress.processed / scanProgress.total) * 100)}%</span>
+          </div>
+        </div>
+      )}
 
       {!driveStatus?.connected && (
         <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4 text-sm text-yellow-300 flex items-center justify-between gap-3">

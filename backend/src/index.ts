@@ -2928,13 +2928,67 @@ async function collectDriveFolderIds(rootId: string, token: string, depth = 0): 
   return ids;
 }
 
-// Scan invoices from Drive folder (simulated — real OCR needs pdf-parse/tesseract)
+// --- In-memory scan status tracker ---
+interface ScanStatus {
+  status: 'running' | 'done' | 'error';
+  total: number;
+  processed: number;
+  scanned: number;
+  matched: number;
+  errors: string[];
+  started_at: number;
+  finished_at?: number;
+}
+const scanJobs = new Map<string, ScanStatus>();
+
+// Clean up old scan jobs (>1h)
+setInterval(() => {
+  const cutoff = Date.now() - 3600_000;
+  for (const [id, job] of scanJobs) {
+    if (job.finished_at && job.finished_at < cutoff) scanJobs.delete(id);
+  }
+}, 600_000);
+
+// List all PDFs from Drive folder, handling pagination (>100 files)
+async function listAllDrivePdfs(folderId: string | null, accessToken: string): Promise<{ id: string; name: string; modifiedTime: string }[]> {
+  let query = "mimeType='application/pdf' and trashed=false";
+  if (folderId) {
+    const allFolderIds = await collectDriveFolderIds(folderId, accessToken);
+    const parentClause = allFolderIds.map(id => `'${id}' in parents`).join(' or ');
+    query += ` and (${parentClause})`;
+  }
+
+  const files: { id: string; name: string; modifiedTime: string }[] = [];
+  let pageToken: string | null = null;
+
+  do {
+    const params = new URLSearchParams({
+      q: query,
+      fields: 'nextPageToken,files(id,name,modifiedTime)',
+      orderBy: 'modifiedTime desc',
+      pageSize: '200',
+    });
+    if (pageToken) params.set('pageToken', pageToken);
+
+    const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
+      headers: { Authorization: `Bearer ${accessToken}` }
+    });
+    if (!res.ok) break;
+    const data: any = await res.json();
+    files.push(...(data.files || []));
+    pageToken = data.nextPageToken || null;
+  } while (pageToken && files.length < 1000); // safety cap
+
+  return files;
+}
+
+// Start scan — returns scan_id, processes in background
 app.post('/api/invoices/scan', async (c) => {
   const userId = await getUserId(c);
   const body = await c.req.json().catch(() => ({}));
   const companyId = body.company_id || null;
 
-  // Check drive connection — scope by company_id like all other drive queries
+  // Check drive connection
   const connSql = companyId
     ? 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id = ? AND status = ? LIMIT 1'
     : 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1';
@@ -2946,7 +3000,9 @@ app.post('/api/invoices/scan', async (c) => {
 
   const driveConn: any = conn.rows[0];
   const accessToken = await getDriveAccessToken(driveConn);
-  // Check for year-specific folder override in drive_folder_mappings
+  if (!accessToken) return c.json({ error: 'Missing Drive access token' }, 400);
+
+  // Resolve folder
   let folderId = driveConn.folder_id;
   const scanYear = body.year || null;
   if (scanYear) {
@@ -2955,164 +3011,203 @@ app.post('/api/invoices/scan', async (c) => {
     if (mapping.rows.length > 0 && mapping.rows[0].folder_id) folderId = String(mapping.rows[0].folder_id);
   }
 
-  if (!accessToken) {
-    return c.json({ error: 'Missing Drive access token' }, 400);
-  }
+  const scanId = `scan_${userId}_${Date.now()}`;
+  const job: ScanStatus = { status: 'running', total: 0, processed: 0, scanned: 0, matched: 0, errors: [], started_at: Date.now() };
+  scanJobs.set(scanId, job);
 
-  try {
-    // Build PDF query — if a folder is configured, collect all subfolder IDs recursively
-    // (Drive API v3 has no native recursive search, so we walk the tree first)
-    let query = "mimeType='application/pdf' and trashed=false";
-    if (folderId) {
-      const allFolderIds = await collectDriveFolderIds(folderId, accessToken);
-      const parentClause = allFolderIds.map(id => `'${id}' in parents`).join(' or ');
-      query += ` and (${parentClause})`;
-    }
+  // Return immediately — process in background
+  // (Do NOT await this promise)
+  (async () => {
+    try {
+      const files = await listAllDrivePdfs(folderId, accessToken);
+      job.total = files.length;
 
-    const listUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(query)}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime desc&pageSize=100`;
-    const listRes = await fetch(listUrl, {
-      headers: { Authorization: `Bearer ${accessToken}` }
-    });
-
-    if (!listRes.ok) {
-      const err = await listRes.text();
-      return c.json({ error: 'Drive API error', details: err }, 502);
-    }
-
-    const listData: any = await listRes.json();
-    const files = listData.files || [];
-
-    let scanned = 0;
-    let matched = 0;
-    let errors: string[] = [];
-
-    for (const file of files) {
-      // Skip if already cached
-      const existing = await db.execute({
-        sql: 'SELECT id FROM invoice_cache WHERE drive_file_id = ?',
-        args: [file.id]
-      });
-      if (existing.rows.length > 0) continue;
-
-      try {
-        // Download file content for OCR
-        const dlRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
-          headers: { Authorization: `Bearer ${accessToken}` }
-        });
-
-        if (!dlRes.ok) {
-          errors.push(`Failed to download ${file.name}`);
-          continue;
-        }
-
-        const buffer = await dlRes.arrayBuffer();
-
-        // Extract metadata from filename as fallback
-        // Pattern: YYYY-MM-DD_Vendor_Amount.pdf or similar
-        const extracted = extractInvoiceMetadata(file.name, Buffer.from(buffer));
-
-        // Try to match with transaction
-        let matchedTxId: number | null = null;
-        let confidence = 0;
-
-        if (extracted.amount) {
-          // Look for transactions within ±5 days with similar amount
-          const dateStr = extracted.date || file.modifiedTime?.slice(0, 10) || '';
-          const matchQuery = companyId
-            ? `SELECT t.id, t.label, t.amount, t.date FROM transactions t
-               JOIN bank_accounts ba ON t.bank_account_id = ba.id
-               WHERE ba.company_id = ? AND ABS(ABS(t.amount) - ?) < 0.02
-               AND t.date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
-               AND t.id NOT IN (SELECT transaction_id FROM invoice_cache WHERE transaction_id IS NOT NULL)
-               ORDER BY ABS(julianday(t.date) - julianday(?)) LIMIT 1`
-            : `SELECT t.id, t.label, t.amount, t.date FROM transactions t
-               WHERE ABS(ABS(t.amount) - ?) < 0.02
-               AND t.date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
-               AND t.id NOT IN (SELECT transaction_id FROM invoice_cache WHERE transaction_id IS NOT NULL)
-               ORDER BY ABS(julianday(t.date) - julianday(?)) LIMIT 1`;
-
-          const matchArgs = companyId
-            ? [companyId, Math.abs(extracted.amount), dateStr, dateStr, dateStr]
-            : [Math.abs(extracted.amount), dateStr, dateStr, dateStr];
-
-          const txMatch = await db.execute({ sql: matchQuery, args: matchArgs });
-
-          if (txMatch.rows.length > 0) {
-            const tx: any = txMatch.rows[0];
-            matchedTxId = tx.id;
-            confidence = 0.8; // Base confidence for amount+date match
-
-            // Boost if vendor name matches label
-            if (extracted.vendor && tx.label) {
-              const vendorLower = extracted.vendor.toLowerCase();
-              const labelLower = (tx.label as string).toLowerCase();
-              if (labelLower.includes(vendorLower) || vendorLower.includes(labelLower)) {
-                confidence = 0.95;
-              }
-            }
-            matched++;
+      for (const file of files) {
+        try {
+          // Skip already cached
+          const existing = await db.execute({
+            sql: 'SELECT id FROM invoice_cache WHERE drive_file_id = ?',
+            args: [file.id]
+          });
+          if (existing.rows.length > 0) {
+            job.processed++;
+            continue;
           }
+
+          // Download PDF
+          const dlRes = await fetch(`https://www.googleapis.com/drive/v3/files/${file.id}?alt=media`, {
+            headers: { Authorization: `Bearer ${accessToken}` }
+          });
+          if (!dlRes.ok) {
+            job.errors.push(`Download failed: ${file.name}`);
+            job.processed++;
+            continue;
+          }
+
+          const buffer = Buffer.from(await dlRes.arrayBuffer());
+
+          // Extract metadata: first from filename, then enhance with PDF text
+          const extracted = await extractInvoiceMetadata(file.name, buffer);
+
+          // Match with transaction
+          let matchedTxId: number | null = null;
+          let confidence = 0;
+
+          if (extracted.amount) {
+            const dateStr = extracted.date || file.modifiedTime?.slice(0, 10) || '';
+            const matchQuery = companyId
+              ? `SELECT t.id, t.label, t.amount, t.date FROM transactions t
+                 JOIN bank_accounts ba ON t.bank_account_id = ba.id
+                 WHERE ba.company_id = ? AND ABS(ABS(t.amount) - ?) < 0.02
+                 AND t.date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
+                 AND t.id NOT IN (SELECT transaction_id FROM invoice_cache WHERE transaction_id IS NOT NULL)
+                 ORDER BY ABS(julianday(t.date) - julianday(?)) LIMIT 1`
+              : `SELECT t.id, t.label, t.amount, t.date FROM transactions t
+                 WHERE ABS(ABS(t.amount) - ?) < 0.02
+                 AND t.date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
+                 AND t.id NOT IN (SELECT transaction_id FROM invoice_cache WHERE transaction_id IS NOT NULL)
+                 ORDER BY ABS(julianday(t.date) - julianday(?)) LIMIT 1`;
+            const matchArgs = companyId
+              ? [companyId, Math.abs(extracted.amount), dateStr, dateStr, dateStr]
+              : [Math.abs(extracted.amount), dateStr, dateStr, dateStr];
+
+            const txMatch = await db.execute({ sql: matchQuery, args: matchArgs });
+            if (txMatch.rows.length > 0) {
+              const tx: any = txMatch.rows[0];
+              matchedTxId = tx.id;
+              confidence = 0.8;
+              if (extracted.vendor && tx.label) {
+                const v = extracted.vendor.toLowerCase();
+                const l = (tx.label as string).toLowerCase();
+                if (l.includes(v) || v.includes(l)) confidence = 0.95;
+              }
+              job.matched++;
+            }
+          }
+
+          await db.execute({
+            sql: `INSERT INTO invoice_cache (user_id, company_id, transaction_id, drive_file_id, filename, vendor, amount_ht, tva_amount, tva_rate, date, invoice_number, match_confidence)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            args: [userId, companyId, matchedTxId, file.id, file.name,
+                   extracted.vendor || null, extracted.amount || null,
+                   extracted.tva_amount || null, extracted.tva_rate || null,
+                   extracted.date || null, extracted.invoice_number || null,
+                   matchedTxId ? confidence : null]
+          });
+          job.scanned++;
+        } catch (e: any) {
+          job.errors.push(`${file.name}: ${e.message}`);
         }
-
-        // Insert metadata into cache
-        await db.execute({
-          sql: `INSERT INTO invoice_cache (user_id, company_id, transaction_id, drive_file_id, filename, vendor, amount_ht, tva_amount, tva_rate, date, invoice_number, match_confidence)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-          args: [userId, companyId, matchedTxId, file.id, file.name,
-                 extracted.vendor || null, extracted.amount || null,
-                 extracted.tva_amount || null, extracted.tva_rate || null,
-                 extracted.date || null, extracted.invoice_number || null,
-                 matchedTxId ? confidence : null]
-        });
-        scanned++;
-      } catch (e: any) {
-        errors.push(`Error processing ${file.name}: ${e.message}`);
+        job.processed++;
       }
-    }
 
-    return c.json({
-      ok: true,
-      total_files: files.length,
-      scanned,
-      matched,
-      errors: errors.length > 0 ? errors : undefined
-    });
-  } catch (e: any) {
-    return c.json({ error: 'Scan failed', details: e.message }, 500);
-  }
+      job.status = 'done';
+      job.finished_at = Date.now();
+    } catch (e: any) {
+      job.status = 'error';
+      job.errors.push(e.message);
+      job.finished_at = Date.now();
+    }
+  })();
+
+  return c.json({ scan_id: scanId, total: 0, status: 'running' });
 });
 
-// Extract invoice metadata from filename (and basic text extraction)
-function extractInvoiceMetadata(filename: string, _buffer: Buffer) {
+// Poll scan progress
+app.get('/api/invoices/scan/:scanId', async (c) => {
+  const scanId = c.req.param('scanId');
+  const job = scanJobs.get(scanId);
+  if (!job) return c.json({ status: 'not_found' }, 404);
+  return c.json(job);
+});
+
+// Extract invoice metadata from filename + PDF text content
+async function extractInvoiceMetadata(filename: string, buffer: Buffer): Promise<{ vendor?: string; amount?: number; date?: string; invoice_number?: string; tva_amount?: number; tva_rate?: number }> {
   const result: { vendor?: string; amount?: number; date?: string; invoice_number?: string; tva_amount?: number; tva_rate?: number } = {};
 
-  // Try to extract date from filename: YYYY-MM-DD or DD-MM-YYYY
+  // --- 1. Parse from filename ---
   const dateMatch = filename.match(/(\d{4})-(\d{2})-(\d{2})/) || filename.match(/(\d{2})-(\d{2})-(\d{4})/);
   if (dateMatch) {
-    if (dateMatch[1].length === 4) {
-      result.date = `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`;
-    } else {
-      result.date = `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
-    }
+    result.date = dateMatch[1].length === 4
+      ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`
+      : `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
   }
 
-  // Try to extract amount: look for numbers like 123.45 or 1234,56
   const amountMatch = filename.match(/(\d+[.,]\d{2})/);
   if (amountMatch) {
     result.amount = parseFloat(amountMatch[1].replace(',', '.'));
   }
 
-  // Vendor: take the part between date and amount, or first meaningful word
   const cleaned = filename.replace(/\.pdf$/i, '').replace(/[\d_-]+/g, ' ').trim();
   const words = cleaned.split(/\s+/).filter(w => w.length > 2);
-  if (words.length > 0) {
-    result.vendor = words.join(' ');
-  }
+  if (words.length > 0) result.vendor = words.join(' ');
 
-  // Invoice number: look for patterns like F-2024-001, INV-123, etc.
   const invMatch = filename.match(/(F|FA|INV|FACT)[- ]?\d+[- ]?\d*/i);
-  if (invMatch) {
-    result.invoice_number = invMatch[0];
+  if (invMatch) result.invoice_number = invMatch[0];
+
+  // --- 2. Enhance from PDF text ---
+  try {
+    const { PDFParse } = await import('pdf-parse');
+    const parser = new PDFParse(new Uint8Array(buffer));
+    const pdfResult = await parser.getText();
+    const text = pdfResult.text || '';
+    if (!text.trim()) return result;
+
+    // Date: look for DD/MM/YYYY patterns
+    if (!result.date) {
+      const pdfDate = text.match(/(\d{2})[/.](\d{2})[/.](\d{4})/);
+      if (pdfDate) result.date = `${pdfDate[3]}-${pdfDate[2]}-${pdfDate[1]}`;
+    }
+
+    // Invoice number
+    if (!result.invoice_number) {
+      const pdfInv = text.match(/(?:facture|invoice|n°)\s*:?\s*([A-Z]*-?\d{4,}[-/]?\d*)/i);
+      if (pdfInv) result.invoice_number = pdfInv[1];
+    }
+
+    // Total TTC — most reliable amount for matching
+    // Look for "Total TTC", "TOTAL TTC", "Montant TTC", "Net à payer"
+    const ttcPatterns = [
+      /total\s+t\.?t\.?c\.?\s*:?\s*([\d\s]+[.,]\d{2})/i,
+      /montant\s+t\.?t\.?c\.?\s*:?\s*([\d\s]+[.,]\d{2})/i,
+      /net\s+[àa]\s+payer\s*:?\s*([\d\s]+[.,]\d{2})/i,
+      /total\s*:?\s*([\d\s]+[.,]\d{2})\s*€?$/im,
+    ];
+    for (const pat of ttcPatterns) {
+      const m = text.match(pat);
+      if (m) {
+        const val = parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
+        if (val > 0 && val < 1_000_000) {
+          result.amount = val;
+          break;
+        }
+      }
+    }
+
+    // Total HT
+    const htMatch = text.match(/total\s+h\.?t\.?\s*:?\s*([\d\s]+[.,]\d{2})/i)
+      || text.match(/montant\s+h\.?t\.?\s*:?\s*([\d\s]+[.,]\d{2})/i);
+    if (htMatch) {
+      const ht = parseFloat(htMatch[1].replace(/\s/g, '').replace(',', '.'));
+      if (ht > 0) result.amount = result.amount || ht; // prefer TTC if found
+    }
+
+    // TVA
+    const tvaMatch = text.match(/t\.?v\.?a\.?\s*(?:\(?\s*(\d+(?:[.,]\d+)?)\s*%?\)?)?\s*:?\s*([\d\s]+[.,]\d{2})/i);
+    if (tvaMatch) {
+      if (tvaMatch[1]) result.tva_rate = parseFloat(tvaMatch[1].replace(',', '.'));
+      result.tva_amount = parseFloat(tvaMatch[2].replace(/\s/g, '').replace(',', '.'));
+    }
+
+    // Vendor: first non-empty substantial line (often company name at top)
+    if (!result.vendor || result.vendor.length < 3) {
+      const lines = text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 3 && !/^\d+$/.test(l));
+      // Skip lines that look like addresses, dates, numbers
+      const vendorLine = lines.find((l: string) => !/^\d/.test(l) && !/facture|invoice|date|siret|siren|tva|iban/i.test(l) && l.length < 60);
+      if (vendorLine) result.vendor = vendorLine;
+    }
+  } catch {
+    // PDF parsing failed — use filename-only results
   }
 
   return result;
