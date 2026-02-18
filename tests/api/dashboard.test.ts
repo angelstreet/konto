@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-const API = 'http://localhost:3004';
+const API = 'http://localhost:5004';
 
 describe('GET /api/users', () => {
   it('returns an array with at least the default user', async () => {

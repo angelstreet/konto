@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, ArrowLeft, CloudOff
+  Home, Plus, Pencil, Trash2, ChevronDown, X, ArrowLeft
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -14,12 +14,6 @@ import { useAmountVisibility } from '../AmountVisibilityContext';
 import { useFilter } from '../FilterContext';
 import { useApi, useAuthFetch, invalidateApi } from '../useApi';
 
-const TYPES = [
-  { id: 'real_estate', icon: Home, labelKey: 'asset_real_estate' },
-  { id: 'vehicle', icon: Car, labelKey: 'asset_vehicle' },
-  { id: 'valuable', icon: Watch, labelKey: 'asset_valuable' },
-  { id: 'other', icon: Package, labelKey: 'asset_other' },
-] as const;
 
 interface Cost { id?: number; label: string; amount: number; frequency: string; category?: string; }
 interface Revenue { id?: number; label: string; amount: number; frequency: string; }
@@ -56,7 +50,6 @@ export default function Assets() {
   const authFetch = useAuthFetch();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const f = (n: number): React.ReactNode => hideAmounts ? <span className="amount-masked">{fmt(n)}</span> : fmt(n);
-  const [filter, setFilter] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [expandedId, setExpandedId] = useState<number | null>(null);
@@ -77,24 +70,21 @@ export default function Assets() {
   const { prefs } = usePreferences();
   const { scope, appendScope, companies } = useFilter();
 
-  // Build assets URL with filter + scope params
+  // Build assets URL — always real_estate only
   const assetsUrl = useMemo(() => {
-    let url = `${API}/assets`;
-    if (filter) url += `?type=${filter}`;
-    if (scope === 'personal') url += (url.includes('?') ? '&' : '?') + 'usage=personal';
-    else if (scope === 'pro') url += (url.includes('?') ? '&' : '?') + 'usage=professional';
-    else if (typeof scope === 'number') url += (url.includes('?') ? '&' : '?') + `company_id=${scope}`;
+    let url = `${API}/assets?type=real_estate`;
+    if (scope === 'personal') url += '&usage=personal';
+    else if (scope === 'pro') url += '&usage=professional';
+    else if (typeof scope === 'number') url += `&company_id=${scope}`;
     return url;
-  }, [filter, scope]);
+  }, [scope]);
 
   const accountsUrl = useMemo(() => appendScope(`${API}/bank/accounts`), [scope, appendScope]);
-  const driveStatusUrl = `${API}/drive/status`;
   const kozyUrl = prefs?.kozy_enabled ? `${API}/kozy/properties` : '';
 
   const { data: assets, refetch: refetchAssets } = useApi<Asset[]>(assetsUrl);
   const { data: accountsRaw } = useApi<BankAccount[]>(accountsUrl);
   const { data: kozyData } = useApi<{ properties: any[] }>(kozyUrl);
-  const { data: driveStatus } = useApi<{ connected: boolean }>(driveStatusUrl);
 
   const assetList = assets || [];
   const accounts = accountsRaw || [];
@@ -125,7 +115,6 @@ export default function Assets() {
   };
 
   const [addressSelected, setAddressSelected] = useState(false);
-  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // Address search with debounce
   useEffect(() => {
@@ -261,11 +250,6 @@ export default function Assets() {
   };
   const removeRevenue = (i: number) => setForm(f => ({ ...f, revenues: f.revenues.filter((_, j) => j !== i) }));
 
-  const typeIcon = (type: string) => {
-    const t = TYPES.find(tt => tt.id === type);
-    return t ? t.icon : Package;
-  };
-
   // Totals
   const totalPnl = assetList.reduce((s, a) => s + (a.pnl || 0), 0);
   const totalAcquisition = assetList.reduce((s, a) => s + (a.purchase_price || 0), 0);
@@ -286,14 +270,6 @@ export default function Assets() {
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <span className="hidden md:block"><ScopeSelect /></span>
-          <button
-            onClick={() => setMobileFiltersOpen(o => !o)}
-            className={`md:hidden flex items-center gap-1 px-2.5 py-2 rounded-lg text-xs font-medium transition-colors ${
-              filter ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'
-            }`}
-          >
-            {t('filters')} <span className="text-[10px]">▾</span>
-          </button>
           <button onClick={() => startCreate()} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black">
             <Plus size={16} /> <span className="hidden sm:inline">{t('add_asset')}</span>
           </button>
@@ -315,72 +291,6 @@ export default function Assets() {
         </div>
       )}
 
-      {!driveStatus?.connected && (
-        <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 mb-4 text-sm text-yellow-300 flex items-center justify-between gap-3">
-          <span className="flex items-center gap-2">
-            <CloudOff size={16} className="shrink-0" />
-            Drive non connecté
-          </span>
-          <button
-            onClick={async () => {
-              const res = await authFetch(`${API}/drive/connect`, { method: 'POST', body: '{}' });
-              const data = await res.json();
-              if (data.url) window.location.href = data.url;
-              else reload();
-            }}
-            className="px-3 py-1.5 bg-yellow-500/20 hover:bg-yellow-500/30 text-yellow-200 rounded-lg text-xs font-medium whitespace-nowrap transition-colors"
-          >
-            Lier Drive
-          </button>
-        </div>
-      )}
-
-      {/* Mobile: Filter dropdown panel (toggled from header button) */}
-      <div className="md:hidden mb-3">
-        {mobileFiltersOpen && (
-          <div className="mt-2 bg-surface rounded-xl border border-border p-3 space-y-3">
-            <div>
-              <label className="text-[10px] text-muted uppercase tracking-wider mb-1 block">{t('filter_type')}</label>
-              <select
-                value={filter}
-                onChange={e => setFilter(e.target.value)}
-                className="w-full bg-background border border-border rounded-lg px-3 py-2.5 text-sm text-white focus:outline-none focus:border-accent-500"
-              >
-                <option value="">{t('all')}</option>
-                {TYPES.map(({ id, labelKey }) => (
-                  <option key={id} value={id}>{t(labelKey)}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="text-[10px] text-muted uppercase tracking-wider mb-1 block">{t('scope_all')}</label>
-              <ScopeSelect />
-            </div>
-            {filter && (
-              <button
-                onClick={() => setFilter('')}
-                className="flex items-center gap-1 text-xs text-muted hover:text-white"
-              >
-                <X size={12} /> {t('clear_filters')}
-              </button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Desktop: Filter pills */}
-      <div className="hidden md:flex gap-2 mb-2 overflow-x-auto pb-1 scrollbar-none -mx-1 px-1">
-        <button onClick={() => setFilter('')}
-          className={`px-3 py-2.5 rounded-full text-xs font-medium min-h-[44px] transition-colors whitespace-nowrap flex-shrink-0 ${!filter ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
-          {t('all')}
-        </button>
-        {TYPES.map(({ id, icon: Icon, labelKey }) => (
-          <button key={id} onClick={() => setFilter(id)}
-            className={`flex items-center gap-1.5 px-3 py-2.5 rounded-full text-xs font-medium min-h-[44px] transition-colors whitespace-nowrap flex-shrink-0 ${filter === id ? 'bg-accent-500/20 text-accent-400' : 'bg-surface text-muted hover:text-white'}`}>
-            <Icon size={12} /> {t(labelKey)}
-          </button>
-        ))}
-      </div>
 
       {/* Asset form */}
       {showForm && (
@@ -389,10 +299,6 @@ export default function Assets() {
             {editingId ? t('edit_asset') : t('new_asset')}
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <select value={form.type} onChange={e => setForm(f => ({ ...f, type: e.target.value }))}
-              className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm">
-              {TYPES.map(({ id, labelKey }) => <option key={id} value={id}>{t(labelKey)}</option>)}
-            </select>
             <input placeholder={t('asset_name')} value={form.name} onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
               className="bg-black/30 border border-border rounded-lg px-3 py-2 text-sm" />
             <select
@@ -626,7 +532,6 @@ export default function Assets() {
       ) : (
         <div className="space-y-3">
           {assetList.map(a => {
-            const Icon = typeIcon(a.type);
             const expanded = expandedId === a.id;
             const netCashflow = a.monthly_revenues - a.monthly_costs;
             return (
@@ -638,7 +543,7 @@ export default function Assets() {
                   <div className="flex items-center gap-2">
                     {/* Desktop only: icon */}
                     <div className="hidden md:flex w-8 h-8 rounded-lg bg-accent-500/10 items-center justify-center flex-shrink-0">
-                      <Icon size={16} className="text-accent-400" />
+                      <Home size={16} className="text-accent-400" />
                     </div>
                     <p className="text-sm font-medium text-white truncate min-w-0">{a.name}</p>
                     <span className="text-sm font-semibold text-accent-400 flex-shrink-0">

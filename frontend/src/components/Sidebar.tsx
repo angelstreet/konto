@@ -29,6 +29,8 @@ import {
   Briefcase,
   TrendingUp,
   Bitcoin,
+  Car,
+  PiggyBank,
 } from 'lucide-react';
 
 /* ── Navigation data structure ──────────────────────────────────────── */
@@ -65,14 +67,14 @@ const navGroups: NavGroup[] = [
   {
     labelKey: 'nav_group_patrimoine',
     children: [
+      { kind: 'leaf', path: '/assets', icon: Home, labelKey: 'nav_assets' },
       { kind: 'leaf', path: '/accounts', icon: Landmark, labelKey: 'nav_accounts' },
       { kind: 'leaf', path: '/companies', icon: Building2, labelKey: 'nav_companies' },
-      { kind: 'leaf', path: '/assets', icon: Home, labelKey: 'nav_assets' },
-      { kind: 'leaf', path: '/loans', icon: Banknote, labelKey: 'nav_loans' },
       { kind: 'leaf', path: '/crypto', icon: Bitcoin, labelKey: 'nav_crypto' },
       { kind: 'leaf', path: '/stocks', icon: BarChart3, labelKey: 'nav_stocks' },
-      { kind: 'leaf', path: '/property-roi', icon: TrendingUp, labelKey: 'nav_property_roi' },
-      { kind: 'leaf', path: '/crypto', icon: Bitcoin, labelKey: 'nav_crypto' },
+      { kind: 'leaf', path: '/autres-actifs', icon: Car, labelKey: 'nav_autres_actifs' },
+      { kind: 'leaf', path: '/fonds-euros', icon: PiggyBank, labelKey: 'nav_fonds_euros' },
+      { kind: 'leaf', path: '/loans', icon: Banknote, labelKey: 'nav_loans' },
     ],
   },
   {

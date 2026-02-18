@@ -93,7 +93,7 @@ fi
 
 # Check 8: Backend API responding
 echo -n "✓ Backend API... "
-API_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3004/api/preferences 2>/dev/null || echo "000")
+API_RESPONSE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5004/api/preferences 2>/dev/null || echo "000")
 if [ "$API_RESPONSE" = "200" ]; then
     echo -e "${GREEN}OK${NC}"
 else
@@ -104,7 +104,7 @@ fi
 
 # Check 9: API returns correct data
 echo -n "✓ API data integrity... "
-API_ACCOUNT_COUNT=$(curl -s http://localhost:3004/api/dashboard 2>/dev/null | jq -r '.accountCount // 0' 2>/dev/null || echo "0")
+API_ACCOUNT_COUNT=$(curl -s http://localhost:5004/api/dashboard 2>/dev/null | jq -r '.accountCount // 0' 2>/dev/null || echo "0")
 if [ "$API_ACCOUNT_COUNT" = "$ACCOUNT_COUNT" ]; then
     echo -e "${GREEN}OK${NC}"
 else

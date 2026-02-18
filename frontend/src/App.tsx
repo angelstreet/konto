@@ -25,6 +25,8 @@ import Outils from './pages/Outils';
 import Onboarding from './pages/Onboarding';
 import Trends from './pages/Trends';
 import PropertyROI from './pages/PropertyROI';
+import StocksDashboard from './pages/StocksDashboard';
+import CryptoDashboard from './pages/CryptoDashboard';
 import { FilterProvider } from './FilterContext';
 import { PreferencesProvider, usePreferences } from './PreferencesContext';
 import { AmountVisibilityProvider } from './AmountVisibilityContext';
@@ -61,6 +63,8 @@ function AppRoutes() {
       <Route path="/simulators" element={<CreditSimulator />} />
       <Route path="/outils" element={<Outils />} />
       <Route path="/fonds-euros" element={<FondsEuros />} />
+      <Route path="/stocks" element={<StocksDashboard />} />
+      <Route path="/crypto" element={<CryptoDashboard />} />
       <Route path="/more" element={<More />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

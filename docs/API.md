@@ -1,6 +1,6 @@
 # Konto — API Reference
 
-Base URL: `http://localhost:3004/api`
+Base URL: `http://localhost:5004/api`
 
 All responses are JSON. No authentication required (currently).
 

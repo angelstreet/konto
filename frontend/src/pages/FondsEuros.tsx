@@ -126,11 +126,6 @@ export default function FondsEuros() {
     }
   };
 
-  const typeIcon = (type: string) => {
-    const t = TYPES.find(tt => tt.id === type);
-    return t ? t.icon : Package;
-  };
-
   const totalValue = holdingList.reduce((s, h) => s + h.current_value, 0);
 
   return (
@@ -155,11 +150,30 @@ export default function FondsEuros() {
           </button>
         </div>
       </div>
+      {/* Summary header */}
       {holdingList.length > 0 && (
-        <div className="text-sm text-muted mb-3">
-          Total: {hideAmounts ? <span className="amount-masked">{fmtCompact(totalValue)}</span> : fmtCompact(totalValue)}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6 p-4 bg-gradient-to-r from-gray-900/50 to-gray-800/50 rounded-xl border border-gray-700">
+          <div>
+            <p className="text-sm text-muted uppercase tracking-wide mb-1">Valeur totale</p>
+            <p className="text-2xl font-bold">
+              {hideAmounts ? <span className="amount-masked">{fmtCompact(totalValue)}</span> : fmtCompact(totalValue)}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted uppercase tracking-wide mb-1">Taux moyen</p>
+            <p className="text-2xl font-bold text-green-400">
+              {holdingList.filter(h => h.annual_rate).length > 0
+                ? fmtPct(holdingList.filter(h => h.annual_rate).reduce((s, h) => s + h.annual_rate * 100, 0) / holdingList.filter(h => h.annual_rate).length)
+                : '—'}
+            </p>
+          </div>
+          <div>
+            <p className="text-sm text-muted uppercase tracking-wide mb-1">Nombre de fonds</p>
+            <p className="text-2xl font-bold text-accent-400">{holdingList.length}</p>
+          </div>
         </div>
       )}
+
 
       {showForm && (
         <div className="bg-surface rounded-xl border border-border p-3.5 mb-3 md:max-w-2xl mx-auto">
@@ -255,33 +269,46 @@ export default function FondsEuros() {
           </button>
         </div>
       ) : (
-        <div className="space-y-3">
-          {holdingList.map((h: Holding) => {
-            const Icon = typeIcon(h.type);
-            return (
-              <div key={h.id} className="bg-surface rounded-xl border border-border overflow-hidden">
-                <div 
-                  className="px-4 py-3 cursor-pointer hover:bg-surface-hover transition-colors"
-                >
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-lg bg-accent-500/10 items-center justify-center flex-shrink-0 hidden md:flex">
-                      <Icon size={16} className="text-accent-400" />
+        <div className="bg-surface rounded-xl border border-border overflow-hidden">
+          {/* Group by account */}
+          {(() => {
+            const groups = (holdingList as Holding[]).reduce((acc: Record<string, Holding[]>, h: Holding) => {
+              const key = h.account_name || 'Sans compte';
+              if (!acc[key]) acc[key] = [];
+              acc[key].push(h);
+              return acc;
+            }, {});
+            return Object.entries(groups).map(([accountName, items]: [string, Holding[]]) => {
+              const groupTotal = items.reduce((s: number, h: Holding) => s + h.current_value, 0);
+              const initials = accountName.slice(0, 3).toUpperCase();
+              return (
+                <div key={accountName} className="border-b border-border last:border-0">
+                  {/* Account header row */}
+                  <div className="flex items-center gap-3 px-4 py-3 hover:bg-white/5 transition-colors">
+                    <div className="w-8 h-8 rounded-full bg-surface-hover flex items-center justify-center flex-shrink-0">
+                      <span className="text-[10px] font-bold text-muted">{initials}</span>
                     </div>
-                    <p className="text-sm font-medium text-white truncate min-w-0 flex-1">{h.name}</p>
-                    <span className="text-sm font-semibold text-accent-400 flex-shrink-0">
-                      {f(h.current_value)}
-                    </span>
-                    <ChevronDown size={14} className="text-muted flex-shrink-0 transition-transform duration-200 rotate-[-90deg]" />
+                    <span className="text-sm font-semibold flex-1 truncate">{accountName}</span>
+                    <span className="text-sm font-semibold text-accent-400 tabular-nums">{f(groupTotal)}</span>
+                    <ChevronDown size={14} className="text-muted flex-shrink-0" />
                   </div>
-                  <div className="mt-1 flex items-center gap-2 text-xs text-muted">
-                    {h.account_name && <span>{h.account_name}</span>}
-                    {h.annual_rate && <span className="text-green-400">{fmtPct(h.annual_rate * 100)}/an</span>}
-                    <span>{h.last_update_date}</span>
-                  </div>
+                  {/* Sub-rows for each fund */}
+                  {items.map((h: Holding) => (
+                    <div key={h.id} className="flex items-center gap-3 px-4 py-2.5 pl-[52px] border-t border-border/30 hover:bg-white/5 transition-colors">
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm truncate">{h.name}</p>
+                        <div className="flex items-center gap-2 text-xs text-muted mt-0.5">
+                          {h.annual_rate && <span className="text-green-400">{fmtPct(h.annual_rate * 100)}/an</span>}
+                          {h.last_update_date && <span>{h.last_update_date}</span>}
+                        </div>
+                      </div>
+                      <span className="text-sm tabular-nums">{f(h.current_value)}</span>
+                    </div>
+                  ))}
                 </div>
-              </div>
-            );
-          })}
+              );
+            });
+          })()}
         </div>
       )}
 

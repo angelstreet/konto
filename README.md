@@ -27,7 +27,7 @@ npm run dev
 
 # Or separately
 npm run dev:frontend   # → http://localhost:5173/konto/
-npm run dev:backend    # → http://localhost:3004/api/
+npm run dev:backend    # → http://localhost:5004/api/
 ```
 
 ## Environment Variables
@@ -107,7 +107,7 @@ konto/
 ## Development
 
 - Frontend: `http://localhost:5173/konto/`
-- Backend API: `http://localhost:3004/api/`
+- Backend API: `http://localhost:5004/api/`
 - PM2 processes: `konto-frontend`, `konto-backend`
 - **Never run `npm run build`** — all dev servers served through nginx
 

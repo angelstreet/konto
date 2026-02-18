@@ -93,7 +93,7 @@ echo -e "${GREEN}✓${NC} Backend restarted"
 echo ""
 echo "✅ Verifying restore..."
 ACCOUNT_COUNT=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM bank_accounts WHERE user_id = 1;")
-API_COUNT=$(curl -s http://localhost:3004/api/dashboard 2>/dev/null | jq -r '.accountCount // 0' 2>/dev/null || echo "0")
+API_COUNT=$(curl -s http://localhost:5004/api/dashboard 2>/dev/null | jq -r '.accountCount // 0' 2>/dev/null || echo "0")
 
 echo "  Bank accounts in DB: $ACCOUNT_COUNT"
 echo "  Bank accounts via API: $API_COUNT"

@@ -51,7 +51,7 @@ sqlite3 backend/db/konto.db "SELECT id, email FROM users;"
 sqlite3 backend/db/konto.db "SELECT user_id, COUNT(*) FROM bank_accounts GROUP BY user_id;"
 
 # Test API
-curl -s http://localhost:3004/api/dashboard | jq '.accountCount'
+curl -s http://localhost:5004/api/dashboard | jq '.accountCount'
 ```
 
 **Fix:**
@@ -66,7 +66,7 @@ UPDATE users SET email = 'jo@konto.fr' WHERE id = 1;
 pm2 restart konto-backend
 
 # Verify fix
-curl -s http://localhost:3004/api/dashboard | jq '.accountCount'
+curl -s http://localhost:5004/api/dashboard | jq '.accountCount'
 ```
 
 ---
@@ -167,16 +167,16 @@ pm2 restart konto-backend
 
 ```bash
 # Health check
-curl http://localhost:3004/api/health
+curl http://localhost:5004/api/health
 
 # User preferences (should show onboarded: 1)
-curl http://localhost:3004/api/preferences | jq .
+curl http://localhost:5004/api/preferences | jq .
 
 # Dashboard data (should show account count)
-curl http://localhost:3004/api/dashboard | jq '.accountCount'
+curl http://localhost:5004/api/dashboard | jq '.accountCount'
 
 # Bank accounts
-curl http://localhost:3004/api/dashboard | jq '.financial.accountsByType'
+curl http://localhost:5004/api/dashboard | jq '.financial.accountsByType'
 ```
 
 ---

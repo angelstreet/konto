@@ -8,10 +8,11 @@ export default defineConfig({
   base: basePath,
   server: {
     host: true,
-    port: 5176,
+    port: parseInt(process.env.VITE_PORT || '3004'),
+    allowedHosts: ['konto.angelstreet.io', 'localhost', '127.0.0.1'],
     proxy: {
       [`${basePath}api`]: {
-        target: 'http://localhost:3004',
+        target: 'http://localhost:5004',
         rewrite: (path) => path.replace(new RegExp(`^${basePath.replace(/\/$/, '')}`), ''),
       },
     },

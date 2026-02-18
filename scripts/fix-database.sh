@@ -71,7 +71,7 @@ sleep 1
 USER_EMAIL=$(sqlite3 "$DB_PATH" "SELECT email FROM users WHERE id = 1;")
 ONBOARDED=$(sqlite3 "$DB_PATH" "SELECT onboarded FROM user_preferences WHERE user_id = 1;")
 ACCOUNT_COUNT=$(sqlite3 "$DB_PATH" "SELECT COUNT(*) FROM bank_accounts WHERE user_id = 1;")
-API_COUNT=$(curl -s http://localhost:3004/api/dashboard 2>/dev/null | jq -r '.accountCount // 0' 2>/dev/null || echo "0")
+API_COUNT=$(curl -s http://localhost:5004/api/dashboard 2>/dev/null | jq -r '.accountCount // 0' 2>/dev/null || echo "0")
 
 echo "  User email: $USER_EMAIL"
 echo "  Onboarded: $ONBOARDED"

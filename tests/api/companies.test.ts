@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-const API = 'http://localhost:3004';
+const API = 'http://localhost:5004';
 
 describe('Companies CRUD', () => {
   let createdId: number;
