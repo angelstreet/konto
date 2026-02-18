@@ -48,12 +48,17 @@ export default function Budget() {
   const navigate = useNavigate();
   const { t } = useTranslation();
   const authFetch = useAuthFetch();
-  const { scope, appendScope } = useFilter();
+  const { scope, setScope, appendScope } = useFilter();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
   const [range, setRange] = useState('3m');
   const [data, setData] = useState<CashflowData | null>(null);
   const [loading, setLoading] = useState(true);
+
+  // Auto-scope: budget page is always personal
+  useEffect(() => {
+    if (scope !== 'personal') setScope('personal');
+  }, []);
 
   useEffect(() => {
     setLoading(true);
