@@ -2124,7 +2124,19 @@ app.get('/api/dashboard/history', async (c) => {
     result = await db.execute({ sql: 'SELECT date, total_value as value FROM patrimoine_snapshots WHERE user_id = ? AND date >= ? AND category = ? ORDER BY date', args: [userId, fromDate, category] });
   }
 
-  return c.json({ history: result.rows, range, category });
+  // Baseline date = when the current set of accounts/assets became complete
+  // (date the most recently added account or asset was created)
+  const baselineResult = await db.execute({
+    sql: `SELECT MAX(d) as baseline FROM (
+      SELECT MAX(DATE(created_at)) as d FROM bank_accounts WHERE user_id = ? AND hidden = 0
+      UNION ALL
+      SELECT MAX(DATE(created_at)) as d FROM assets WHERE user_id = ?
+    )`,
+    args: [userId, userId]
+  });
+  const baselineDate = (baselineResult.rows[0]?.baseline as string) || null;
+
+  return c.json({ history: result.rows, range, category, baselineDate });
 });
 
 // ========== BUDGET / CASHFLOW ==========

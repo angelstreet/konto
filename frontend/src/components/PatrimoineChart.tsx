@@ -14,25 +14,33 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
   const { t } = useTranslation();
   const [range, setRange] = useState<string>('6m');
   const [data, setData] = useState<{ date: string; value: number }[]>([]);
+  const [baselineDate, setBaselineDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     setLoading(true);
     fetch(`${API}/dashboard/history?range=${range}&category=all`)
       .then(r => r.json())
-      .then(d => setData(d.history || []))
+      .then(d => {
+        setData(d.history || []);
+        setBaselineDate(d.baselineDate || null);
+      })
       .finally(() => setLoading(false));
   }, [range]);
 
   const latestValue = data.length > 0 ? data[data.length - 1].value : 0;
-  const firstValue = data.length > 0 ? data[0].value : 0;
+  // Use the first snapshot on or after the baseline date (when current accounts were all present)
+  const baselinePoint = baselineDate
+    ? (data.find(d => d.date >= baselineDate) ?? data[0])
+    : data[0];
+  const firstValue = baselinePoint ? baselinePoint.value : 0;
   const change = latestValue - firstValue;
   const changePct = firstValue !== 0 ? (change / Math.abs(firstValue)) * 100 : 0;
 
   if (!loading && data.length < 2) return null;
 
   return (
-    <div className="bg-surface rounded-xl border border-border p-4 mb-4">
+    <div className="bg-surface rounded-xl border border-border p-4">
       <div className="flex items-center justify-between mb-3">
         <div>
           <h3 className="text-sm font-medium text-muted tracking-wide">{t('patrimoine_evolution') || 'Évolution du patrimoine'}{!showNet ? ` (${t('balance_brut') || 'brut'})` : ''}</h3>

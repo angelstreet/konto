@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Download, Volume2, VolumeX, ChevronDown, Landmark, TrendingUp, Home, CreditCard, PlusCircle } from 'lucide-react';
+import { Download, Volume2, VolumeX, Landmark, TrendingUp, Home, CreditCard, PlusCircle } from 'lucide-react';
 import EyeToggle from '../components/EyeToggle';
 import { useApi } from '../useApi';
 import { useFilter } from '../FilterContext';
@@ -59,7 +59,6 @@ export default function Dashboard() {
   const { data, loading } = useApi<DashboardData>(appendScope(`${API}/dashboard`));
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const [showNet, setShowNet] = useState(() => localStorage.getItem('konto_show_net') !== 'false');
-  const [donutOpen, setDonutOpen] = useState(true);
   const [speaking, setSpeaking] = useState(false);
   const fc = (n: number) => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
 
@@ -88,11 +87,13 @@ export default function Dashboard() {
   const investments = data ? (data.financial.accountsByType.investment || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0) : 0;
   const loans = data ? (data.financial.accountsByType.loan || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0) : 0;
   
-  const immoValue = data ? data.patrimoine.assets.filter(a => a.type === 'real_estate').reduce((s, a) => s + a.currentValue, 0) : 0;
+  const immoAssets = data ? data.patrimoine.assets.filter(a => a.type === 'real_estate') : [];
+  const immoValue = immoAssets.reduce((s, a) => s + a.currentValue, 0);
+  const immoNetValue = immoAssets.reduce((s, a) => s + a.currentValue + a.loanBalance, 0);
   // Crypto = blockchain/coinbase accounts (type investment with crypto currencies)
   // For now include all investments as "Stocks" and patrimoine real_estate as "Real Estate"
   const cashTotal = checking + savings;
-  
+
   const brutTotal = cashTotal + investments + immoValue + (data ? data.patrimoine.assets.filter(a => a.type !== 'real_estate').reduce((s, a) => s + a.currentValue, 0) : 0);
   const netTotal = brutTotal + loans;
 
@@ -100,7 +101,7 @@ export default function Dashboard() {
   const summaryBlocks = data ? [
     { icon: Landmark, label: t('summary_cash'), value: cashTotal, color: 'text-white' },
     { icon: TrendingUp, label: t('summary_stocks'), value: investments, color: 'text-purple-400' },
-    { icon: Home, label: t('immobilier'), value: immoValue, color: 'text-green-400' },
+    { icon: Home, label: t('immobilier'), value: showNet ? immoNetValue : immoValue, color: 'text-green-400' },
     { icon: CreditCard, label: t('total_loans'), value: loans, color: 'text-orange-400' },
   ].filter(b => b.value !== 0) : [];
 
@@ -225,29 +226,21 @@ export default function Dashboard() {
             })}
           </div>
 
-          {/* Patrimoine evolution chart — separate section, self-hides when empty */}
-          <PatrimoineChart showNet={showNet} hideAmounts={hideAmounts} />
+          {/* Patrimoine charts — side by side 2x1 grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4 items-stretch">
+            {/* Evolution chart */}
+            <PatrimoineChart showNet={showNet} hideAmounts={hideAmounts} />
 
-          {/* Patrimoine distribution — collapsible donut */}
-          {donutData.length > 0 && (
-            <div className="mb-3">
-              <button
-                onClick={() => setDonutOpen(o => !o)}
-                className="w-full flex items-center justify-between py-2 group"
-              >
-                <h2 className="text-sm font-medium text-muted tracking-wide">
+            {/* Distribution donut */}
+            {donutData.length > 0 && (
+              <div className="bg-surface rounded-xl border border-border p-4">
+                <h3 className="text-sm font-medium text-muted tracking-wide mb-3">
                   {t('patrimoine_distribution')}
-                </h2>
-                <ChevronDown
-                  size={14}
-                  className={`text-muted transition-transform ${donutOpen ? '' : '-rotate-90'}`}
-                />
-              </button>
-              <div className={donutOpen ? 'block' : 'hidden'}>
+                </h3>
                 <DistributionDonut data={donutData} total={showNet ? netTotal : posTotal} hideAmounts={hideAmounts} showNet={showNet} loans={loans} />
               </div>
-            </div>
-          )}
+            )}
+          </div>
 
           {/* Daily quote */}
           <div className="mt-6 text-center">
