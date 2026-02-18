@@ -2853,7 +2853,14 @@ app.post('/api/invoices/scan', async (c) => {
 
   const driveConn: any = conn.rows[0];
   const accessToken = driveConn.access_token;
-  const folderId = driveConn.folder_id;
+  // Check for year-specific folder override in drive_folder_mappings
+  let folderId = driveConn.folder_id;
+  const scanYear = body.year || null;
+  if (scanYear) {
+    const purpose = companyId ? `invoices_${scanYear}_${companyId}` : `invoices_${scanYear}`;
+    const mapping = await db.execute({ sql: 'SELECT folder_id FROM drive_folder_mappings WHERE user_id = ? AND purpose = ?', args: [userId, purpose] });
+    if (mapping.rows.length > 0 && mapping.rows[0].folder_id) folderId = String(mapping.rows[0].folder_id);
+  }
 
   if (!accessToken) {
     return c.json({ error: 'Missing Drive access token' }, 400);
@@ -3361,6 +3368,55 @@ app.get('/api/bilan/:year', async (c) => {
       match_rate: invTotal > 0 ? Math.round((invMatched / invTotal) * 100) : null,
     },
   });
+});
+
+// ========== BILAN PRO (consolidated per-company) ==========
+
+app.get('/api/bilan-pro/:year', async (c) => {
+  const year = parseInt(c.req.param('year'));
+  const userId = await getUserId(c);
+  const startDate = `${year}-01-01`;
+  const endDate = `${year + 1}-01-01`;
+
+  // Get all companies for this user
+  const companiesRes = await db.execute({
+    sql: `SELECT id, name FROM companies WHERE user_id = ? ORDER BY name`,
+    args: [userId],
+  });
+
+  const summaries = await Promise.all(
+    companiesRes.rows.map(async (company: any) => {
+      const caRes = await db.execute({
+        sql: `SELECT COALESCE(SUM(t.amount), 0) as total
+              FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id
+              WHERE t.date >= ? AND t.date < ? AND ba.company_id = ? AND t.amount > 0`,
+        args: [startDate, endDate, company.id],
+      });
+      const chargesRes = await db.execute({
+        sql: `SELECT COALESCE(SUM(ABS(t.amount)), 0) as total
+              FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id
+              WHERE t.date >= ? AND t.date < ? AND ba.company_id = ? AND t.amount < 0`,
+        args: [startDate, endDate, company.id],
+      });
+      const ca = Math.round(Number(caRes.rows[0]?.total || 0) * 100) / 100;
+      const charges = Math.round(Number(chargesRes.rows[0]?.total || 0) * 100) / 100;
+      return {
+        company_id: Number(company.id),
+        name: String(company.name),
+        ca,
+        charges,
+        resultat: Math.round((ca - charges) * 100) / 100,
+      };
+    })
+  );
+
+  const total = {
+    ca: Math.round(summaries.reduce((s, c) => s + c.ca, 0) * 100) / 100,
+    charges: Math.round(summaries.reduce((s, c) => s + c.charges, 0) * 100) / 100,
+    resultat: Math.round(summaries.reduce((s, c) => s + c.resultat, 0) * 100) / 100,
+  };
+
+  return c.json({ year, companies: summaries, total });
 });
 
 // ========== USER PREFERENCES ==========

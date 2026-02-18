@@ -6,6 +6,7 @@ import { useApi, invalidateApi, useAuthFetch } from '../useApi';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
+import DriveFolderPickerModal from '../components/DriveFolderPickerModal';
 
 interface Company {
   id: number;
@@ -249,36 +250,13 @@ export default function CompanyPage() {
     if (companies) loadDriveStatuses(companies);
   };
 
-  const openFolderPicker = async (companyId: number, parentId: string | null = null, parentName: string = 'Mon Drive') => {
-    setLoadingFolders(true);
-    try {
-      const params = [`company_id=${companyId}`, ...(parentId ? [`parent_id=${parentId}`] : [])].join('&');
-      const res = await authFetch(`${API}/drive/folders?${params}`);
-      const data = await res.json();
-      setFolders(data.folders || []);
-      setCurrentFolderId(parentId);
-      if (parentId) {
-        const existingIndex = folderPath.findIndex(f => f.id === parentId);
-        if (existingIndex >= 0) setFolderPath(folderPath.slice(0, existingIndex + 1));
-        else setFolderPath([...folderPath, { id: parentId, name: parentName }]);
-      } else {
-        setFolderPath([{ id: null, name: 'Mon Drive' }]);
-      }
-      setShowFolderPickerFor(companyId);
-    } finally {
-      setLoadingFolders(false);
-    }
-  };
 
-  const selectDriveFolder = async (companyId: number, folderId: string | null, folderName: string | null) => {
-    const fullPath = folderId ? folderPath.map(f => f.name).join(' / ') + (folderName ? ` / ${folderName}` : '') : null;
+  const handleFolderSelected = async (companyId: number, folderId: string | null, folderPath: string | null) => {
     await authFetch(`${API}/drive/folder`, {
       method: 'PATCH',
-      body: JSON.stringify({ company_id: companyId, folder_id: folderId, folder_name: fullPath }),
+      body: JSON.stringify({ company_id: companyId, folder_id: folderId, folder_name: folderPath }),
     });
     setShowFolderPickerFor(null);
-    setFolderPath([{ id: null, name: 'Mon Drive' }]);
-    setCurrentFolderId(null);
     if (companies) loadDriveStatuses(companies);
   };
 
@@ -314,10 +292,6 @@ export default function CompanyPage() {
   const [driveStatuses, setDriveStatuses] = useState<Record<number, { connected: boolean; folder_path?: string | null }>>({});
   const [managingDriveId, setManagingDriveId] = useState<number | null>(null);
   const [showFolderPickerFor, setShowFolderPickerFor] = useState<number | null>(null);
-  const [folders, setFolders] = useState<any[]>([]);
-  const [loadingFolders, setLoadingFolders] = useState(false);
-  const [currentFolderId, setCurrentFolderId] = useState<string | null>(null);
-  const [folderPath, setFolderPath] = useState<Array<{ id: string | null; name: string }>>([{ id: null, name: 'Mon Drive' }]);
 
   const toggleAccount = (id: number) => {
     setExpandedAccounts(prev => {
@@ -812,11 +786,10 @@ export default function CompanyPage() {
                       </div>
                       <div className="flex gap-2">
                         <button
-                          onClick={() => openFolderPicker(c.id)}
-                          disabled={loadingFolders}
+                          onClick={() => setShowFolderPickerFor(c.id)}
                           className="text-xs px-2.5 py-1.5 bg-white/5 hover:bg-white/10 text-muted hover:text-white rounded border border-border transition-colors disabled:opacity-50"
                         >
-                          {loadingFolders ? '...' : `📂 ${t('choose_folder')}`}
+                          {`📂 ${t('choose_folder')}`}
                         </button>
                         <button
                           onClick={() => disconnectDrive(c.id)}
@@ -826,53 +799,12 @@ export default function CompanyPage() {
                         </button>
                       </div>
                       {showFolderPickerFor === c.id && (
-                        <div className="mt-3 border-t border-border pt-3">
-                          <div className="flex items-center gap-1 text-xs text-muted mb-2 flex-wrap">
-                            {folderPath.map((p, i) => (
-                              <span key={i} className="flex items-center gap-1">
-                                {i > 0 && <span>/</span>}
-                                <button
-                                  onClick={() => openFolderPicker(c.id, p.id, p.name)}
-                                  className={`hover:text-white transition-colors ${i === folderPath.length - 1 ? 'text-white' : ''}`}
-                                >
-                                  {p.name}
-                                </button>
-                              </span>
-                            ))}
-                          </div>
-                          <button
-                            onClick={() => selectDriveFolder(c.id, null, null)}
-                            className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-white/5 text-muted hover:text-white mb-1 transition-colors"
-                          >
-                            📁 {t('all_folders_full_scan')}
-                          </button>
-                          {currentFolderId && (
-                            <button
-                              onClick={() => selectDriveFolder(c.id, currentFolderId, folderPath[folderPath.length - 1]?.name || null)}
-                              className="w-full text-left text-xs px-2 py-1.5 rounded bg-accent-500/10 hover:bg-accent-500/20 text-accent-400 mb-2 transition-colors"
-                            >
-                              ✓ {t('select_this_folder')}
-                            </button>
-                          )}
-                          <div className="space-y-0.5 max-h-40 overflow-y-auto">
-                            {loadingFolders ? (
-                              <p className="text-xs text-muted text-center py-2">{t('loading')}</p>
-                            ) : folders.length > 0 ? (
-                              folders.map((f: any) => (
-                                <button
-                                  key={f.id}
-                                  onClick={() => openFolderPicker(c.id, f.id, f.name)}
-                                  className="w-full text-left text-xs px-2 py-1.5 rounded hover:bg-white/5 flex items-center justify-between transition-colors"
-                                >
-                                  <span>📁 {f.name}</span>
-                                  <span className="text-muted">{t('open')} →</span>
-                                </button>
-                              ))
-                            ) : (
-                              <p className="text-xs text-muted text-center py-2">{t('no_subfolders')}</p>
-                            )}
-                          </div>
-                        </div>
+                        <DriveFolderPickerModal
+                          authFetch={authFetch}
+                          companyId={c.id}
+                          onSelect={(folderId, folderPath) => handleFolderSelected(c.id, folderId, folderPath)}
+                          onClose={() => setShowFolderPickerFor(null)}
+                        />
                       )}
                     </div>
                   )}

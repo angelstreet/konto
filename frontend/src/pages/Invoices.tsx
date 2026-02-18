@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, RefreshCw, CheckCircle, Unlink, CloudOff, ArrowLeft, FolderOpen, Folder, ChevronRight, Check, Paperclip, Upload, Link2 } from 'lucide-react';
+import { Search, RefreshCw, Unlink, CloudOff, ArrowLeft, FolderOpen, Folder, Check, Paperclip, Upload, Link2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch, useApi } from '../useApi';
 import DriveFolderPickerModal from '../components/DriveFolderPickerModal';
@@ -84,20 +84,26 @@ export default function Invoices() {
   const [scanResult, setScanResult] = useState<any>(null);
   const [driveStatus, setDriveStatus] = useState<any>(null);
   const [showFolderPicker, setShowFolderPicker] = useState(false);
+  const [showYearFolderPicker, setShowYearFolderPicker] = useState(false);
+  const [yearFolderMapping, setYearFolderMapping] = useState<{ folder_id: string; folder_path: string | null } | null>(null);
 
   const load = useCallback(async () => {
     const cid = selectedCompanyId;
     const driveParam = cid ? `?company_id=${cid}` : '';
     const statsParam = cid ? `?company_id=${cid}&year=${year}` : '';
+    const yearPurpose = cid ? `invoices_${year}_${cid}` : `invoices_${year}`;
     if (cid) {
-      const [txRes, statsRes, driveRes] = await Promise.all([
+      const [txRes, statsRes, driveRes, yearMappingRes] = await Promise.all([
         authFetch(`${API}/invoices/transactions?company_id=${cid}&year=${year}${filter !== 'all' ? `&matched=${filter === 'matched'}` : ''}`),
         authFetch(`${API}/invoices/stats${statsParam}`),
         authFetch(`${API}/drive/status${driveParam}`),
+        authFetch(`${API}/drive/folder-mapping?purpose=${yearPurpose}`),
       ]);
       setTxRows(await txRes.json());
       setStats(await statsRes.json());
       setDriveStatus(await driveRes.json());
+      const ym = await yearMappingRes.json();
+      setYearFolderMapping(ym.mapping || null);
     } else {
       const [driveRes] = await Promise.all([
         authFetch(`${API}/drive/status`),
@@ -105,6 +111,7 @@ export default function Invoices() {
       setTxRows([]);
       setStats(null);
       setDriveStatus(await driveRes.json());
+      setYearFolderMapping(null);
     }
   }, [filter, selectedCompanyId, year]);
 
@@ -117,7 +124,7 @@ export default function Invoices() {
     try {
       const res = await authFetch(`${API}/invoices/scan`, {
         method: 'POST',
-        body: JSON.stringify({ company_id: selectedCompanyId })
+        body: JSON.stringify({ company_id: selectedCompanyId, year })
       });
       const data = await res.json();
       setScanResult(data);
@@ -177,6 +184,17 @@ export default function Invoices() {
     });
     setShowFolderPicker(false);
     await load();
+    scan();
+  };
+
+  const handleYearFolderSelected = async (folderId: string | null, folderPath: string | null) => {
+    const purpose = selectedCompanyId ? `invoices_${year}_${selectedCompanyId}` : `invoices_${year}`;
+    await authFetch(`${API}/drive/folder-mapping`, {
+      method: 'PUT',
+      body: JSON.stringify({ purpose, folder_id: folderId, folder_path: folderPath }),
+    });
+    setYearFolderMapping(folderId ? { folder_id: folderId, folder_path: folderPath } : null);
+    setShowYearFolderPicker(false);
     scan();
   };
 
@@ -266,17 +284,16 @@ export default function Invoices() {
         <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-3 mb-4 text-sm text-green-300 flex items-center justify-between gap-3">
           <span className="flex items-center gap-2 min-w-0 truncate">
             <FolderOpen size={14} className="shrink-0" />
-            <span className="truncate">{driveStatus.folder_path || 'Tous les dossiers'}</span>
+            <span className="truncate">{driveStatus.folder_path ? driveStatus.folder_path.split('/').pop()?.trim() || driveStatus.folder_path : 'Tous les dossiers'}</span>
           </span>
           <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => setShowFolderPicker(true)}
-              disabled={loadingFolders}
               className="flex items-center gap-1.5 text-xs px-2.5 py-1.5 text-green-300 hover:text-white hover:bg-white/10 rounded-lg transition-colors disabled:opacity-40"
               title="Changer le dossier"
             >
               <Folder size={13} />
-              <span className="hidden sm:inline">{loadingFolders ? '...' : 'Dossier'}</span>
+              <span className="hidden sm:inline">{driveStatus.folder_path ? 'Modifier' : 'Dossier'}</span>
             </button>
             <button
               onClick={disconnectDrive}
@@ -319,17 +336,36 @@ export default function Invoices() {
                 <div className="text-[10px] text-muted uppercase tracking-wide">Total</div>
               </div>
             </div>
-            <select
-              value={year}
-              onChange={e => setYear(Number(e.target.value))}
-              className="text-xs px-2 py-1.5 bg-surface border border-border rounded-lg"
-            >
-              {[0, 1].map(i => {
-                const y = new Date().getFullYear() - i;
-                return <option key={y} value={y}>{y}</option>;
-              })}
-            </select>
+            <div className="flex items-center gap-2">
+              <select
+                value={year}
+                onChange={e => setYear(Number(e.target.value))}
+                className="text-xs px-2 py-1.5 bg-surface border border-border rounded-lg"
+              >
+                {[0, 1, 2, 3].map(i => {
+                  const y = new Date().getFullYear() - i;
+                  return <option key={y} value={y}>{y}</option>;
+                })}
+              </select>
+              <button
+                onClick={() => setShowYearFolderPicker(true)}
+                title={yearFolderMapping ? `Dossier ${year} : ${yearFolderMapping.folder_path || yearFolderMapping.folder_id}` : `Définir un dossier pour ${year}`}
+                className={`flex items-center gap-1 text-xs px-2 py-1.5 rounded-lg border transition-colors ${yearFolderMapping ? 'border-accent-500/50 text-accent-400 bg-accent-500/10' : 'border-border text-muted hover:text-white'}`}
+              >
+                <FolderOpen size={13} />
+                <span>{yearFolderMapping ? yearFolderMapping.folder_path?.split('/').pop()?.trim() || String(year) : String(year)}</span>
+              </button>
+            </div>
           </div>
+
+          {showYearFolderPicker && (
+            <DriveFolderPickerModal
+              authFetch={authFetch}
+              companyId={selectedCompanyId}
+              onSelect={handleYearFolderSelected}
+              onClose={() => setShowYearFolderPicker(false)}
+            />
+          )}
 
           {/* Tabs */}
           <div className="flex gap-2 mb-3">
@@ -457,71 +493,13 @@ export default function Invoices() {
         </div>
       )}
 
-      {/* Folder Picker Modal */}
       {showFolderPicker && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowFolderPicker(false)}>
-          <div className="bg-surface rounded-xl border border-border p-3 max-w-sm w-full max-h-[70vh] flex flex-col" onClick={e => e.stopPropagation()}>
-            {/* Header */}
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1 text-xs text-muted overflow-x-auto">
-                {folderPath.map((folder, idx) => (
-                  <div key={folder.id || 'root'} className="flex items-center gap-0.5 shrink-0">
-                    {idx > 0 && <ChevronRight size={12} className="text-muted/50" />}
-                    <button
-                      onClick={() => navigateToFolder(folder.id, folder.name)}
-                      className={idx === folderPath.length - 1 ? 'text-white font-medium' : 'hover:text-white transition-colors'}
-                    >
-                      {folder.name}
-                    </button>
-                  </div>
-                ))}
-              </div>
-              <button onClick={() => { setShowFolderPicker(false); setFolderPath([{id: null, name: 'Mon Drive'}]); }} className="text-muted hover:text-white p-1 ml-2 shrink-0 text-sm leading-none">✕</button>
-            </div>
-
-            <div className="overflow-auto flex-1 -mx-1">
-              {/* Select current folder / all folders */}
-              {currentFolderId ? (
-                <button
-                  onClick={() => selectFolder(currentFolderId, folderPath[folderPath.length - 1].name)}
-                  className="w-full text-left px-2 py-1.5 rounded hover:bg-accent-500/10 text-accent-400 text-xs font-medium transition-colors flex items-center gap-2"
-                >
-                  <CheckCircle size={12} className="shrink-0" />
-                  Sélectionner ce dossier
-                </button>
-              ) : (
-                <button
-                  onClick={() => selectFolder(null, null)}
-                  className="w-full text-left px-2 py-1.5 rounded hover:bg-white/5 text-xs text-muted hover:text-white transition-colors flex items-center gap-2"
-                >
-                  <Folder size={12} className="shrink-0" />
-                  Tous les dossiers
-                </button>
-              )}
-
-              {/* Folder list */}
-              {loadingFolders && (
-                <div className="text-center text-muted py-6 text-xs">Chargement...</div>
-              )}
-              {!loadingFolders && folders.length === 0 && (
-                <div className="text-center text-muted py-6 text-xs">Aucun sous-dossier</div>
-              )}
-              {folders.map((folder: any) => (
-                <button
-                  key={folder.id}
-                  onClick={() => navigateToFolder(folder.id, folder.name)}
-                  className="w-full text-left px-2 py-1.5 rounded hover:bg-white/5 transition-colors flex items-center justify-between group"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <FolderOpen size={12} className="shrink-0 text-muted group-hover:text-white transition-colors" />
-                    <span className="text-xs truncate">{folder.name}</span>
-                  </div>
-                  <ChevronRight size={12} className="text-muted/30 group-hover:text-muted shrink-0 transition-colors" />
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
+        <DriveFolderPickerModal
+          authFetch={authFetch}
+          companyId={selectedCompanyId}
+          onSelect={handleFolderSelected}
+          onClose={() => setShowFolderPicker(false)}
+        />
       )}
     </div>
   );

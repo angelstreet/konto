@@ -2,7 +2,8 @@ import { API } from '../config';
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
-import { Plus, Trash2, Edit3, X, Check, TrendingUp, ChevronDown, ArrowLeft, FolderOpen, RefreshCw, Upload, FileText, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Edit3, X, Check, TrendingUp, ChevronDown, ArrowLeft, FolderOpen, RefreshCw, Upload, FileText } from 'lucide-react';
+import DriveFolderPickerModal from '../components/DriveFolderPickerModal';
 import EyeToggle from '../components/EyeToggle';
 import { useNavigate } from 'react-router-dom';
 import { useApi, useAuthFetch } from '../useApi';
@@ -201,9 +202,6 @@ export default function Income() {
 
   // Folder picker state
   const [showFolderPicker, setShowFolderPicker] = useState(false);
-  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
-  const [folderBreadcrumbs, setFolderBreadcrumbs] = useState<{ id: string; name: string }[]>([]);
-  const [foldersLoading, setFoldersLoading] = useState(false);
 
   // Edit payslip state
   const [editingPayslip, setEditingPayslip] = useState<number | null>(null);
@@ -232,49 +230,14 @@ export default function Income() {
 
   useEffect(() => { loadPayslipsData(); }, [loadPayslipsData]);
 
-  // Folder picker navigation
-  const loadFolders = async (parentId?: string) => {
-    setFoldersLoading(true);
-    try {
-      const url = parentId ? `${API}/drive/folders?parent_id=${parentId}` : `${API}/drive/folders`;
-      const res = await authFetch(url).then(r => r.json());
-      setFolders(res.folders || []);
-    } catch { setFolders([]); }
-    setFoldersLoading(false);
-  };
-
-  const openFolderPicker = () => {
-    setShowFolderPicker(true);
-    setFolderBreadcrumbs([]);
-    loadFolders();
-  };
-
-  const navigateFolder = (folder: { id: string; name: string }) => {
-    setFolderBreadcrumbs(prev => [...prev, folder]);
-    loadFolders(folder.id);
-  };
-
-  const navigateBreadcrumb = (index: number) => {
-    if (index < 0) {
-      setFolderBreadcrumbs([]);
-      loadFolders();
-    } else {
-      const crumb = folderBreadcrumbs[index];
-      setFolderBreadcrumbs(prev => prev.slice(0, index + 1));
-      loadFolders(crumb.id);
-    }
-  };
-
-  const selectFolder = async (folder: { id: string; name: string }) => {
-    const fullPath = [...folderBreadcrumbs, folder].map(f => f.name).join(' / ');
+  const handleFolderSelected = async (folderId: string | null, folderPath: string | null) => {
     await authFetch(`${API}/drive/folder-mapping`, {
       method: 'PUT',
-      body: JSON.stringify({ purpose: 'payslips', folder_id: folder.id, folder_path: fullPath }),
+      body: JSON.stringify({ purpose: 'payslips', folder_id: folderId, folder_path: folderPath }),
     });
-    setFolderMapping({ folder_id: folder.id, folder_path: fullPath });
+    setFolderMapping(folderId ? { folder_id: folderId, folder_path: folderPath } : null);
     setShowFolderPicker(false);
-    // Auto-scan after selecting folder
-    handleScan();
+    if (folderId) handleScan();
   };
 
   const handleScan = async () => {
@@ -772,7 +735,7 @@ export default function Income() {
               {!folderMapping && !showFolderPicker && (
                 <div className="flex items-center gap-3 pt-3">
                   <span className="text-sm text-muted flex-1">{t('select_drive_folder_payslips')}</span>
-                  <button onClick={openFolderPicker} className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 px-3 py-1.5 rounded-lg bg-accent-500/10">
+                  <button onClick={() => setShowFolderPicker(true)} className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 px-3 py-1.5 rounded-lg bg-accent-500/10">
                     <FolderOpen size={14} /> {t('choose')}
                   </button>
                 </div>
@@ -780,46 +743,11 @@ export default function Income() {
 
               {/* Folder picker */}
               {showFolderPicker && (
-                <div className="pt-3 space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-medium">{t('select_folder')}</span>
-                    <button onClick={() => setShowFolderPicker(false)} className="text-muted hover:text-white"><X size={16} /></button>
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-muted flex-wrap">
-                    <button onClick={() => navigateBreadcrumb(-1)} className="hover:text-white">{t('my_drive')}</button>
-                    {folderBreadcrumbs.map((crumb, i) => (
-                      <span key={crumb.id} className="flex items-center gap-1">
-                        <ChevronRight size={12} />
-                        <button onClick={() => navigateBreadcrumb(i)} className="hover:text-white">{crumb.name}</button>
-                      </span>
-                    ))}
-                  </div>
-                  {foldersLoading ? (
-                    <div className="text-sm text-muted text-center py-3">{t('loading')}</div>
-                  ) : folders.length === 0 ? (
-                    <div className="text-sm text-muted text-center py-3">{t('no_subfolders')}</div>
-                  ) : (
-                    <div className="space-y-0.5 max-h-48 overflow-y-auto">
-                      {folders.map(f => (
-                        <div key={f.id} className="flex items-center gap-2 px-3 py-2 rounded-lg hover:bg-white/5 transition-colors">
-                          <FolderOpen size={14} className="text-accent-400 flex-shrink-0" />
-                          <button onClick={() => navigateFolder(f)} className="text-sm flex-1 text-left truncate">{f.name}</button>
-                          <button onClick={() => selectFolder(f)} className="text-[11px] text-accent-400 hover:text-accent-300 flex-shrink-0 px-2 py-0.5 rounded bg-accent-500/10">
-                            {t('choose')}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  {folderBreadcrumbs.length > 0 && (
-                    <button
-                      onClick={() => selectFolder(folderBreadcrumbs[folderBreadcrumbs.length - 1])}
-                      className="w-full text-sm text-accent-400 hover:text-accent-300 py-2 rounded-lg bg-accent-500/10 transition-colors"
-                    >
-                      {t('use_this_folder')}
-                    </button>
-                  )}
-                </div>
+                <DriveFolderPickerModal
+                  authFetch={authFetch}
+                  onSelect={handleFolderSelected}
+                  onClose={() => setShowFolderPicker(false)}
+                />
               )}
 
               {/* Folder selected → monthly grid */}
@@ -829,7 +757,7 @@ export default function Income() {
                   <div className="flex items-center gap-2 pt-3 text-xs text-muted">
                     <FolderOpen size={13} className="text-accent-400/60" />
                     <span className="truncate flex-1">{folderMapping.folder_path || folderMapping.folder_id}</span>
-                    <button onClick={openFolderPicker} className="text-accent-400/70 hover:text-accent-300">{t('change')}</button>
+                    <button onClick={() => setShowFolderPicker(true)} className="text-accent-400/70 hover:text-accent-300">{t('change')}</button>
                     <button
                       onClick={handleScan}
                       disabled={scanning}

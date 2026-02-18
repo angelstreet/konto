@@ -96,6 +96,7 @@ const navGroups: NavGroup[] = [
         icon: Briefcase,
         children: [
           { kind: 'leaf', path: '/analysis', icon: BarChart3, labelKey: 'nav_budget' },
+          { kind: 'leaf', path: '/bilan-pro', icon: FileBarChart, labelKey: 'nav_bilan_pro' },
           { kind: 'leaf', path: '/trends-pro', icon: TrendingUp, labelKey: 'nav_trends' },
           { kind: 'leaf', path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
           { kind: 'leaf', path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },

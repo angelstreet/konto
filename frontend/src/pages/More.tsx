@@ -60,6 +60,7 @@ const menuGroups: MenuGroup[] = [
         items: [
           { path: '/reports', icon: FileSpreadsheet, labelKey: 'nav_reports' },
           { path: '/analysis', icon: BarChart3, labelKey: 'nav_budget' },
+          { path: '/bilan-pro', icon: FileBarChart, labelKey: 'nav_bilan_pro' },
           { path: '/trends-pro', icon: TrendingUp, labelKey: 'nav_trends' },
           { path: '/ledger', icon: BookOpen, labelKey: 'nav_ledger', disabled: true },
           { path: '/vat', icon: Receipt, labelKey: 'nav_vat', disabled: true },

@@ -17,6 +17,7 @@ import Income from './pages/Income';
 import Analytics from './pages/Analytics';
 import Invoices from './pages/Invoices';
 import Bilan from './pages/Bilan';
+import BilanPro from './pages/BilanPro';
 import More from './pages/More';
 import Outils from './pages/Outils';
 import Onboarding from './pages/Onboarding';
@@ -50,6 +51,7 @@ function AppRoutes() {
       <Route path="/reconciliation" element={<Invoices />} />
       <Route path="/invoices" element={<Invoices />} />
       <Route path="/bilan" element={<Bilan />} />
+      <Route path="/bilan-pro" element={<BilanPro />} />
       <Route path="/trends" element={<Trends />} />
       <Route path="/trends-pro" element={<Trends />} />
       <Route path="/property-roi" element={<PropertyROI />} />
