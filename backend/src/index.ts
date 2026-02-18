@@ -2431,23 +2431,30 @@ app.post('/api/borrowing-capacity', async (c) => {
 
 // ========== ANALYTICS ==========
 
-async function computeAnalytics(period: string, userId: number = 1) {
+async function computeAnalytics(period: string, userId: number = 1, scope?: { usage?: string; company_id?: string }) {
   const [year, month] = period.split('-').map(Number);
   const startDate = `${period}-01`;
   const endDate = month === 12 ? `${year + 1}-01-01` : `${year}-${String(month + 1).padStart(2, '0')}-01`;
-  
+
+  // Build scope filter (all queries JOIN ba via t.bank_account_id)
+  let scopeClause = '';
+  const scopeArgs: any[] = [];
+  if (scope?.usage === 'personal') { scopeClause = " AND (ba.usage = 'personal' OR ba.usage IS NULL)"; }
+  else if (scope?.usage === 'professional') { scopeClause = " AND ba.usage = 'professional'"; }
+  else if (scope?.company_id) { scopeClause = ' AND ba.company_id = ?'; scopeArgs.push(scope.company_id); }
+
+  const join = 'LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id';
+
   // Total income & expenses for the period
   const incomeRes = await db.execute({
-    sql: `SELECT COALESCE(SUM(t.amount), 0) as total FROM transactions t 
-          LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
-          WHERE t.date >= ? AND t.date < ? AND t.amount > 0`,
-    args: [startDate, endDate]
+    sql: `SELECT COALESCE(SUM(t.amount), 0) as total FROM transactions t ${join}
+          WHERE t.date >= ? AND t.date < ? AND t.amount > 0${scopeClause}`,
+    args: [startDate, endDate, ...scopeArgs]
   });
   const expenseRes = await db.execute({
-    sql: `SELECT COALESCE(SUM(ABS(t.amount)), 0) as total FROM transactions t 
-          LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
-          WHERE t.date >= ? AND t.date < ? AND t.amount < 0`,
-    args: [startDate, endDate]
+    sql: `SELECT COALESCE(SUM(ABS(t.amount)), 0) as total FROM transactions t ${join}
+          WHERE t.date >= ? AND t.date < ? AND t.amount < 0${scopeClause}`,
+    args: [startDate, endDate, ...scopeArgs]
   });
 
   const totalIncome = Number(incomeRes.rows[0]?.total || 0);
@@ -2457,9 +2464,9 @@ async function computeAnalytics(period: string, userId: number = 1) {
   // Top 5 expense categories
   const topCatsRes = await db.execute({
     sql: `SELECT COALESCE(t.category, 'Non catégorisé') as category, SUM(ABS(t.amount)) as total
-          FROM transactions t WHERE t.date >= ? AND t.date < ? AND t.amount < 0
+          FROM transactions t ${join} WHERE t.date >= ? AND t.date < ? AND t.amount < 0${scopeClause}
           GROUP BY t.category ORDER BY total DESC LIMIT 5`,
-    args: [startDate, endDate]
+    args: [startDate, endDate, ...scopeArgs]
   });
   const topCategories = topCatsRes.rows.map((r: any) => ({
     category: r.category,
@@ -2475,12 +2482,12 @@ async function computeAnalytics(period: string, userId: number = 1) {
   const prevEnd = prevMonth === 12 ? `${prevYear + 1}-01-01` : `${prevYear}-${String(prevMonth + 1).padStart(2, '0')}-01`;
 
   const prevIncomeRes = await db.execute({
-    sql: `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE date >= ? AND date < ? AND amount > 0`,
-    args: [prevStart, prevEnd]
+    sql: `SELECT COALESCE(SUM(t.amount), 0) as total FROM transactions t ${join} WHERE t.date >= ? AND t.date < ? AND t.amount > 0${scopeClause}`,
+    args: [prevStart, prevEnd, ...scopeArgs]
   });
   const prevExpenseRes = await db.execute({
-    sql: `SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM transactions WHERE date >= ? AND date < ? AND amount < 0`,
-    args: [prevStart, prevEnd]
+    sql: `SELECT COALESCE(SUM(ABS(t.amount)), 0) as total FROM transactions t ${join} WHERE t.date >= ? AND t.date < ? AND t.amount < 0${scopeClause}`,
+    args: [prevStart, prevEnd, ...scopeArgs]
   });
   const prevIncome = Number(prevIncomeRes.rows[0]?.total || 0);
   const prevExpenses = Number(prevExpenseRes.rows[0]?.total || 0);
@@ -2494,12 +2501,12 @@ async function computeAnalytics(period: string, userId: number = 1) {
   const yoyEnd = month === 12 ? `${year}-01-01` : `${year - 1}-${String(month + 1).padStart(2, '0')}-01`;
 
   const yoyIncomeRes = await db.execute({
-    sql: `SELECT COALESCE(SUM(amount), 0) as total FROM transactions WHERE date >= ? AND date < ? AND amount > 0`,
-    args: [yoyStart, yoyEnd]
+    sql: `SELECT COALESCE(SUM(t.amount), 0) as total FROM transactions t ${join} WHERE t.date >= ? AND t.date < ? AND t.amount > 0${scopeClause}`,
+    args: [yoyStart, yoyEnd, ...scopeArgs]
   });
   const yoyExpenseRes = await db.execute({
-    sql: `SELECT COALESCE(SUM(ABS(amount)), 0) as total FROM transactions WHERE date >= ? AND date < ? AND amount < 0`,
-    args: [yoyStart, yoyEnd]
+    sql: `SELECT COALESCE(SUM(ABS(t.amount)), 0) as total FROM transactions t ${join} WHERE t.date >= ? AND t.date < ? AND t.amount < 0${scopeClause}`,
+    args: [yoyStart, yoyEnd, ...scopeArgs]
   });
   const yoyIncome = Number(yoyIncomeRes.rows[0]?.total || 0);
   const yoyExpenses = Number(yoyExpenseRes.rows[0]?.total || 0);
@@ -2511,9 +2518,9 @@ async function computeAnalytics(period: string, userId: number = 1) {
 
   const recurringRes = await db.execute({
     sql: `SELECT t.label, COUNT(DISTINCT strftime('%Y-%m', t.date)) as months, AVG(ABS(t.amount)) as avg_amount
-          FROM transactions t WHERE t.date >= ? AND t.date < ? AND t.amount < 0 AND t.label IS NOT NULL
+          FROM transactions t ${join} WHERE t.date >= ? AND t.date < ? AND t.amount < 0 AND t.label IS NOT NULL${scopeClause}
           GROUP BY LOWER(t.label) HAVING months >= 2 ORDER BY avg_amount DESC LIMIT 10`,
-    args: [threeMonthsAgo, endDate]
+    args: [threeMonthsAgo, endDate, ...scopeArgs]
   });
   const recurring = recurringRes.rows.map((r: any) => ({
     label: r.label,
@@ -2530,8 +2537,8 @@ async function computeAnalytics(period: string, userId: number = 1) {
     const p = `${y}-${String(m).padStart(2, '0')}`;
     const s = `${p}-01`;
     const e = m === 12 ? `${y + 1}-01-01` : `${y}-${String(m + 1).padStart(2, '0')}-01`;
-    const inc = await db.execute({ sql: `SELECT COALESCE(SUM(amount), 0) as t FROM transactions WHERE date >= ? AND date < ? AND amount > 0`, args: [s, e] });
-    const exp = await db.execute({ sql: `SELECT COALESCE(SUM(ABS(amount)), 0) as t FROM transactions WHERE date >= ? AND date < ? AND amount < 0`, args: [s, e] });
+    const inc = await db.execute({ sql: `SELECT COALESCE(SUM(t.amount), 0) as t FROM transactions t ${join} WHERE t.date >= ? AND t.date < ? AND t.amount > 0${scopeClause}`, args: [s, e, ...scopeArgs] });
+    const exp = await db.execute({ sql: `SELECT COALESCE(SUM(ABS(t.amount)), 0) as t FROM transactions t ${join} WHERE t.date >= ? AND t.date < ? AND t.amount < 0${scopeClause}`, args: [s, e, ...scopeArgs] });
     trends.push({ period: p, income: Number(inc.rows[0]?.t || 0), expenses: Number(exp.rows[0]?.t || 0) });
   }
 
@@ -2542,20 +2549,16 @@ async function computeAnalytics(period: string, userId: number = 1) {
     yoy: { income: yoyIncome, expenses: yoyExpenses, incomeChange: yoyIncome > 0 ? Math.round(((totalIncome - yoyIncome) / yoyIncome) * 100) : 0, expensesChange: yoyExpenses > 0 ? Math.round(((totalExpenses - yoyExpenses) / yoyExpenses) * 100) : 0 },
   };
 
-  // Cache it
-  const now = new Date().toISOString();
-  await db.execute({
-    sql: `INSERT OR REPLACE INTO analytics_cache (user_id, metric_key, period, value, computed_at) VALUES (?, 'full', ?, ?, ?)`,
-    args: [userId, period, JSON.stringify(metrics), now]
-  });
-
-  return { ...metrics, computed_at: now };
+  return { ...metrics, computed_at: new Date().toISOString() };
 }
 
 app.get('/api/analytics', async (c) => {
   const period = c.req.query('period') || new Date().toISOString().slice(0, 7);
   const userId = await getUserId(c);
-  const result = await computeAnalytics(period, userId);
+  const usage = c.req.query('usage');
+  const company_id = c.req.query('company_id');
+  const scope = usage || company_id ? { usage: usage || undefined, company_id: company_id || undefined } : undefined;
+  const result = await computeAnalytics(period, userId, scope);
   return c.json({ ...result, cached: false });
 });
 
