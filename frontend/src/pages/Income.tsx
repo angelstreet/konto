@@ -198,7 +198,6 @@ export default function Income() {
   const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
   const [folderMapping, setFolderMapping] = useState<{ folder_id: string; folder_path: string | null } | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [payslipsExpanded, setPayslipsExpanded] = useState(false);
 
   // Folder picker state
   const [showFolderPicker, setShowFolderPicker] = useState(false);
@@ -709,11 +708,8 @@ export default function Income() {
       {/* ===== Fiches de paie (current year only, Drive connected) ===== */}
       {driveConnected && (
         <section className="bg-surface rounded-xl border border-border overflow-hidden">
-          {/* Header — always visible, compact */}
-          <button
-            onClick={() => setPayslipsExpanded(!payslipsExpanded)}
-            className="w-full flex items-center gap-3 px-4 py-3 hover:bg-surface-hover transition-colors"
-          >
+          {/* Header */}
+          <div className="flex items-center gap-3 px-4 py-3">
             <FileText size={18} className="text-accent-400 flex-shrink-0" />
             <div className="flex-1 text-left min-w-0">
               <span className="text-sm font-medium">{t('payslips')} {currentYear}</span>
@@ -724,22 +720,14 @@ export default function Income() {
               )}
             </div>
             {!folderMapping && (
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent-500/15 text-accent-400">{t('configure')}</span>
+              <button onClick={() => setShowFolderPicker(true)} className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 px-3 py-1.5 rounded-lg bg-accent-500/10 flex-shrink-0">
+                <FolderOpen size={14} /> {t('choose')}
+              </button>
             )}
-            <ChevronDown size={16} className={`text-muted transition-transform flex-shrink-0 ${payslipsExpanded ? '' : '-rotate-90'}`} />
-          </button>
+          </div>
 
-          {payslipsExpanded && (
+          {(folderMapping || showFolderPicker) && (
             <div className="px-4 pb-4 space-y-3 border-t border-border/50">
-              {/* No folder yet → picker */}
-              {!folderMapping && !showFolderPicker && (
-                <div className="flex items-center gap-3 pt-3">
-                  <span className="text-sm text-muted flex-1">{t('select_drive_folder_payslips')}</span>
-                  <button onClick={() => setShowFolderPicker(true)} className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 px-3 py-1.5 rounded-lg bg-accent-500/10">
-                    <FolderOpen size={14} /> {t('choose')}
-                  </button>
-                </div>
-              )}
 
               {/* Folder picker */}
               {showFolderPicker && (
