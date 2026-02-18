@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
-import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign, MoreVertical, Search, AlertTriangle } from 'lucide-react';
-import { useState } from 'react';
+import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign, MoreVertical, Search, AlertTriangle, Upload, FileText } from 'lucide-react';
+import { useState, useRef, useMemo } from 'react';
 import { useApi } from '../useApi';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
@@ -122,6 +122,18 @@ export default function Accounts() {
   // Balance update state
   const [updatingBalanceId, setUpdatingBalanceId] = useState<number | null>(null);
   const [newBalance, setNewBalance] = useState('');
+
+  // CSV import state
+  const [importAccountId, setImportAccountId] = useState<number | null>(null);
+  const [csvRows, setCsvRows] = useState<{ date: string; amount: number; label: string }[]>([]);
+  const [csvFileName, setCsvFileName] = useState('');
+  const [csvFormat, setCsvFormat] = useState('');
+  const [csvError, setCsvError] = useState('');
+  const [csvImporting, setCsvImporting] = useState(false);
+  const [csvResult, setCsvResult] = useState<{ imported: number; skipped: number; total: number; batch_id?: string } | null>(null);
+  const [csvAccountName, setCsvAccountName] = useState('');
+  const [csvBatches, setCsvBatches] = useState<{ batch_id: string; from_date: string; to_date: string; count: number }[]>([]);
+  const csvFileRef = useRef<HTMLInputElement>(null);
   const [_expandedGroups, _setExpandedGroups] = useState<Record<string, boolean>>({});
 
 
@@ -436,6 +448,141 @@ export default function Accounts() {
     });
     refetchAll();
   };
+
+  // CSV import functions
+  const openCsvImport = (accountId: number) => {
+    setImportAccountId(accountId);
+    setCsvRows([]);
+    setCsvFileName('');
+    setCsvFormat('');
+    setCsvError('');
+    setCsvResult(null);
+    setCsvAccountName('');
+    setCsvBatches([]);
+    setOverflowMenuId(null);
+    // Load existing import batches for this account
+    authFetch(`${API}/import/csv/batches/${accountId}`).then(r => r.json()).then(setCsvBatches).catch(() => {});
+    setTimeout(() => csvFileRef.current?.click(), 100);
+  };
+
+  const handleCsvFile = async (file: File) => {
+    setCsvError('');
+    setCsvResult(null);
+    setCsvFileName(file.name);
+
+    let text: string;
+    try {
+      text = await file.text();
+      if (text.includes('\ufffd')) {
+        const buf = await file.arrayBuffer();
+        text = new TextDecoder('iso-8859-1').decode(buf);
+      }
+    } catch { text = await file.text(); }
+
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n').filter(l => l.trim());
+    if (lines.length < 2) { setCsvError('File too short'); return; }
+
+    const header = lines[0];
+    const sep = header.includes(';') ? ';' : header.includes('\t') ? '\t' : ',';
+    const cols = header.split(sep).map(c => c.trim().toLowerCase().replace(/[éèê]/g, 'e').replace(/[àâä]/g, 'a'));
+
+    const dateCol = cols.findIndex(c => c.includes('date'));
+    const labelCol = cols.findIndex(c => c.includes('libelle') || c.includes('label') || c.includes('description') || c.includes('wording'));
+    let amountCol = cols.findIndex(c => c.includes('montant') || c.includes('amount'));
+    const debitCol = cols.findIndex(c => c.includes('debit'));
+    const creditCol = cols.findIndex(c => c.includes('credit'));
+
+    if (dateCol === -1) { setCsvError(`No date column found. Headers: ${cols.join(', ')}`); return; }
+    if (amountCol === -1 && debitCol === -1 && creditCol === -1) { setCsvError(`No amount column found. Headers: ${cols.join(', ')}`); return; }
+
+    const parseAmt = (s: string): number => {
+      let c = s.trim().replace(/[€$\s]/g, '');
+      if (c.includes(',') && c.includes('.')) {
+        c = c.lastIndexOf(',') > c.lastIndexOf('.') ? c.replace(/\./g, '').replace(',', '.') : c.replace(/,/g, '');
+      } else if (c.includes(',')) { c = c.replace(',', '.'); }
+      return parseFloat(c) || 0;
+    };
+
+    const parseDt = (s: string): string | null => {
+      const dmy = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+      if (dmy) return `${dmy[3]}-${dmy[2].padStart(2, '0')}-${dmy[1].padStart(2, '0')}`;
+      const ymd = s.match(/^(\d{4})[/\-](\d{2})[/\-](\d{2})/);
+      if (ymd) return `${ymd[1]}-${ymd[2]}-${ymd[3]}`;
+      return null;
+    };
+
+    const useDebitCredit = amountCol === -1;
+    const fmt = cols.join(sep).includes('banque') ? 'CIC' : useDebitCredit ? 'Debit/Credit' : 'CSV';
+    setCsvFormat(fmt);
+
+    // Extract account name from CSV (CIC: 2nd column "Libellé Compte")
+    const accountNameCol = cols.findIndex(c => c.includes('libelle compte') || c.includes('libelle_compte') || c.includes('account name'));
+    if (accountNameCol >= 0 && lines.length > 1) {
+      const firstDataFields = lines[1].split(sep);
+      setCsvAccountName(firstDataFields[accountNameCol]?.trim() || '');
+    } else { setCsvAccountName(''); }
+
+    const rows: { date: string; amount: number; label: string }[] = [];
+    for (let i = 1; i < lines.length; i++) {
+      const fields = lines[i].split(sep);
+      const date = parseDt(fields[dateCol]?.trim() || '');
+      if (!date) continue;
+
+      let amount: number;
+      if (useDebitCredit) {
+        const d = debitCol >= 0 ? parseAmt(fields[debitCol] || '') : 0;
+        const cr = creditCol >= 0 ? parseAmt(fields[creditCol] || '') : 0;
+        amount = cr - Math.abs(d);
+      } else {
+        amount = parseAmt(fields[amountCol] || '');
+      }
+
+      rows.push({ date, amount: Math.round(amount * 100) / 100, label: labelCol >= 0 ? fields[labelCol]?.trim() || '' : '' });
+    }
+    setCsvRows(rows);
+  };
+
+  const handleCsvImport = async () => {
+    if (!importAccountId || csvRows.length === 0) return;
+    setCsvImporting(true);
+    setCsvError('');
+    try {
+      const res = await authFetch(`${API}/import/csv`, {
+        method: 'POST',
+        body: JSON.stringify({ account_id: importAccountId, rows: csvRows }),
+      });
+      const data = await res.json();
+      if (data.error) { setCsvError(data.error); }
+      else {
+        setCsvResult(data);
+        refetchAccounts();
+        // Reload batches
+        authFetch(`${API}/import/csv/batches/${importAccountId}`).then(r => r.json()).then(setCsvBatches).catch(() => {});
+      }
+    } catch (e: any) { setCsvError(e.message); }
+    setCsvImporting(false);
+  };
+
+  const undoCsvBatch = async (batchId: string) => {
+    try {
+      const res = await authFetch(`${API}/import/csv/${encodeURIComponent(batchId)}`, { method: 'DELETE' });
+      const data = await res.json();
+      if (data.deleted > 0) {
+        setCsvBatches(prev => prev.filter(b => b.batch_id !== batchId));
+        refetchAccounts();
+      }
+    } catch {}
+  };
+
+  const csvSummary = useMemo(() => {
+    if (csvRows.length === 0) return null;
+    const income = csvRows.filter(r => r.amount > 0).reduce((s, r) => s + r.amount, 0);
+    const expenses = csvRows.filter(r => r.amount < 0).reduce((s, r) => s + r.amount, 0);
+    const dates = csvRows.map(r => r.date).sort();
+    return { count: csvRows.length, income: Math.round(income * 100) / 100, expenses: Math.round(expenses * 100) / 100, from: dates[0], to: dates[dates.length - 1] };
+  }, [csvRows]);
+
+  const fmtCsv = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
 
   const allAccounts = accounts || [];
   const uniqueBanks = [...new Set(allAccounts.map(a => a.bank_name).filter(Boolean))] as string[];
@@ -1022,6 +1169,11 @@ export default function Accounts() {
                       >
                         <RefreshCw size={14} className={syncingId === acc.id ? 'animate-spin' : ''} />
                       </button>
+                      {acc.type === 'checking' && (
+                        <button onClick={() => openCsvImport(acc.id)} className="text-muted hover:text-accent-400 transition-colors p-1.5" title={t('nav_import')}>
+                          <Upload size={14} />
+                        </button>
+                      )}
                       <button onClick={() => deleteAccount(acc.id)} className="text-muted hover:text-red-400 transition-colors p-1.5" title={t('delete')}>
                         <Trash2 size={14} />
                       </button>
@@ -1121,6 +1273,11 @@ export default function Accounts() {
                           >
                             <RefreshCw size={14} className={`${isStale ? 'text-orange-400' : 'text-muted'} ${syncingId === acc.id ? 'animate-spin' : ''}`} /> {t('sync')}
                           </button>
+                          {acc.type === 'checking' && (
+                            <button onClick={() => openCsvImport(acc.id)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-white hover:bg-white/5">
+                              <Upload size={14} className="text-muted" /> {t('nav_import')}
+                            </button>
+                          )}
                           <button onClick={() => { deleteAccount(acc.id); setOverflowMenuId(null); }} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-400 hover:bg-white/5">
                             <Trash2 size={14} /> {t('delete')}
                           </button>
@@ -1143,6 +1300,116 @@ export default function Accounts() {
         onConfirm={() => confirmAction?.onConfirm()}
         onCancel={() => setConfirmAction(null)}
       />
+
+      {/* Hidden CSV file input */}
+      <input
+        ref={csvFileRef}
+        type="file"
+        accept=".csv,.txt,.tsv"
+        className="hidden"
+        onChange={e => {
+          const f = e.target.files?.[0];
+          if (f) handleCsvFile(f);
+          e.target.value = '';
+        }}
+      />
+
+      {/* CSV Import Modal */}
+      {importAccountId && (csvRows.length > 0 || csvError || csvResult) && (
+        <>
+          <div className="fixed inset-0 bg-black/60 z-50" onClick={() => setImportAccountId(null)} />
+          <div className="fixed inset-x-4 top-[10%] max-w-lg mx-auto bg-surface border border-border rounded-2xl z-50 overflow-hidden max-h-[80vh] flex flex-col">
+            {/* Header */}
+            <div className="flex items-center gap-3 px-4 py-3 border-b border-border/50">
+              <FileText size={18} className="text-accent-400" />
+              <div className="flex-1 min-w-0">
+                <div className="text-sm font-medium">{t('nav_import')}</div>
+                <div className="text-[11px] text-muted truncate">
+                  {(accounts || []).find(a => a.id === importAccountId)?.name} — {csvFileName}
+                  {csvFormat && <span className="ml-1 text-accent-400/60">({csvFormat})</span>}
+                </div>
+              </div>
+              <button onClick={() => setImportAccountId(null)} className="text-muted hover:text-white p-1">
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Error */}
+            {csvError && (
+              <div className="flex items-center gap-2 px-4 py-2 bg-red-500/10 text-sm text-red-400">
+                <AlertTriangle size={14} /> {csvError}
+              </div>
+            )}
+
+            {/* Result */}
+            {csvResult ? (
+              <div className="p-6 text-center">
+                <Check size={32} className="mx-auto text-green-400 mb-2" />
+                <div className="text-sm font-medium mb-1">
+                  {csvResult.imported} imported, {csvResult.skipped} skipped
+                </div>
+                <div className="text-xs text-muted mb-3">{csvResult.total} rows processed</div>
+                <button onClick={() => setImportAccountId(null)} className="text-xs text-accent-400 hover:text-accent-300">
+                  {t('confirm')}
+                </button>
+              </div>
+            ) : csvRows.length > 0 && csvSummary ? (
+              <>
+                {/* Summary stats */}
+                <div className="grid grid-cols-4 gap-2 px-4 py-3 border-b border-border/50 bg-surface-hover/30">
+                  <div className="text-center">
+                    <div className="text-[10px] text-muted">{t('transactions')}</div>
+                    <div className="text-sm font-bold">{csvSummary.count}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-muted">{t('period')}</div>
+                    <div className="text-xs font-bold">{csvSummary.from?.slice(5)} → {csvSummary.to?.slice(5)}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-green-400">{t('revenue')}</div>
+                    <div className="text-xs font-bold font-mono text-green-400">{fmtCsv(csvSummary.income)}</div>
+                  </div>
+                  <div className="text-center">
+                    <div className="text-[10px] text-red-400">{t('expenses')}</div>
+                    <div className="text-xs font-bold font-mono text-red-400">{fmtCsv(csvSummary.expenses)}</div>
+                  </div>
+                </div>
+
+                {/* Rows preview */}
+                <div className="flex-1 overflow-y-auto min-h-0">
+                  {csvRows.slice(0, 100).map((row, i) => (
+                    <div key={i} className="flex items-center gap-2 px-4 py-1.5 text-xs border-b border-border/10 hover:bg-surface-hover/30">
+                      <span className="text-muted w-[70px] flex-shrink-0">{row.date}</span>
+                      <span className="truncate flex-1 min-w-0">{row.label}</span>
+                      <span className={`font-mono flex-shrink-0 ${row.amount >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {fmtCsv(row.amount)}
+                      </span>
+                    </div>
+                  ))}
+                  {csvRows.length > 100 && (
+                    <div className="text-center text-xs text-muted py-2">+{csvRows.length - 100} more...</div>
+                  )}
+                </div>
+
+                {/* Import button */}
+                <div className="p-3 border-t border-border/50">
+                  <button
+                    onClick={handleCsvImport}
+                    disabled={csvImporting}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-accent-500 text-white rounded-lg text-sm font-medium hover:bg-accent-600 transition-colors disabled:opacity-50"
+                  >
+                    {csvImporting ? (
+                      <span className="animate-pulse">{t('loading')}</span>
+                    ) : (
+                      <><Check size={16} /> {t('confirm')} — {csvSummary.count} transactions</>
+                    )}
+                  </button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        </>
+      )}
     </div>
   );
 }
