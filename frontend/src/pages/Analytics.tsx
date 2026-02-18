@@ -1,8 +1,8 @@
 import { API } from '../config';
-import { useState, useCallback, useEffect } from 'react';
-import { useApi, useAuthFetch } from '../useApi';
+import { useState, useEffect } from 'react';
+import { useApi } from '../useApi';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
-import { RefreshCw, TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, ArrowLeft } from 'lucide-react';
+import { TrendingUp, TrendingDown, ChevronLeft, ChevronRight, ArrowUpRight, ArrowDownRight, ArrowLeft } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
@@ -39,7 +39,6 @@ export default function Analytics() {
   
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const authFetch = useAuthFetch();
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
   const [month, setMonth] = useState(now.getMonth() + 1);
@@ -83,8 +82,7 @@ export default function Analytics() {
   };
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
-  const { data, loading, refetch } = useApi<AnalyticsData>(appendScope(`${API}/analytics?period=${period}`));
-  const [refreshing, setRefreshing] = useState(false);
+  const { data, loading } = useApi<AnalyticsData>(appendScope(`${API}/analytics?period=${period}`));
 
   const prev = () => {
     if (month === 1) { setYear(y => y - 1); setMonth(12); }
@@ -94,19 +92,6 @@ export default function Analytics() {
     if (month === 12) { setYear(y => y + 1); setMonth(1); }
     else setMonth(m => m + 1);
   };
-
-  const handleRefresh = useCallback(async () => {
-    setRefreshing(true);
-    try {
-      await authFetch(`${API}/analytics/recompute`, {
-        method: 'POST',
-        body: JSON.stringify({ period }),
-      });
-      refetch();
-    } finally {
-      setRefreshing(false);
-    }
-  }, [period, refetch]);
 
   const moisFr = ['Janvier', 'Février', 'Mars', 'Avril', 'Mai', 'Juin', 'Juillet', 'Août', 'Septembre', 'Octobre', 'Novembre', 'Décembre'];
 
@@ -146,9 +131,6 @@ export default function Analytics() {
             </select>
           )}
           {!isPerso && !isPro && <ScopeSelect />}
-          <button onClick={handleRefresh} disabled={refreshing} className="hidden sm:block p-2 rounded-lg text-muted hover:text-accent-400 hover:bg-surface-hover disabled:opacity-50">
-            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-          </button>
         </div>
       </div>
 

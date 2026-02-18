@@ -2555,27 +2555,6 @@ async function computeAnalytics(period: string, userId: number = 1) {
 app.get('/api/analytics', async (c) => {
   const period = c.req.query('period') || new Date().toISOString().slice(0, 7);
   const userId = await getUserId(c);
-
-  // Try cache first
-  const cached = await db.execute({
-    sql: `SELECT value, computed_at FROM analytics_cache WHERE user_id = ? AND metric_key = 'full' AND period = ?`,
-    args: [userId, period]
-  });
-
-  if (cached.rows.length > 0) {
-    const row: any = cached.rows[0];
-    return c.json({ ...JSON.parse(row.value), computed_at: row.computed_at, cached: true });
-  }
-
-  // Compute on first access
-  const result = await computeAnalytics(period, userId);
-  return c.json({ ...result, cached: false });
-});
-
-app.post('/api/analytics/recompute', async (c) => {
-  const userId = await getUserId(c);
-  const body = await c.req.json().catch(() => ({}));
-  const period = body.period || new Date().toISOString().slice(0, 7);
   const result = await computeAnalytics(period, userId);
   return c.json({ ...result, cached: false });
 });
@@ -3099,6 +3078,36 @@ app.get('/api/invoices/transactions', async (c) => {
   sql += ' ORDER BY t.date DESC';
   const result = await db.execute({ sql, args });
   return c.json(result.rows);
+});
+
+// List all Drive files for a company (for manual linking)
+app.get('/api/invoices/files', async (c) => {
+  const userId = await getUserId(c);
+  const companyId = c.req.query('company_id');
+  if (!companyId) return c.json([]);
+  const result = await db.execute({
+    sql: `SELECT ic.id, ic.filename, ic.drive_file_id, ic.date, ic.vendor, ic.amount_ht, ic.transaction_id
+          FROM invoice_cache ic WHERE ic.user_id = ? AND ic.company_id = ?
+          ORDER BY ic.transaction_id IS NOT NULL, ic.scanned_at DESC`,
+    args: [userId, Number(companyId)]
+  });
+  return c.json(result.rows);
+});
+
+// Manually link an existing Drive file (invoice_cache) to a transaction
+app.post('/api/invoices/link', async (c) => {
+  const userId = await getUserId(c);
+  const body = await c.req.json().catch(() => ({}));
+  const { invoice_id, transaction_id } = body;
+  if (!invoice_id || !transaction_id) return c.json({ error: 'Missing fields' }, 400);
+  // Verify ownership
+  const check = await db.execute({ sql: 'SELECT id FROM invoice_cache WHERE id = ? AND user_id = ?', args: [invoice_id, userId] });
+  if (check.rows.length === 0) return c.json({ error: 'Not found' }, 404);
+  // Unlink any existing invoice for this transaction first
+  await db.execute({ sql: 'UPDATE invoice_cache SET transaction_id = NULL WHERE transaction_id = ? AND user_id = ?', args: [transaction_id, userId] });
+  // Link
+  await db.execute({ sql: 'UPDATE invoice_cache SET transaction_id = ?, match_confidence = 1.0 WHERE id = ? AND user_id = ?', args: [transaction_id, invoice_id, userId] });
+  return c.json({ ok: true });
 });
 
 // Upload invoice file to Drive and link to transaction
