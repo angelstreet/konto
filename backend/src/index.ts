@@ -4,6 +4,10 @@ import { cors } from 'hono/cors';
 import { serve } from '@hono/node-server';
 import { verifyToken } from '@clerk/backend';
 import db, { initDatabase, migrateDatabase, ensureUser } from './db.js';
+import { execSync } from 'child_process';
+import * as os from 'os';
+import * as path from 'path';
+import * as fs from 'fs';
 import * as ecc from 'tiny-secp256k1';
 import { BIP32Factory } from 'bip32';
 import * as bitcoin from 'bitcoinjs-lib';
@@ -323,6 +327,30 @@ app.get('/api/companies/search', async (c) => {
 app.get('/api/bank/connect-url', (c) => {
   const url = `https://webview.powens.com/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
   return c.json({ url });
+});
+
+// Powens webview wrapper — forces light mode so QR codes remain scannable
+app.get('/api/bank/webview', (c) => {
+  const target = c.req.query('url');
+  if (!target || !target.startsWith('https://webview.powens.com/')) {
+    return c.text('Invalid URL', 400);
+  }
+  return c.html(`<!DOCTYPE html>
+<html style="color-scheme:light only">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="color-scheme" content="light only">
+  <title>Bank Connection</title>
+  <style>
+    *{margin:0;padding:0}
+    html,body{height:100%;background:#fff;color-scheme:light only}
+    iframe{width:100%;height:100%;border:none}
+    @media(prefers-color-scheme:dark){html,body{background:#fff;color:#000}}
+  </style>
+</head>
+<body><iframe src="${target.replace(/"/g, '&quot;')}"></iframe></body>
+</html>`);
 });
 
 // Reconnect a specific SCA-blocked connection
@@ -2725,10 +2753,8 @@ app.post('/api/drive/connect', async (c) => {
   if (returnTo) stateData.return_to = returnTo;
   const state = Object.keys(stateData).length > 0 ? Buffer.from(JSON.stringify(stateData)).toString('base64') : '';
 
-  // Use broader scope if upload is needed (for payslip uploads to Drive)
-  const scope = withUpload
-    ? 'https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.readonly'
-    : 'https://www.googleapis.com/auth/drive.readonly';
+  // Use drive scope: read + copy (for OCR) + upload
+  const scope = 'https://www.googleapis.com/auth/drive';
 
   const params = new URLSearchParams({
     client_id: GOOGLE_CLIENT_ID,
@@ -2988,12 +3014,8 @@ app.post('/api/invoices/scan', async (c) => {
   const body = await c.req.json().catch(() => ({}));
   const companyId = body.company_id || null;
 
-  // Check drive connection
-  const connSql = companyId
-    ? 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id = ? AND status = ? LIMIT 1'
-    : 'SELECT * FROM drive_connections WHERE user_id = ? AND company_id IS NULL AND status = ? LIMIT 1';
-  const connArgs = companyId ? [userId, companyId, 'active'] : [userId, 'active'];
-  const conn = await db.execute({ sql: connSql, args: connArgs });
+  // Drive connection is global (one per user), folders are per-company
+  const conn = await db.execute({ sql: 'SELECT * FROM drive_connections WHERE user_id = ? AND status = ? ORDER BY company_id IS NULL DESC LIMIT 1', args: [userId, 'active'] });
   if (conn.rows.length === 0) {
     return c.json({ error: 'No active Google Drive connection. Connect in Settings first.' }, 400);
   }
@@ -3009,6 +3031,15 @@ app.post('/api/invoices/scan', async (c) => {
     const purpose = companyId ? `invoices_${scanYear}_${companyId}` : `invoices_${scanYear}`;
     const mapping = await db.execute({ sql: 'SELECT folder_id FROM drive_folder_mappings WHERE user_id = ? AND purpose = ?', args: [userId, purpose] });
     if (mapping.rows.length > 0 && mapping.rows[0].folder_id) folderId = String(mapping.rows[0].folder_id);
+  }
+
+  // Force re-scan: clear existing cache for this scope
+  if (body.force) {
+    const delSql = companyId
+      ? 'DELETE FROM invoice_cache WHERE user_id = ? AND company_id = ?'
+      : 'DELETE FROM invoice_cache WHERE user_id = ? AND company_id IS NULL';
+    const delArgs = companyId ? [userId, companyId] : [userId];
+    await db.execute({ sql: delSql, args: delArgs });
   }
 
   const scanId = `scan_${userId}_${Date.now()}`;
@@ -3046,53 +3077,110 @@ app.post('/api/invoices/scan', async (c) => {
 
           const buffer = Buffer.from(await dlRes.arrayBuffer());
 
-          // Extract metadata: first from filename, then enhance with PDF text
-          const extracted = await extractInvoiceMetadata(file.name, buffer);
+          // Extract metadata: filename → pdf-parse → Drive OCR
+          const extracted = await extractInvoiceMetadata(file.name, buffer, file.id, accessToken);
 
-          // Match with transaction
+          // Weighted transaction matching — needs 2 of 3 signals: amount, date, label
           let matchedTxId: number | null = null;
-          let confidence = 0;
+          let bestScore = 0;
+          const dateStr = extracted.date || file.modifiedTime?.slice(0, 10) || '';
+          const invAmt = extracted.amount ? Math.abs(extracted.amount) : null;
 
-          if (extracted.amount) {
-            const dateStr = extracted.date || file.modifiedTime?.slice(0, 10) || '';
+          console.log(`[SCAN] ${file.name} → extracted: amount=${invAmt}, date=${dateStr}, vendor=${extracted.vendor}, method=${extracted.extraction_method}`);
+
+          // Helper: extract USD amount from bank label (e.g. "100,05 USD" → 100.05)
+          function extractUsdFromLabel(label: string): number | null {
+            const m = label.match(/([\d]+[,.][\d]{2})\s*USD/i);
+            if (m) return parseFloat(m[1].replace(',', '.'));
+            return null;
+          }
+
+          if (invAmt || (extracted.vendor && dateStr)) {
+            // Search by date range only — scoring handles the rest
             const matchQuery = companyId
               ? `SELECT t.id, t.label, t.amount, t.date FROM transactions t
                  JOIN bank_accounts ba ON t.bank_account_id = ba.id
-                 WHERE ba.company_id = ? AND ABS(ABS(t.amount) - ?) < 0.02
-                 AND t.date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
+                 WHERE ba.company_id = ? AND ba.type = 'checking'
+                 AND t.date BETWEEN date(?, '-30 days') AND date(?, '+30 days')
                  AND t.id NOT IN (SELECT transaction_id FROM invoice_cache WHERE transaction_id IS NOT NULL)
-                 ORDER BY ABS(julianday(t.date) - julianday(?)) LIMIT 1`
+                 AND ${blocklist_sql}
+                 LIMIT 50`
               : `SELECT t.id, t.label, t.amount, t.date FROM transactions t
-                 WHERE ABS(ABS(t.amount) - ?) < 0.02
-                 AND t.date BETWEEN date(?, '-5 days') AND date(?, '+5 days')
+                 WHERE t.date BETWEEN date(?, '-30 days') AND date(?, '+30 days')
                  AND t.id NOT IN (SELECT transaction_id FROM invoice_cache WHERE transaction_id IS NOT NULL)
-                 ORDER BY ABS(julianday(t.date) - julianday(?)) LIMIT 1`;
+                 LIMIT 50`;
             const matchArgs = companyId
-              ? [companyId, Math.abs(extracted.amount), dateStr, dateStr, dateStr]
-              : [Math.abs(extracted.amount), dateStr, dateStr, dateStr];
+              ? [companyId, dateStr, dateStr]
+              : [dateStr, dateStr];
 
-            const txMatch = await db.execute({ sql: matchQuery, args: matchArgs });
-            if (txMatch.rows.length > 0) {
-              const tx: any = txMatch.rows[0];
-              matchedTxId = tx.id;
-              confidence = 0.8;
-              if (extracted.vendor && tx.label) {
-                const v = extracted.vendor.toLowerCase();
-                const l = (tx.label as string).toLowerCase();
-                if (l.includes(v) || v.includes(l)) confidence = 0.95;
+            const txMatches = await db.execute({ sql: matchQuery, args: matchArgs });
+            console.log(`[SCAN] ${file.name} → ${txMatches.rows.length} candidates in date range`);
+
+            for (const tx of txMatches.rows as any[]) {
+              let score = 0;
+              const label = (tx.label as string) || '';
+
+              // Amount scoring — check EUR amount and USD amount from label
+              if (invAmt) {
+                const eurDiff = Math.abs(Math.abs(tx.amount as number) - invAmt);
+                const usdInLabel = extractUsdFromLabel(label);
+                const usdDiff = usdInLabel ? Math.abs(usdInLabel - invAmt) : null;
+
+                // Best of EUR or USD match
+                const bestDiff = usdDiff !== null ? Math.min(eurDiff, usdDiff) : eurDiff;
+                if (bestDiff < 0.02) score += 50;
+                else if (bestDiff < 0.5) score += 40;
+                else if (bestDiff < 2) score += 25;
+                else if (bestDiff / invAmt < 0.05) score += 20;
               }
-              job.matched++;
+
+              // Date scoring
+              if (dateStr && tx.date) {
+                const daysDiff = Math.abs((new Date(tx.date as string).getTime() - new Date(dateStr).getTime()) / 86400000);
+                if (daysDiff <= 1) score += 35;
+                else if (daysDiff <= 3) score += 25;
+                else if (daysDiff <= 7) score += 15;
+                else if (daysDiff <= 14) score += 8;
+                else score += 3;
+              }
+
+              // Vendor/label scoring
+              if (extracted.vendor) {
+                const v = extracted.vendor.toLowerCase();
+                const l = label.toLowerCase();
+                if (l.includes(v) || v.includes(l)) score += 30;
+                else {
+                  const vWords = v.split(/[\s.,·\-]+/).filter((w: string) => w.length > 3);
+                  const matched = vWords.filter((w: string) => l.includes(w));
+                  if (matched.length > 0) score += 20;
+                }
+              }
+
+              if (score > bestScore) {
+                bestScore = score;
+                matchedTxId = tx.id as number;
+              }
             }
+            // Need score > 60 — requires at least 2 strong signals (e.g. date+label, date+amount, amount+label)
+            console.log(`[SCAN] ${file.name} → best score=${bestScore}, matchedTxId=${matchedTxId}`);
+            if (bestScore <= 60) { matchedTxId = null; bestScore = 0; }
+            if (matchedTxId) job.matched++;
+          } else {
+            console.log(`[SCAN] ${file.name} → NO AMOUNT or VENDOR+DATE, skipping matching`);
           }
 
+          // Truncate raw_text for storage (keep first 2000 chars)
+          const storedText = extracted.raw_text ? extracted.raw_text.slice(0, 2000) : null;
+
           await db.execute({
-            sql: `INSERT INTO invoice_cache (user_id, company_id, transaction_id, drive_file_id, filename, vendor, amount_ht, tva_amount, tva_rate, date, invoice_number, match_confidence)
-                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+            sql: `INSERT INTO invoice_cache (user_id, company_id, transaction_id, drive_file_id, filename, vendor, amount_ht, tva_amount, tva_rate, date, invoice_number, match_confidence, raw_text, extraction_method)
+                  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
             args: [userId, companyId, matchedTxId, file.id, file.name,
                    extracted.vendor || null, extracted.amount || null,
                    extracted.tva_amount || null, extracted.tva_rate || null,
                    extracted.date || null, extracted.invoice_number || null,
-                   matchedTxId ? confidence : null]
+                   matchedTxId ? bestScore / 100 : null,
+                   storedText, extracted.extraction_method]
           });
           job.scanned++;
         } catch (e: any) {
@@ -3113,6 +3201,39 @@ app.post('/api/invoices/scan', async (c) => {
   return c.json({ scan_id: scanId, total: 0, status: 'running' });
 });
 
+// Debug: show cached invoices extraction results and why they didn't match
+app.get('/api/invoices/debug', async (c) => {
+  const userId = await getUserId(c);
+  const companyId = c.req.query('company_id');
+  if (!companyId) return c.json({ error: 'company_id required' });
+  const cid = Number(companyId);
+  const invoices = await db.execute({
+    sql: `SELECT id, filename, vendor, amount_ht, date, extraction_method, transaction_id, match_confidence
+          FROM invoice_cache WHERE user_id = ? AND company_id = ? ORDER BY date DESC`,
+    args: [userId, cid]
+  });
+  // For unmatched invoices with an amount, show nearest transactions
+  const results = [];
+  for (const inv of invoices.rows as any[]) {
+    const entry: any = { ...inv };
+    if (!inv.transaction_id && inv.amount_ht) {
+      const dateStr = inv.date || '2025-01-01';
+      const amt = Math.abs(inv.amount_ht);
+      const candidates = await db.execute({
+        sql: `SELECT t.id, t.label, t.amount, t.date, ABS(ABS(t.amount) - ?) as amt_diff
+              FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id
+              WHERE ba.company_id = ? AND ba.type = 'checking'
+              AND t.date BETWEEN date(?, '-60 days') AND date(?, '+60 days')
+              ORDER BY ABS(ABS(t.amount) - ?) LIMIT 5`,
+        args: [amt, cid, dateStr, dateStr, amt]
+      });
+      entry.nearest_transactions = candidates.rows;
+    }
+    results.push(entry);
+  }
+  return c.json(results);
+});
+
 // Poll scan progress
 app.get('/api/invoices/scan/:scanId', async (c) => {
   const scanId = c.req.param('scanId');
@@ -3121,22 +3242,194 @@ app.get('/api/invoices/scan/:scanId', async (c) => {
   return c.json(job);
 });
 
-// Extract invoice metadata from filename + PDF text content
-async function extractInvoiceMetadata(filename: string, buffer: Buffer): Promise<{ vendor?: string; amount?: number; date?: string; invoice_number?: string; tva_amount?: number; tva_rate?: number }> {
+// --- Tesseract OCR: PDF → images → text (local, fast, no network) ---
+async function tesseractOcrExtractText(buffer: Buffer): Promise<string | null> {
+  try {
+    // Check tesseract is available
+    execSync('which tesseract', { stdio: 'ignore' });
+  } catch {
+    console.log('[SCAN] Tesseract not installed, skipping');
+    return null;
+  }
+  const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'ocr-'));
+  try {
+    const pdfPath = path.join(tmpDir, 'input.pdf');
+    fs.writeFileSync(pdfPath, buffer);
+    // Convert PDF to PNG images (one per page)
+    execSync(`pdftoppm -png -r 300 "${pdfPath}" "${path.join(tmpDir, 'page')}"`, { timeout: 15000 });
+    // OCR each page
+    const pages = fs.readdirSync(tmpDir).filter(f => f.startsWith('page') && f.endsWith('.png')).sort();
+    let fullText = '';
+    for (const page of pages) {
+      const imgPath = path.join(tmpDir, page);
+      const text = execSync(`tesseract "${imgPath}" - -l eng+fra 2>/dev/null`, { timeout: 15000 }).toString();
+      fullText += text + '\n';
+    }
+    return fullText.trim() || null;
+  } catch (e: any) {
+    console.log(`[SCAN] Tesseract error: ${e.message}`);
+    return null;
+  } finally {
+    // Cleanup temp files
+    try { fs.rmSync(tmpDir, { recursive: true }); } catch {}
+  }
+}
+
+// --- Drive OCR: copy PDF as Google Doc → export text → delete temp doc ---
+async function driveOcrExtractText(driveFileId: string, accessToken: string): Promise<string | null> {
+  try {
+    // 1. Copy the file as a Google Doc (triggers OCR)
+    const copyRes = await fetch(`https://www.googleapis.com/drive/v3/files/${driveFileId}/copy`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ mimeType: 'application/vnd.google-apps.document', name: '_ocr_temp' }),
+    });
+    if (!copyRes.ok) {
+      console.error('Drive OCR copy failed:', await copyRes.text());
+      return null;
+    }
+    const copyData: any = await copyRes.json();
+    const tempDocId = copyData.id;
+
+    // 2. Export as plain text
+    const exportRes = await fetch(`https://www.googleapis.com/drive/v3/files/${tempDocId}/export?mimeType=text/plain`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    const text = exportRes.ok ? await exportRes.text() : null;
+
+    // 3. Delete temp doc (fire-and-forget)
+    fetch(`https://www.googleapis.com/drive/v3/files/${tempDocId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    }).catch(() => {});
+
+    return text && text.trim().length > 5 ? text : null;
+  } catch (e: any) {
+    console.error('Drive OCR error:', e.message);
+    return null;
+  }
+}
+
+// Parse structured fields from raw text (used for both pdf-parse and Drive OCR output)
+function parseInvoiceText(text: string): { vendor?: string; amount?: number; date?: string; invoice_number?: string; tva_amount?: number; tva_rate?: number } {
   const result: { vendor?: string; amount?: number; date?: string; invoice_number?: string; tva_amount?: number; tva_rate?: number } = {};
 
-  // --- 1. Parse from filename ---
+  // Date: DD/MM/YYYY or DD.MM.YYYY
+  const pdfDate = text.match(/(\d{2})[/.](\d{2})[/.](\d{4})/);
+  if (pdfDate) result.date = `${pdfDate[3]}-${pdfDate[2]}-${pdfDate[1]}`;
+
+  // Date: English format "Month DD, YYYY" or "due Month DD, YYYY"
+  const monthMapEn: Record<string, string> = { january:'01', february:'02', march:'03', april:'04', may:'05', june:'06', july:'07', august:'08', september:'09', october:'10', november:'11', december:'12' };
+  if (!result.date) {
+    const engDate = text.match(/(?:due\s+)?(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{1,2}),?\s+(\d{4})/i);
+    if (engDate) result.date = `${engDate[3]}-${monthMapEn[engDate[1].toLowerCase()]}-${String(engDate[2]).padStart(2, '0')}`;
+  }
+
+  // Date: French format "21 novembre 2025"
+  const monthMapFr: Record<string, string> = { janvier:'01', 'février':'02', fevrier:'02', mars:'03', avril:'04', mai:'05', juin:'06', juillet:'07', 'août':'08', aout:'08', septembre:'09', octobre:'10', novembre:'11', 'décembre':'12', decembre:'12' };
+  if (!result.date) {
+    const frDate = text.match(/(\d{1,2})\s+(janvier|f[ée]vrier|mars|avril|mai|juin|juillet|ao[ûu]t|septembre|octobre|novembre|d[ée]cembre)\s+(\d{4})/i);
+    if (frDate) result.date = `${frDate[3]}-${monthMapFr[frDate[2].toLowerCase()]}-${String(frDate[1]).padStart(2, '0')}`;
+  }
+
+  // Date: YYYY-MM-DD (ISO)
+  if (!result.date) {
+    const isoDate = text.match(/(\d{4})-(\d{2})-(\d{2})/);
+    if (isoDate) result.date = `${isoDate[1]}-${isoDate[2]}-${isoDate[3]}`;
+  }
+
+  // Invoice number
+  const pdfInv = text.match(/(?:facture|invoice|n°|nummer|rechnung)\s*:?\s*([A-Z]*-?\d{4,}[-/]?\d*)/i);
+  if (pdfInv) result.invoice_number = pdfInv[1];
+
+  // Total TTC — most reliable amount for matching (ordered by specificity)
+  const ttcPatterns = [
+    // "Amount due" / "Montant dû" — the most reliable final amount
+    /montant\s+d[ûu]\s*:?\s*(?:[$€])?\s*([\d\s,.]+\d{2})/i,
+    /amount\s+due\s*:?\s*(?:[$€])?\s*([\d\s,.]+\d{2})/i,
+    // Standard French/German patterns
+    /total\s+t\.?t\.?c\.?\s*:?\s*([\d\s]+[.,]\d{2})/i,
+    /montant\s+t\.?t\.?c\.?\s*:?\s*([\d\s]+[.,]\d{2})/i,
+    /net\s+[àa]\s+payer\s*:?\s*([\d\s]+[.,]\d{2})/i,
+    /gesamtbetrag\s*:?\s*([\d\s]+[.,]\d{2})/i,
+    /total\s*:?\s*([\d\s]+[.,]\d{2})\s*€?$/im,
+  ];
+  for (const pat of ttcPatterns) {
+    const m = text.match(pat);
+    if (m) {
+      const val = parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
+      if (val > 0 && val < 1_000_000) { result.amount = val; break; }
+    }
+  }
+
+  // Total HT
+  if (!result.amount) {
+    const htMatch = text.match(/total\s+h\.?t\.?\s*:?\s*([\d\s]+[.,]\d{2})/i)
+      || text.match(/montant\s+h\.?t\.?\s*:?\s*([\d\s]+[.,]\d{2})/i);
+    if (htMatch) {
+      const ht = parseFloat(htMatch[1].replace(/\s/g, '').replace(',', '.'));
+      if (ht > 0) result.amount = ht;
+    }
+  }
+
+  // Currency-prefixed amounts: $30.00, €21.60, USD 30.00, EUR 21.60
+  if (!result.amount) {
+    const currMatch = text.match(/[$€]\s*([\d,]+\.\d{2})/);
+    if (currMatch) {
+      const val = parseFloat(currMatch[1].replace(',', ''));
+      if (val > 0 && val < 1_000_000) result.amount = val;
+    }
+  }
+  if (!result.amount) {
+    const currMatch2 = text.match(/([\d\s]+[.,]\d{2})\s*(?:USD|EUR|€|\$)/);
+    if (currMatch2) {
+      const val = parseFloat(currMatch2[1].replace(/\s/g, '').replace(',', '.'));
+      if (val > 0 && val < 1_000_000) result.amount = val;
+    }
+  }
+
+  // TVA
+  const tvaMatch = text.match(/t\.?v\.?a\.?\s*(?:\(?\s*(\d+(?:[.,]\d+)?)\s*%?\)?)?\s*:?\s*([\d\s]+[.,]\d{2})/i);
+  if (tvaMatch) {
+    if (tvaMatch[1]) result.tva_rate = parseFloat(tvaMatch[1].replace(',', '.'));
+    result.tva_amount = parseFloat(tvaMatch[2].replace(/\s/g, '').replace(',', '.'));
+  }
+
+  // Vendor: first substantial line that isn't a header/date/number
+  const lines = text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 3 && !/^\d+$/.test(l));
+  const vendorLine = lines.find((l: string) => !/^\d/.test(l) && !/facture|invoice|date|siret|siren|tva|iban|total|montant/i.test(l) && l.length < 60);
+  if (vendorLine) result.vendor = vendorLine;
+
+  return result;
+}
+
+interface ExtractionResult {
+  vendor?: string;
+  amount?: number;
+  date?: string;
+  invoice_number?: string;
+  tva_amount?: number;
+  tva_rate?: number;
+  raw_text?: string;
+  extraction_method: string; // 'filename' | 'pdf-parse' | 'drive-ocr'
+}
+
+// Extract invoice metadata: filename → pdf-parse → Drive OCR fallback
+async function extractInvoiceMetadata(filename: string, buffer: Buffer, driveFileId: string, accessToken: string): Promise<ExtractionResult> {
+  const result: ExtractionResult = { extraction_method: 'filename' };
+
+  // --- 1. Parse from filename (always) ---
   const dateMatch = filename.match(/(\d{4})-(\d{2})-(\d{2})/) || filename.match(/(\d{2})-(\d{2})-(\d{4})/);
   if (dateMatch) {
     result.date = dateMatch[1].length === 4
       ? `${dateMatch[1]}-${dateMatch[2]}-${dateMatch[3]}`
       : `${dateMatch[3]}-${dateMatch[2]}-${dateMatch[1]}`;
   }
-
   const amountMatch = filename.match(/(\d+[.,]\d{2})/);
-  if (amountMatch) {
-    result.amount = parseFloat(amountMatch[1].replace(',', '.'));
-  }
+  if (amountMatch) result.amount = parseFloat(amountMatch[1].replace(',', '.'));
 
   const cleaned = filename.replace(/\.pdf$/i, '').replace(/[\d_-]+/g, ' ').trim();
   const words = cleaned.split(/\s+/).filter(w => w.length > 2);
@@ -3145,69 +3438,60 @@ async function extractInvoiceMetadata(filename: string, buffer: Buffer): Promise
   const invMatch = filename.match(/(F|FA|INV|FACT)[- ]?\d+[- ]?\d*/i);
   if (invMatch) result.invoice_number = invMatch[0];
 
-  // --- 2. Enhance from PDF text ---
+  // --- 2. Try pdf-parse (fast, for text-based PDFs) ---
+  let rawText = '';
   try {
     const { PDFParse } = await import('pdf-parse');
     const parser = new PDFParse(new Uint8Array(buffer));
     const pdfResult = await parser.getText();
-    const text = pdfResult.text || '';
-    if (!text.trim()) return result;
+    rawText = pdfResult.text || '';
+  } catch {}
 
-    // Date: look for DD/MM/YYYY patterns
-    if (!result.date) {
-      const pdfDate = text.match(/(\d{2})[/.](\d{2})[/.](\d{4})/);
-      if (pdfDate) result.date = `${pdfDate[3]}-${pdfDate[2]}-${pdfDate[1]}`;
-    }
+  if (rawText.trim().length > 200) {
+    // Substantial text from pdf-parse — trust it
+    result.extraction_method = 'pdf-parse';
+    result.raw_text = rawText;
+    const parsed = parseInvoiceText(rawText);
+    if (parsed.date) result.date = parsed.date;
+    if (parsed.amount) result.amount = parsed.amount;
+    if (parsed.vendor) result.vendor = parsed.vendor;
+    if (parsed.invoice_number) result.invoice_number = parsed.invoice_number;
+    if (parsed.tva_amount) result.tva_amount = parsed.tva_amount;
+    if (parsed.tva_rate) result.tva_rate = parsed.tva_rate;
+    if (result.amount && result.date) return result;
+    console.log(`[SCAN] pdf-parse text >200 chars but missing amount or date, trying Tesseract`);
+  } else if (rawText.trim().length > 0) {
+    console.log(`[SCAN] pdf-parse got only ${rawText.trim().length} chars, falling through to Tesseract`);
+  }
 
-    // Invoice number
-    if (!result.invoice_number) {
-      const pdfInv = text.match(/(?:facture|invoice|n°)\s*:?\s*([A-Z]*-?\d{4,}[-/]?\d*)/i);
-      if (pdfInv) result.invoice_number = pdfInv[1];
-    }
+  // --- 3. Tesseract OCR (local, fast, no network) ---
+  const tesseractText = await tesseractOcrExtractText(buffer);
+  if (tesseractText && tesseractText.trim().length > 20) {
+    result.extraction_method = 'tesseract';
+    result.raw_text = tesseractText;
+    const parsed = parseInvoiceText(tesseractText);
+    if (parsed.date) result.date = parsed.date;
+    if (parsed.amount) result.amount = parsed.amount;
+    if (parsed.vendor) result.vendor = parsed.vendor;
+    if (parsed.invoice_number) result.invoice_number = parsed.invoice_number;
+    if (parsed.tva_amount) result.tva_amount = parsed.tva_amount;
+    if (parsed.tva_rate) result.tva_rate = parsed.tva_rate;
+    if (result.amount || result.date) return result;
+    console.log(`[SCAN] Tesseract got text but no useful fields, falling through to Drive OCR`);
+  }
 
-    // Total TTC — most reliable amount for matching
-    // Look for "Total TTC", "TOTAL TTC", "Montant TTC", "Net à payer"
-    const ttcPatterns = [
-      /total\s+t\.?t\.?c\.?\s*:?\s*([\d\s]+[.,]\d{2})/i,
-      /montant\s+t\.?t\.?c\.?\s*:?\s*([\d\s]+[.,]\d{2})/i,
-      /net\s+[àa]\s+payer\s*:?\s*([\d\s]+[.,]\d{2})/i,
-      /total\s*:?\s*([\d\s]+[.,]\d{2})\s*€?$/im,
-    ];
-    for (const pat of ttcPatterns) {
-      const m = text.match(pat);
-      if (m) {
-        const val = parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
-        if (val > 0 && val < 1_000_000) {
-          result.amount = val;
-          break;
-        }
-      }
-    }
-
-    // Total HT
-    const htMatch = text.match(/total\s+h\.?t\.?\s*:?\s*([\d\s]+[.,]\d{2})/i)
-      || text.match(/montant\s+h\.?t\.?\s*:?\s*([\d\s]+[.,]\d{2})/i);
-    if (htMatch) {
-      const ht = parseFloat(htMatch[1].replace(/\s/g, '').replace(',', '.'));
-      if (ht > 0) result.amount = result.amount || ht; // prefer TTC if found
-    }
-
-    // TVA
-    const tvaMatch = text.match(/t\.?v\.?a\.?\s*(?:\(?\s*(\d+(?:[.,]\d+)?)\s*%?\)?)?\s*:?\s*([\d\s]+[.,]\d{2})/i);
-    if (tvaMatch) {
-      if (tvaMatch[1]) result.tva_rate = parseFloat(tvaMatch[1].replace(',', '.'));
-      result.tva_amount = parseFloat(tvaMatch[2].replace(/\s/g, '').replace(',', '.'));
-    }
-
-    // Vendor: first non-empty substantial line (often company name at top)
-    if (!result.vendor || result.vendor.length < 3) {
-      const lines = text.split('\n').map((l: string) => l.trim()).filter((l: string) => l.length > 3 && !/^\d+$/.test(l));
-      // Skip lines that look like addresses, dates, numbers
-      const vendorLine = lines.find((l: string) => !/^\d/.test(l) && !/facture|invoice|date|siret|siren|tva|iban/i.test(l) && l.length < 60);
-      if (vendorLine) result.vendor = vendorLine;
-    }
-  } catch {
-    // PDF parsing failed — use filename-only results
+  // --- 4. Last resort: Drive OCR (network-dependent) ---
+  const ocrText = await driveOcrExtractText(driveFileId, accessToken);
+  if (ocrText && ocrText.trim().length > 20) {
+    result.extraction_method = 'drive-ocr';
+    result.raw_text = ocrText;
+    const parsed = parseInvoiceText(ocrText);
+    if (parsed.date) result.date = parsed.date;
+    if (parsed.amount) result.amount = parsed.amount;
+    if (parsed.vendor) result.vendor = parsed.vendor;
+    if (parsed.invoice_number) result.invoice_number = parsed.invoice_number;
+    if (parsed.tva_amount) result.tva_amount = parsed.tva_amount;
+    if (parsed.tva_rate) result.tva_rate = parsed.tva_rate;
   }
 
   return result;
@@ -3267,6 +3551,13 @@ app.post('/api/invoices/:id/unmatch', async (c) => {
   return c.json({ ok: true });
 });
 
+// Transactions starting with these prefixes are excluded from rapprochement
+// (justified by annual bank statements / IFU — no individual justificatif needed)
+const RAPPROCHEMENT_LABEL_BLOCKLIST = [
+  'COUPONS',
+];
+const blocklist_sql = RAPPROCHEMENT_LABEL_BLOCKLIST.map(p => `t.label NOT LIKE '${p}%'`).join(' AND ');
+
 // Invoice stats — transaction-centric for companies, file-centric for personal
 app.get('/api/invoices/stats', async (c) => {
   const userId = await getUserId(c);
@@ -3277,11 +3568,11 @@ app.get('/api/invoices/stats', async (c) => {
     const start = `${year}-01-01`, end = `${year + 1}-01-01`;
     const cid = Number(companyId);
     const totalRes = await db.execute({
-      sql: `SELECT COUNT(*) as c FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE ba.company_id = ? AND t.date >= ? AND t.date < ?`,
+      sql: `SELECT COUNT(*) as c FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE ba.company_id = ? AND ba.type = 'checking' AND t.date >= ? AND t.date < ? AND ${blocklist_sql}`,
       args: [cid, start, end]
     });
     const matchedRes = await db.execute({
-      sql: `SELECT COUNT(*) as c FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE ba.company_id = ? AND t.date >= ? AND t.date < ? AND EXISTS (SELECT 1 FROM invoice_cache ic WHERE ic.transaction_id = t.id)`,
+      sql: `SELECT COUNT(*) as c FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE ba.company_id = ? AND ba.type = 'checking' AND t.date >= ? AND t.date < ? AND ${blocklist_sql} AND EXISTS (SELECT 1 FROM invoice_cache ic WHERE ic.transaction_id = t.id)`,
       args: [cid, start, end]
     });
     const total = Number(totalRes.rows[0]?.c || 0);
@@ -3309,7 +3600,7 @@ app.get('/api/invoices/transactions', async (c) => {
     ic.id as invoice_id, ic.filename, ic.drive_file_id, ic.vendor, ic.amount_ht, ic.date as invoice_date
     FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id
     LEFT JOIN invoice_cache ic ON ic.transaction_id = t.id
-    WHERE ba.company_id = ? AND t.date >= ? AND t.date < ?`;
+    WHERE ba.company_id = ? AND ba.type = 'checking' AND t.date >= ? AND t.date < ? AND ${blocklist_sql}`;
   const args: any[] = [Number(companyId), start, end];
   if (matched === 'true') sql += ' AND ic.id IS NOT NULL';
   else if (matched === 'false') sql += ' AND ic.id IS NULL';

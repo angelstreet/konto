@@ -294,6 +294,8 @@ export async function initDatabase() {
       date TEXT,
       invoice_number TEXT,
       match_confidence REAL,
+      raw_text TEXT,
+      extraction_method TEXT,
       scanned_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(drive_file_id)
     );
@@ -381,6 +383,14 @@ export async function migrateDatabase() {
     await db.execute("SELECT folder_path FROM drive_connections LIMIT 1");
   } catch {
     await db.execute("ALTER TABLE drive_connections ADD COLUMN folder_path TEXT");
+  }
+
+  // Add raw_text and extraction_method to invoice_cache for OCR results
+  for (const col of ['raw_text TEXT', 'extraction_method TEXT']) {
+    const name = col.split(' ')[0];
+    try { await db.execute(`SELECT ${name} FROM invoice_cache LIMIT 1`); } catch {
+      await db.execute(`ALTER TABLE invoice_cache ADD COLUMN ${col}`);
+    }
   }
 }
 

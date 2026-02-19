@@ -113,3 +113,89 @@ Supports 10 networks. **One-click MetaMask connect** — same address (e.g. Meta
 | Revolut | - | ❌ No API | Manual only |
 | eToro | - | ❌ No API | Manual only |
 | Yuh | - | ❌ No API | Manual only |
+
+---
+
+## 9. Google Drive — Invoice Scan & Rapprochement
+
+**Status:** ✅ Live
+
+### Overview
+
+Scans PDF invoices from Google Drive, extracts amounts/dates/vendors via OCR, and auto-matches them to bank transactions (rapprochement).
+
+### Connection Model
+
+- **One global Drive connection per user** (not per company)
+- Per-company **folder selection** — each company picks which Drive folder to scan
+- OAuth2 with `drive.readonly` scope, token auto-refresh
+
+### Scan Pipeline (3-tier text extraction)
+
+```
+PDF file from Drive
+  │
+  ├─ 1. pdf-parse (text layer extraction)
+  │    └─ Trust only if >200 chars AND both amount+date found
+  │
+  ├─ 2. Tesseract OCR (local, ~1-2s per page)
+  │    └─ pdftoppm (300dpi PNG) → tesseract (eng+fra)
+  │    └─ Use if pdf-parse insufficient
+  │
+  └─ 3. Google Drive OCR (network, last resort)
+       └─ Upload as image, convert to Google Doc, read text
+       └─ Use only if Tesseract also fails
+```
+
+**Why 3 tiers?**
+- Many invoices (Cursor, Anthropic, etc.) are styled HTML-to-PDF where pdf-parse gets almost no text
+- Tesseract handles these perfectly and is free/local (~1-2s per page)
+- Drive OCR is the final fallback but uses network and API quota
+
+### Text Parsing (`parseInvoiceText`)
+
+Extracts from OCR'd text using regex patterns:
+
+| Field | Patterns (priority order) |
+|-------|--------------------------|
+| Amount | "Montant dû" / "Amount due" → "Total" → Currency-prefixed ($30.00, €21.60) → Generic number patterns |
+| Date | French ("21 novembre 2025") → English ("November 21, 2025") → ISO (2025-11-21) → DD/MM/YYYY, MM/DD/YYYY |
+| Vendor | "Invoice from X" → "Bill to" context → Filename-based fallback |
+
+### Matching Logic (scoring system)
+
+Candidates: checking account transactions within ±14 days of invoice date.
+
+| Signal | Max Points | Scoring |
+|--------|-----------|---------|
+| Amount | 50 | Exact=50, <1%=40, <5%=25, <10%=15, <20%=8 (best of EUR vs USD match) |
+| Date | 35 | Same day=35, ±1d=25, ±3d=20, ±7d=15, ±14d=8 |
+| Vendor | 30 | Full name match=30, partial word=20 |
+
+**Threshold: >60** (requires at least 2 strong signals out of 3)
+
+### Filters
+
+- **Account type:** Only `checking` accounts (excludes investment, savings, loan)
+- **Label blocklist:** Transactions starting with blocked prefixes (e.g. "COUPONS") are excluded
+
+### System Dependencies
+
+```bash
+apt install tesseract-ocr tesseract-ocr-fra poppler-utils
+# tesseract: OCR engine
+# tesseract-ocr-fra: French language data
+# poppler-utils: pdftoppm for PDF→PNG conversion
+```
+
+### API Endpoints
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/drive/status` | GET | Check Drive connection status |
+| `/api/drive/connect` | GET | Initiate OAuth2 flow |
+| `/api/invoices/scan` | POST | Scan Drive folder, extract text, match transactions |
+| `/api/invoices/list` | GET | List cached invoices with match status |
+| `/api/invoices/debug` | GET | Debug view: extraction data + nearest transactions |
+| `/api/reconciliation/stats` | GET | Match/total counts for a company+year |
+| `/api/reconciliation/transactions` | GET | Transactions with match status |

@@ -152,13 +152,14 @@ export default function Accounts() {
   const connectBank = async () => {
     const res = await authFetch(`${API}/bank/connect-url`);
     const { url } = await res.json();
-    window.location.href = url;
+    // Use light-mode wrapper so Powens QR codes remain scannable
+    window.location.href = `${API}/bank/webview?url=${encodeURIComponent(url)}`;
   };
 
   const reconnectAccount = async (accountId: number) => {
     const res = await authFetch(`${API}/bank/reconnect-url/${accountId}`);
     const { url } = await res.json();
-    window.location.href = url;
+    window.location.href = `${API}/bank/webview?url=${encodeURIComponent(url)}`;
   };
 
   const connectCoinbase = async () => {

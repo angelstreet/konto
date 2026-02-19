@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, RefreshCw, CloudOff, ArrowLeft, FolderOpen, Pencil, Check, Paperclip, Upload, Link2, X, Unlink } from 'lucide-react';
+import { Search, RefreshCw, CloudOff, ArrowLeft, FolderOpen, Pencil, Check, Paperclip, Upload, Link2, X, Unlink, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch, useApi } from '../useApi';
 import DriveFolderPickerModal from '../components/DriveFolderPickerModal';
@@ -452,6 +452,18 @@ export default function Invoices() {
                     <div className="flex items-center gap-1 mt-0.5">
                       <Paperclip size={10} className="text-green-400/70 shrink-0" />
                       <span className="text-xs text-green-400/70 truncate">{tx.filename}</span>
+                      {tx.drive_file_id && (
+                        <a
+                          href={`https://drive.google.com/file/d/${tx.drive_file_id}/view`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-green-400/50 hover:text-green-400 transition-colors shrink-0 ml-0.5"
+                          title="Ouvrir dans Drive"
+                          onClick={e => e.stopPropagation()}
+                        >
+                          <ExternalLink size={10} />
+                        </a>
+                      )}
                     </div>
                   )}
                 </div>
