@@ -316,8 +316,8 @@ export default function Sidebar({ onLogout }: Props) {
               {group.labelKey && !collapsed && (
                 <button
                   onClick={() => toggleGroup(gi)}
-                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-[10px] font-semibold uppercase tracking-wider transition-colors ${
-                    hasActiveItem ? 'text-accent-400/70' : 'text-muted/50 hover:text-muted/80'
+                  className={`w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-[12px] font-semibold uppercase tracking-wider transition-colors ${
+                    hasActiveItem ? 'text-accent-400/70' : 'text-muted/60 hover:text-muted/80'
                   }`}
                 >
                   <span>{t(group.labelKey)}</span>

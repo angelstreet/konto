@@ -167,6 +167,8 @@
   "add_blockchain_desc": "Bitcoin, Ethereum, Solana...",
   "add_coinbase": "Coinbase",
   "add_coinbase_desc": "Coming soon",
+  "add_binance": "Binance",
+  "add_binance_desc": "Read-only API",
   "account_name": "Account name",
   "provider_name": "Bank / provider name",
   "initial_balance": "Current balance",
