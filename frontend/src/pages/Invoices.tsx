@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Search, RefreshCw, CloudOff, ArrowLeft, FolderOpen, Pencil, Check, Paperclip, Upload, Link2, X, Unlink, ExternalLink } from 'lucide-react';
+import { Search, RefreshCw, CloudOff, ArrowLeft, FolderOpen, Check, Paperclip, Upload, Link2, Unlink, ExternalLink } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch, useApi } from '../useApi';
 import DriveFolderPickerModal from '../components/DriveFolderPickerModal';
