@@ -396,6 +396,65 @@ export default function Settings() {
         <LogOut size={18} />
         <span className="text-sm">{t('logout')}</span>
       </button>
+
+      {/* RGPD Section */}
+      <div className="mt-8">
+        <h3 className="text-xs text-muted uppercase tracking-wider mb-3">{t('rgpd_title', 'Données personnelles (RGPD)')}</h3>
+        <div className="bg-surface rounded-xl border border-border divide-y divide-border overflow-hidden">
+          <button
+            onClick={async () => {
+              try {
+                const res = await authFetch('/api/account/data');
+                const data = await res.json();
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `konto-data-export-${new Date().toISOString().split('T')[0]}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              } catch {}
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+          >
+            <Download size={18} className="text-accent-400" />
+            <div>
+              <span className="text-sm">{t('export_my_data', 'Exporter mes données')}</span>
+              <p className="text-xs text-muted mt-0.5">{t('export_my_data_desc', 'Télécharger toutes vos données au format JSON')}</p>
+            </div>
+          </button>
+
+          <button
+            onClick={() => navigate('/privacy')}
+            className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+          >
+            <Shield size={18} className="text-muted" />
+            <span className="text-sm">{t('privacy_policy', 'Politique de confidentialité')}</span>
+          </button>
+
+          <button
+            onClick={() => {
+              if (window.confirm(t('delete_account_confirm', 'Êtes-vous sûr ? Cette action est IRRÉVERSIBLE. Toutes vos données seront définitivement supprimées.'))) {
+                if (window.confirm(t('delete_account_confirm2', 'Dernière confirmation : supprimer définitivement votre compte et toutes vos données ?'))) {
+                  authFetch('/api/account', { method: 'DELETE' })
+                    .then(() => {
+                      localStorage.clear();
+                      window.location.href = '/konto/';
+                    })
+                    .catch(() => alert('Erreur lors de la suppression'));
+                }
+              }
+            }}
+            className="w-full flex items-center gap-3 px-4 py-3.5 text-left text-red-500 hover:bg-red-500/10 transition-colors"
+          >
+            <CloudOff size={18} />
+            <div>
+              <span className="text-sm font-medium">{t('delete_account', 'Supprimer mon compte')}</span>
+              <p className="text-xs text-red-400/60 mt-0.5">{t('delete_account_desc', 'Suppression définitive et irréversible de toutes vos données')}</p>
+            </div>
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

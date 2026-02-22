@@ -21,7 +21,31 @@ const bip32 = BIP32Factory(ecc);
 
 const app = new Hono();
 
-app.use('/*', cors());
+// --- CORS: restrict in production ---
+const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS
+  ? process.env.ALLOWED_ORIGINS.split(',')
+  : ['http://localhost:5003', 'http://localhost:5173'];
+
+app.use('/*', cors({
+  origin: (origin) => {
+    // In production, only allow configured origins
+    if (!origin) return origin; // same-origin requests
+    if (ALLOWED_ORIGINS.includes('*') || ALLOWED_ORIGINS.includes(origin)) return origin;
+    // Allow Vercel preview URLs
+    if (origin.endsWith('.vercel.app')) return origin;
+    return ALLOWED_ORIGINS[0]; // fallback
+  },
+  credentials: true,
+}));
+
+// --- Security headers ---
+app.use('/*', async (c, next) => {
+  await next();
+  c.header('X-Content-Type-Options', 'nosniff');
+  c.header('X-Frame-Options', 'DENY');
+  c.header('Referrer-Policy', 'strict-origin-when-cross-origin');
+  c.header('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+});
 
 // --- Clerk Auth Middleware ---
 // If CLERK_SECRET_KEY is set, validate Clerk JWTs on all /api/* routes.
@@ -263,6 +287,63 @@ app.put('/api/profile', async (c) => {
   });
   const result = await db.execute({ sql: 'SELECT id, email, name, phone, address, created_at FROM users WHERE id = ?', args: [userId] });
   return c.json(result.rows[0]);
+});
+
+// --- RGPD: Account deletion (right to erasure) ---
+app.delete('/api/account', async (c) => {
+  const userId = await getUserId(c);
+
+  // Delete all user data in dependency order
+  await db.execute({ sql: 'DELETE FROM invoice_cache WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM patrimoine_snapshots WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM analytics_cache WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM income_entries WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM drive_connections WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM coinbase_connections WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM binance_connections WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM payslips WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM drive_folder_mappings WHERE user_id = ?', args: [userId] });
+
+  // Delete asset sub-tables
+  const assetIds = await db.execute({ sql: 'SELECT id FROM assets WHERE user_id = ?', args: [userId] });
+  for (const a of assetIds.rows as any[]) {
+    await db.execute({ sql: 'DELETE FROM asset_costs WHERE asset_id = ?', args: [a.id] });
+    await db.execute({ sql: 'DELETE FROM asset_revenues WHERE asset_id = ?', args: [a.id] });
+  }
+  await db.execute({ sql: 'DELETE FROM assets WHERE user_id = ?', args: [userId] });
+
+  // Delete transactions for user's accounts
+  await db.execute({ sql: 'DELETE FROM transactions WHERE bank_account_id IN (SELECT id FROM bank_accounts WHERE user_id = ?)', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM investments WHERE bank_account_id IN (SELECT id FROM bank_accounts WHERE user_id = ?)', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM bank_accounts WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM bank_connections WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM companies WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM user_preferences WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [userId] });
+
+  return c.json({ ok: true, message: 'All your data has been permanently deleted.' });
+});
+
+// --- RGPD: Data export (right to portability) ---
+app.get('/api/account/data', async (c) => {
+  const userId = await getUserId(c);
+  const user = await db.execute({ sql: 'SELECT id, email, name, phone, address, created_at FROM users WHERE id = ?', args: [userId] });
+  const companies = await db.execute({ sql: 'SELECT * FROM companies WHERE user_id = ?', args: [userId] });
+  const accounts = await db.execute({ sql: 'SELECT id, name, custom_name, bank_name, account_number, iban, balance, type, usage, currency, created_at FROM bank_accounts WHERE user_id = ?', args: [userId] });
+  const transactions = await db.execute({ sql: 'SELECT t.date, t.amount, t.label, t.category FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE ba.user_id = ?', args: [userId] });
+  const assets = await db.execute({ sql: 'SELECT type, name, purchase_price, current_value, address, created_at FROM assets WHERE user_id = ?', args: [userId] });
+  const income = await db.execute({ sql: 'SELECT * FROM income_entries WHERE user_id = ?', args: [userId] });
+
+  return c.json({
+    exported_at: new Date().toISOString(),
+    format: 'RGPD Data Export',
+    user: user.rows[0] || null,
+    companies: companies.rows,
+    bank_accounts: accounts.rows,
+    transactions: transactions.rows,
+    assets: assets.rows,
+    income: income.rows,
+  });
 });
 
 // --- Companies ---

@@ -29,6 +29,8 @@ import { FilterProvider } from './FilterContext';
 import { PreferencesProvider, usePreferences } from './PreferencesContext';
 import { AmountVisibilityProvider } from './AmountVisibilityContext';
 import { LogoutProvider } from './LogoutContext';
+import CookieConsent from './components/CookieConsent';
+import Privacy from './pages/Privacy';
 
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -62,6 +64,7 @@ function AppRoutes() {
       <Route path="/simulators" element={<CreditSimulator />} />
       <Route path="/outils" element={<Outils />} />
       <Route path="/more" element={<More />} />
+      <Route path="/privacy" element={<Privacy />} />
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
@@ -150,6 +153,7 @@ function ClerkAppInner({ onLogout }: { onLogout: () => void }) {
           <Layout onLogout={onLogout}>
             <AppRoutes />
           </Layout>
+          <CookieConsent />
         </FilterProvider>
       </AmountVisibilityProvider>
     </LogoutProvider>
@@ -217,6 +221,7 @@ function LegacyAppInner({ onLogout }: { onLogout: () => void }) {
           <Layout onLogout={onLogout}>
             <AppRoutes />
           </Layout>
+          <CookieConsent />
         </FilterProvider>
       </AmountVisibilityProvider>
     </LogoutProvider>
