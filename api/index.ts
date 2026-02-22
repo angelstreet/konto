@@ -1,18 +1,13 @@
 import { handle } from 'hono/vercel';
-
-// Import the app - need to init DB first
 import { initDatabase, migrateDatabase } from '../backend/src/db.js';
 import { app } from '../backend/src/index.js';
 
-let initialized = false;
+// Initialize DB on cold start (top-level await)
+await initDatabase();
+await migrateDatabase();
 
-const handler = async (req: Request) => {
-  if (!initialized) {
-    await initDatabase();
-    await migrateDatabase();
-    initialized = true;
-  }
-  return handle(app)(req);
+export const config = {
+  runtime: 'nodejs',
 };
 
-export default handler;
+export default handle(app);
