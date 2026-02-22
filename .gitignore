@@ -11,3 +11,4 @@ frontend/.env.local.backup
 *.db-wal
 *.db-journal
 backend/db/backups/
+.vercel

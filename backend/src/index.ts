@@ -8,16 +8,23 @@ import { execSync } from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
 import * as fs from 'fs';
-import * as ecc from 'tiny-secp256k1';
-import { BIP32Factory } from 'bip32';
-import * as bitcoin from 'bitcoinjs-lib';
+// Lazy-load Bitcoin modules (contain WASM that breaks Vercel serverless)
+let bip32: any = null;
+let bitcoin: any = null;
+async function loadBitcoinModules() {
+  if (bip32) return;
+  const ecc = await import('tiny-secp256k1');
+  const { BIP32Factory } = await import('bip32');
+  bitcoin = await import('bitcoinjs-lib');
+  bip32 = BIP32Factory(ecc);
+}
 
-// Import cron jobs - these will start automatically when imported
-import './jobs/createDailySnapshots.js';
-import './jobs/refreshStaleConnections.js';
-import { cronMonitor } from './jobs/cronMonitor.js';
-
-const bip32 = BIP32Factory(ecc);
+// Import cron jobs - these will start automatically when imported (only in standalone mode)
+if (!process.env.VERCEL) {
+  await import('./jobs/createDailySnapshots.js');
+  await import('./jobs/refreshStaleConnections.js');
+}
+const { cronMonitor } = await import('./jobs/cronMonitor.js');
 
 const app = new Hono();
 
@@ -1577,6 +1584,7 @@ async function fetchBlockchainBalance(network: string, address: string): Promise
     return { balance: (data.result?.value || 0) / 1e9, currency: 'SOL' };
   }
   if (network === 'bitcoin') {
+    await loadBitcoinModules();
     // xpub → derive native segwit (bc1) addresses and scan via Blockstream
     if (/^[xyz]pub/.test(address)) {
       const node = bip32.fromBase58(address);
@@ -1645,6 +1653,7 @@ async function fetchBlockchainTransactions(network: string, address: string): Pr
   const txs: BlockchainTx[] = [];
 
   if (network === 'bitcoin') {
+    await loadBitcoinModules();
     // For xpub: derive addresses and aggregate txs, dedup by txid
     const addresses: string[] = [];
     const addressSet = new Set<string>();
