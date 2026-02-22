@@ -2,9 +2,10 @@ import { API } from '../config';
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload, Type, EyeOff, Coins, Bitcoin, Home, ArrowLeft, CloudOff, Cloud } from 'lucide-react';
+import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload, Type, EyeOff, Coins, Bitcoin, Home, ArrowLeft, CloudOff, Cloud, User } from 'lucide-react';
 import { usePreferences } from '../PreferencesContext';
 import { useAuthFetch } from '../useApi';
+import { useLogout } from '../LogoutContext';
 
 const THEMES = [
   { id: 'gold', label: 'Gold', color: '#d4a812' },
@@ -29,6 +30,7 @@ export default function Settings() {
     () => localStorage.getItem('konto_hide_amounts') !== 'false'
   );
   const authFetch = useAuthFetch();
+  const logout = useLogout();
   const { prefs, update: updatePrefs } = usePreferences();
   const [showCurrency, setShowCurrency] = useState(false);
   const [showCryptoMode, setShowCryptoMode] = useState(false);
@@ -102,6 +104,14 @@ export default function Settings() {
       </div>
 
       <div className="bg-surface rounded-xl border border-border divide-y divide-border">
+        <button
+          onClick={() => navigate('/profile')}
+          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+        >
+          <User size={18} className="text-muted" />
+          <span className="text-sm">{t('profile')}</span>
+        </button>
+
         <button
           onClick={() => navigate('/companies')}
           className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
@@ -380,10 +390,7 @@ export default function Settings() {
       </div>
 
       <button
-        onClick={() => {
-          localStorage.removeItem('konto_auth');
-          window.location.reload();
-        }}
+        onClick={logout}
         className="w-full mt-4 flex items-center gap-3 px-4 py-3.5 bg-surface rounded-xl border border-border text-red-400 hover:bg-surface-hover transition-colors"
       >
         <LogOut size={18} />

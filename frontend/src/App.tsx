@@ -23,10 +23,12 @@ import Outils from './pages/Outils';
 import Onboarding from './pages/Onboarding';
 import Trends from './pages/Trends';
 import PropertyROI from './pages/PropertyROI';
+import Profile from './pages/Profile';
 import Import from './pages/Import';
 import { FilterProvider } from './FilterContext';
 import { PreferencesProvider, usePreferences } from './PreferencesContext';
 import { AmountVisibilityProvider } from './AmountVisibilityContext';
+import { LogoutProvider } from './LogoutContext';
 
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -38,6 +40,7 @@ function AppRoutes() {
       <Route path="/transactions" element={<Transactions />} />
       <Route path="/companies" element={<Company />} />
       <Route path="/settings" element={<Settings />} />
+      <Route path="/profile" element={<Profile />} />
       <Route path="/assets" element={<Assets />} />
       <Route path="/analysis" element={<Analytics />} />
       <Route path="/cashflow" element={<ComingSoon titleKey="nav_cashflow" />} />
@@ -141,13 +144,15 @@ function ClerkAppInner({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <AmountVisibilityProvider>
-      <FilterProvider>
-        <Layout onLogout={onLogout}>
-          <AppRoutes />
-        </Layout>
-      </FilterProvider>
-    </AmountVisibilityProvider>
+    <LogoutProvider value={onLogout}>
+      <AmountVisibilityProvider>
+        <FilterProvider>
+          <Layout onLogout={onLogout}>
+            <AppRoutes />
+          </Layout>
+        </FilterProvider>
+      </AmountVisibilityProvider>
+    </LogoutProvider>
   );
 }
 
@@ -155,9 +160,10 @@ function LegacyApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(
     () => {
       const stored = localStorage.getItem('konto_auth') === 'true';
+      const loggedOut = sessionStorage.getItem('konto_logged_out') === 'true';
       const hostname = window.location.hostname;
       const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
-      if (isLocal && !stored) {
+      if (isLocal && !stored && !loggedOut) {
         localStorage.setItem('konto_auth', 'true');
         return true;
       }
@@ -166,6 +172,7 @@ function LegacyApp() {
   );
 
   const login = () => {
+    sessionStorage.removeItem('konto_logged_out');
     localStorage.setItem('konto_auth', 'true');
     setIsAuthenticated(true);
   };
@@ -173,6 +180,7 @@ function LegacyApp() {
   const logout = () => {
     localStorage.removeItem('konto_auth');
     localStorage.removeItem('konto_sidebar_collapsed');
+    sessionStorage.setItem('konto_logged_out', 'true');
     setIsAuthenticated(false);
   };
 
@@ -203,13 +211,15 @@ function LegacyAppInner({ onLogout }: { onLogout: () => void }) {
   }
 
   return (
-    <AmountVisibilityProvider>
-      <FilterProvider>
-        <Layout onLogout={onLogout}>
-          <AppRoutes />
-        </Layout>
-      </FilterProvider>
-    </AmountVisibilityProvider>
+    <LogoutProvider value={onLogout}>
+      <AmountVisibilityProvider>
+        <FilterProvider>
+          <Layout onLogout={onLogout}>
+            <AppRoutes />
+          </Layout>
+        </FilterProvider>
+      </AmountVisibilityProvider>
+    </LogoutProvider>
   );
 }
 

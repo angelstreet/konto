@@ -335,5 +335,16 @@
   "net_annual": "Salaire net annuel",
   "start_date": "Date de début",
   "end_date": "Date de fin",
-  "period": "Période"
+  "period": "Période",
+  "patrimoine_evolution_short": "Évolution",
+  "profile": "Profil",
+  "email": "Email",
+  "name": "Nom",
+  "phone": "Téléphone",
+  "your_name": "Votre nom",
+  "your_phone": "Votre numéro de téléphone",
+  "your_address": "Votre adresse",
+  "member_since": "Membre depuis",
+  "save": "Enregistrer",
+  "saved": "Enregistré"
 }

@@ -245,6 +245,26 @@ app.get('/api/users', async (c) => {
   return c.json(result.rows);
 });
 
+// --- Profile ---
+app.get('/api/profile', async (c) => {
+  const userId = await getUserId(c);
+  const result = await db.execute({ sql: 'SELECT id, email, name, phone, address, created_at FROM users WHERE id = ?', args: [userId] });
+  if (result.rows.length === 0) return c.json({ error: 'User not found' }, 404);
+  return c.json(result.rows[0]);
+});
+
+app.put('/api/profile', async (c) => {
+  const userId = await getUserId(c);
+  const body = await c.req.json();
+  const { name, phone, address } = body;
+  await db.execute({
+    sql: 'UPDATE users SET name = ?, phone = ?, address = ? WHERE id = ?',
+    args: [name || '', phone || null, address || null, userId]
+  });
+  const result = await db.execute({ sql: 'SELECT id, email, name, phone, address, created_at FROM users WHERE id = ?', args: [userId] });
+  return c.json(result.rows[0]);
+});
+
 // --- Companies ---
 app.get('/api/companies', async (c) => {
   const userId = await getUserId(c);

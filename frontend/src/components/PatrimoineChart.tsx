@@ -43,19 +43,18 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
 
   return (
     <div className="bg-surface rounded-xl border border-border p-4">
-      <div className="flex items-center justify-between mb-3">
-        <div>
-          <h3 className="text-sm font-medium text-muted tracking-wide">{t('patrimoine_evolution') || 'Évolution du patrimoine'}{!showNet ? ` (${t('balance_brut') || 'brut'})` : ''}</h3>
+      <div className="mb-3">
+        <div className="flex items-baseline gap-2 flex-wrap">
+          <h3 className="text-sm font-medium text-muted tracking-wide whitespace-nowrap">{t('patrimoine_evolution_short') || t('patrimoine_evolution') || 'Évolution'}{!showNet ? ` (${t('balance_brut') || 'brut'})` : ''}</h3>
           {data.length > 0 && (
-            <div className="flex items-baseline gap-2 mt-1">
-              <span className="text-lg font-bold text-accent-400">{hideAmounts ? <span className="amount-masked">{formatCurrency(latestValue)}</span> : formatCurrency(latestValue)}</span>
-              <span className={`text-xs font-medium ${change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+            <>
+              <span className="text-lg font-bold text-accent-400 whitespace-nowrap">{hideAmounts ? <span className="amount-masked">{formatCurrency(latestValue)}</span> : formatCurrency(latestValue)}</span>
+              <span className={`text-xs font-medium whitespace-nowrap ${change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {hideAmounts ? <span className="amount-masked">{change >= 0 ? '+' : ''}{formatCurrency(change)} ({changePct >= 0 ? '+' : ''}{changePct.toFixed(1)}%)</span> : <>{change >= 0 ? '+' : ''}{formatCurrency(change)} ({changePct >= 0 ? '+' : ''}{changePct.toFixed(1)}%)</>}
               </span>
-            </div>
+            </>
           )}
-        </div>
-        <div className="flex gap-1">
+          <div className="flex gap-1 ml-auto flex-shrink-0">
           {ranges.map(r => (
             <button
               key={r}
@@ -67,6 +66,7 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
               {rangeLabels[r]}
             </button>
           ))}
+          </div>
         </div>
       </div>
 

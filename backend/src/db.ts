@@ -385,6 +385,14 @@ export async function migrateDatabase() {
     await db.execute("ALTER TABLE drive_connections ADD COLUMN folder_path TEXT");
   }
 
+  // Add phone and address to users for profile page
+  for (const col of ['phone TEXT', 'address TEXT']) {
+    const name = col.split(' ')[0];
+    try { await db.execute(`SELECT ${name} FROM users LIMIT 1`); } catch {
+      await db.execute(`ALTER TABLE users ADD COLUMN ${col}`);
+    }
+  }
+
   // Add raw_text and extraction_method to invoice_cache for OCR results
   for (const col of ['raw_text TEXT', 'extraction_method TEXT']) {
     const name = col.split(' ')[0];
