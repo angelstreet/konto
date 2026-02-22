@@ -4164,7 +4164,7 @@ app.get('/api/properties/roi', async (c) => {
   });
 
   // Match costs to properties
-  const costsByApt: Record<number, { total: number; byMonth: Record<string, number>; matched: string[] }> = {};
+  const costsByApt: Record<number, { total: number; byMonth: Record<string, number>; matched: { label: any; amount: number; date: string }[] }> = {};
   for (const apt of apartments) {
     costsByApt[apt.id] = { total: 0, byMonth: {}, matched: [] };
   }
