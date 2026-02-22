@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import { serve } from '@hono/node-server';
+// serve imported dynamically in main() to avoid breaking Vercel serverless
 import { verifyToken } from '@clerk/backend';
 import db, { initDatabase, migrateDatabase, ensureUser } from './db.js';
 import { execSync } from 'child_process';
@@ -4979,6 +4979,7 @@ async function backgroundSyncAll() {
 async function main() {
   await initDatabase();
   await migrateDatabase();
+  const { serve } = await import('@hono/node-server');
   serve({ fetch: app.fetch, port: Number(process.env.PORT) || 5004 }, (info) => {
     console.log(`🦎 Konto API running on http://localhost:${info.port}`);
     // Sync all accounts in background on startup
@@ -4986,4 +4987,6 @@ async function main() {
   });
 }
 
-main().catch(console.error);
+if (!process.env.VERCEL) {
+  main().catch(console.error);
+}
