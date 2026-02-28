@@ -951,3 +951,67 @@ router.get('/api/properties/roi', async (c) => {
 
 
 export default router;
+
+
+// --- Dashboard summary ---
+router.get('/api/dashboard', async (c) => {
+  const userId = await getUserId(c);
+  const usage = c.req.query('usage');
+  const companyId = c.req.query('company_id');
+  let accountWhere = 'hidden = 0 AND user_id = ?';
+  const accountParams: any[] = [userId];
+  if (usage === 'personal') { accountWhere += ' AND usage = ?'; accountParams.push('personal'); }
+  else if (usage === 'professional') { accountWhere += ' AND usage = ?'; accountParams.push('professional'); }
+  else if (companyId) { accountWhere += ' AND company_id = ?'; accountParams.push(companyId); }
+
+  const accountsResult = await db.execute({ sql: `SELECT * FROM bank_accounts WHERE ${accountWhere}`, args: accountParams });
+  const accounts = accountsResult.rows as any[];
+  const companiesResult = await db.execute({ sql: 'SELECT COUNT(*) as count FROM companies WHERE user_id = ?', args: [userId] });
+  const companyCount = (companiesResult.rows[0] as any)?.count || 0;
+
+  const accountsByType: Record<string, any[]> = { checking: [], savings: [], investment: [], loan: [] };
+  for (const a of accounts) {
+    const type = a.type || 'checking';
+    if (!accountsByType[type]) accountsByType[type] = [];
+    accountsByType[type].push({ id: a.id, name: a.custom_name || a.name, balance: a.balance || 0, type, currency: a.currency || 'EUR' });
+  }
+
+  const brutBalance = [...accountsByType.checking, ...accountsByType.savings, ...accountsByType.investment]
+    .reduce((sum: number, a: any) => sum + a.balance, 0);
+  const loanTotal = accountsByType.loan.reduce((sum: number, a: any) => sum + a.balance, 0);
+  const netBalance = brutBalance + loanTotal;
+
+  let personalBalance = 0, proBalance = 0;
+  for (const a of accounts) {
+    if (a.type === 'loan') continue;
+    if (a.usage === 'professional') proBalance += (a.balance || 0);
+    else personalBalance += (a.balance || 0);
+  }
+
+  let assetWhere = 'a.user_id = ?';
+  const assetParams: any[] = [userId];
+  if (usage === 'personal') { assetWhere += ' AND a.usage = ?'; assetParams.push('personal'); }
+  else if (usage === 'professional') { assetWhere += ' AND a.usage = ?'; assetParams.push('professional'); }
+  else if (companyId) { assetWhere += ' AND a.company_id = ?'; assetParams.push(companyId); }
+  const assetsResult = await db.execute({
+    sql: `SELECT a.id, a.type, a.name, a.current_value, a.purchase_price, ba.balance as loan_balance
+          FROM assets a LEFT JOIN bank_accounts ba ON ba.id = a.linked_loan_account_id WHERE ${assetWhere}`,
+    args: assetParams
+  });
+  const assets = assetsResult.rows as any[];
+
+  const patrimoineBrut = assets.reduce((sum: number, a: any) => sum + (a.current_value || a.purchase_price || 0), 0);
+  const patrimoineLoans = assets.reduce((sum: number, a: any) => sum + (a.loan_balance || 0), 0);
+  const patrimoineNet = patrimoineBrut + patrimoineLoans;
+
+  return c.json({
+    financial: { brutBalance, netBalance, accountsByType },
+    patrimoine: {
+      brutValue: patrimoineBrut, netValue: patrimoineNet, count: assets.length,
+      assets: assets.map((a: any) => ({ id: a.id, type: a.type, name: a.name, currentValue: a.current_value || a.purchase_price || 0, loanBalance: a.loan_balance || 0 })),
+    },
+    totals: { brut: brutBalance + patrimoineBrut, net: netBalance + patrimoineNet },
+    accountCount: accounts.length, companyCount,
+    distribution: { personal: personalBalance, pro: proBalance },
+  });
+});
