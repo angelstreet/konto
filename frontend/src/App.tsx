@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useUser, useClerk as useClerkHook, SignIn } from '@clerk/clerk-react';
 import { dark } from '@clerk/themes';
-import { enableSandbox, isSandbox } from './sandbox';
+import { enableSandbox, isSandbox, disableSandbox } from './sandbox';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -131,7 +131,7 @@ function ClerkApp() {
     if (sandboxMode) {
       return (
         <PreferencesProvider>
-          <ClerkAppInner onLogout={() => { void signOut().finally(() => window.location.reload()); }} />
+          <ClerkAppInner onLogout={() => { disableSandbox(); window.location.reload(); }} />
         </PreferencesProvider>
       );
     }
