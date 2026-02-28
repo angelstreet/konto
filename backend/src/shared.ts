@@ -76,9 +76,30 @@ export async function getUserId(c: any): Promise<number> {
   if (result.rows.length > 0) return result.rows[0].id as number;
   const legacyResult = await db.execute({ sql: 'SELECT id FROM users WHERE email = ?', args: ['demo@konto.app'] });
   if (legacyResult.rows.length > 0) return legacyResult.rows[0].id as number;
-  const ins = await db.execute({ sql: 'INSERT INTO users (email, name, role) VALUES (?, ?, ?)', args: [process.env.DEFAULT_ADMIN_EMAIL || 'admin@example.com', process.env.DEFAULT_ADMIN_NAME || 'Admin', 'admin'] });
+  const fallbackEmail = process.env.DEFAULT_ADMIN_EMAIL || 'admin@example.com';
+  const fallbackName = process.env.DEFAULT_ADMIN_NAME || 'Admin';
+
+  // Production may already contain an admin user while demo user is absent.
+  // Reuse existing rows instead of trying to insert a duplicate email.
+  const existingFallback = await db.execute({ sql: 'SELECT id FROM users WHERE email = ?', args: [fallbackEmail] });
+  if (existingFallback.rows.length > 0) {
+    const id = Number(existingFallback.rows[0].id);
+    await db.execute({ sql: 'INSERT OR IGNORE INTO user_profiles (user_id, email, name) VALUES (?, ?, ?)', args: [id, fallbackEmail, fallbackName] });
+    return id;
+  }
+
+  // Final fallback: if any user exists, use it to avoid hard failure in legacy DB states.
+  const anyUser = await db.execute({ sql: 'SELECT id, email, name FROM users ORDER BY id ASC LIMIT 1' });
+  if (anyUser.rows.length > 0) {
+    const row: any = anyUser.rows[0];
+    const id = Number(row.id);
+    await db.execute({ sql: 'INSERT OR IGNORE INTO user_profiles (user_id, email, name) VALUES (?, ?, ?)', args: [id, row.email || fallbackEmail, row.name || fallbackName] });
+    return id;
+  }
+
+  const ins = await db.execute({ sql: 'INSERT INTO users (email, name, role) VALUES (?, ?, ?)', args: [fallbackEmail, fallbackName, 'admin'] });
   const newUserId = Number(ins.lastInsertRowid);
-  await db.execute({ sql: 'INSERT OR IGNORE INTO user_profiles (user_id, email, name) VALUES (?, ?, ?)', args: [newUserId, process.env.DEFAULT_ADMIN_EMAIL || 'admin@example.com', process.env.DEFAULT_ADMIN_NAME || 'Admin'] });
+  await db.execute({ sql: 'INSERT OR IGNORE INTO user_profiles (user_id, email, name) VALUES (?, ?, ?)', args: [newUserId, fallbackEmail, fallbackName] });
   return newUserId;
 }
 
