@@ -1,0 +1,168 @@
+{
+  "_meta": {
+    "description": "Country-level wealth, income and savings benchmarks. All monetary values in EUR.",
+    "sources": [
+      "Credit Suisse Global Wealth Databook 2022 (net_worth percentiles)",
+      "OECD Income Distribution Database 2022 (income percentiles)",
+      "World Inequality Database (WID) 2022 (income validation)",
+      "OECD Household Savings Data 2022 (savings_rate)"
+    ],
+    "vintage": "2022",
+    "notes": "Net worth = total assets minus liabilities per adult. Income = individual gross annual income. Savings rate = % of disposable income saved (negative = dissaving). All EUR values use 2022 average exchange rates: 1 USD=0.92 EUR, 1 CHF=1.01 EUR, 1 CNY=0.136 EUR."
+  },
+  "FR": {
+    "country_name": "France",
+    "net_worth": {
+      "p10":    2500,
+      "p25":   32000,
+      "p50":  133000,
+      "p75":  298000,
+      "p90":  619000,
+      "p95": 1050000,
+      "p99": 3250000
+    },
+    "income": {
+      "p10":  10500,
+      "p25":  17200,
+      "p50":  26400,
+      "p75":  41300,
+      "p90":  65000,
+      "p95":  88000,
+      "p99": 200000
+    },
+    "savings_rate": {
+      "national_avg": 17.5,
+      "p10":  -8,
+      "p25":   2,
+      "p50":  13,
+      "p75":  28,
+      "p90":  42,
+      "p95":  52,
+      "p99":  68
+    }
+  },
+  "DE": {
+    "country_name": "Germany",
+    "net_worth": {
+      "p10":     800,
+      "p25":   10000,
+      "p50":   66600,
+      "p75":  188000,
+      "p90":  465000,
+      "p95":  820000,
+      "p99": 2800000
+    },
+    "income": {
+      "p10":  15500,
+      "p25":  23500,
+      "p50":  36500,
+      "p75":  57000,
+      "p90":  86000,
+      "p95": 112000,
+      "p99": 270000
+    },
+    "savings_rate": {
+      "national_avg": 19.7,
+      "p10":  -5,
+      "p25":   5,
+      "p50":  16,
+      "p75":  32,
+      "p90":  47,
+      "p95":  57,
+      "p99":  73
+    }
+  },
+  "CH": {
+    "country_name": "Switzerland",
+    "net_worth": {
+      "p10":   11500,
+      "p25":   73000,
+      "p50":  169000,
+      "p75":  465000,
+      "p90": 1280000,
+      "p95": 2350000,
+      "p99": 7850000
+    },
+    "income": {
+      "p10":  39500,
+      "p25":  55500,
+      "p50":  83000,
+      "p75": 110000,
+      "p90": 143000,
+      "p95": 170000,
+      "p99": 290000
+    },
+    "savings_rate": {
+      "national_avg": 24.3,
+      "p10":   2,
+      "p25":  12,
+      "p50":  22,
+      "p75":  37,
+      "p90":  54,
+      "p95":  65,
+      "p99":  80
+    }
+  },
+  "US": {
+    "country_name": "United States",
+    "net_worth": {
+      "p10":    1500,
+      "p25":   20000,
+      "p50":   85800,
+      "p75":  280000,
+      "p90":  780000,
+      "p95": 1600000,
+      "p99": 8200000
+    },
+    "income": {
+      "p10":  14300,
+      "p25":  26900,
+      "p50":  49200,
+      "p75":  85000,
+      "p90": 138000,
+      "p95": 198000,
+      "p99": 550000
+    },
+    "savings_rate": {
+      "national_avg": 4.8,
+      "p10": -25,
+      "p25":  -7,
+      "p50":   2,
+      "p75":  14,
+      "p90":  30,
+      "p95":  42,
+      "p99":  62
+    }
+  },
+  "CN": {
+    "country_name": "China",
+    "net_worth": {
+      "p10":    1800,
+      "p25":    7500,
+      "p50":   24600,
+      "p75":   70000,
+      "p90":  180000,
+      "p95":  320000,
+      "p99": 1100000
+    },
+    "income": {
+      "p10":   2200,
+      "p25":   4800,
+      "p50":   9700,
+      "p75":  19500,
+      "p90":  37000,
+      "p95":  58000,
+      "p99": 175000
+    },
+    "savings_rate": {
+      "national_avg": 34.5,
+      "p10":   8,
+      "p25":  22,
+      "p50":  32,
+      "p75":  48,
+      "p90":  62,
+      "p95":  73,
+      "p99":  87
+    }
+  }
+}

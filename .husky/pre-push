@@ -1,0 +1,24 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "[pre-push] Running build..."
+npm run build
+
+echo "[pre-push] Generating screenshots..."
+if [ -z "$KONTO_BASE_URL" ]; then
+  for candidate in "https://127.0.0.1:8080/konto" "http://127.0.0.1:8080/konto" "http://localhost:5003/konto"; do
+    if curl -k -fsS "${candidate}/?demo=1" >/dev/null 2>&1; then
+      KONTO_BASE_URL="$candidate"
+      break
+    fi
+  done
+fi
+
+if [ -n "$KONTO_BASE_URL" ]; then
+  echo "[pre-push] Screenshot base URL: $KONTO_BASE_URL"
+  KONTO_BASE_URL="$KONTO_BASE_URL" node scripts/screenshot-all.cjs || echo "[pre-push] Screenshot warnings (non-blocking)"
+else
+  echo "[pre-push] No reachable app URL found (tried https://127.0.0.1:8080, http://127.0.0.1:8080, localhost:5003). Skipping screenshots."
+fi
+
+echo "[pre-push] Done."
