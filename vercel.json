@@ -3,8 +3,18 @@
   "installCommand": "npm install",
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
+  "headers": [
+    {
+      "source": "/konto/manifest.webmanifest",
+      "headers": [{ "key": "Content-Type", "value": "application/manifest+json" }]
+    }
+  ],
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/((?!api|manifest\\.webmanifest|sw\\.js|workbox-.*\\.js|registerSW\\.js).*)", "destination": "/index.html" }
+    { "source": "/konto/manifest.webmanifest", "destination": "/konto/manifest.webmanifest" },
+    { "source": "/konto/sw.js", "destination": "/konto/sw.js" },
+    { "source": "/konto/registerSW.js", "destination": "/konto/registerSW.js" },
+    { "source": "/konto/workbox-:path*", "destination": "/konto/workbox-:path*" },
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
