@@ -150,12 +150,42 @@ npm run build
 # Backend: node backend/dist/index.js
 ```
 
-## Security
+## Security & Privacy
 
-See [SECURITY.md](SECURITY.md) for:
-- Vulnerability reporting
-- Encryption architecture
-- API security (CSRF, rate limiting, auth)
+Konto takes your financial data seriously. Here's how it works:
+
+### Your bank credentials are safe
+
+Konto **never sees or stores your bank passwords**. Bank connections go through [Powens](https://www.powens.com/) (formerly Budget Insight), a regulated financial data aggregator:
+
+- **ACPR-licensed** (French banking authority) and **PSD2-compliant** (EU regulation)
+- Your credentials are entered directly on Powens' secure page — they never pass through Konto
+- Konto only receives **read-only** OAuth tokens — it is technically impossible to make transactions, transfers, or modify your accounts
+- Tokens are encrypted (AES-256-GCM) before storage
+
+### What Konto can and cannot do
+
+| | |
+|---|---|
+| ✅ **Can** | Read your account balances and transaction history |
+| ✅ **Can** | Read your investment positions and valuations |
+| ❌ **Cannot** | Make transfers, payments, or any transactions |
+| ❌ **Cannot** | Access your bank login credentials |
+| ❌ **Cannot** | Modify anything in your bank accounts |
+
+### Data protection
+
+- **Encryption at rest** — all sensitive data (tokens, connection info) encrypted with AES-256-GCM
+- **Encryption in transit** — all connections use TLS/HTTPS
+- **Open source** — the full codebase is public, anyone can audit it
+- **Self-hostable** — you can run your own instance and keep data on your own machine
+- **No tracking** — no analytics, no ads, no data selling
+
+### Try without connecting your bank
+
+Not ready to connect? Use **Sandbox mode** to explore Konto with realistic demo data — no bank account required.
+
+For the full security policy and vulnerability reporting, see [SECURITY.md](SECURITY.md).
 
 ## Contributing
 
