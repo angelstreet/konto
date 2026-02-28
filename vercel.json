@@ -5,6 +5,6 @@
   "outputDirectory": "frontend/dist",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
-    { "source": "/((?!api).*)", "destination": "/index.html" }
+    { "source": "/((?!api|manifest\\.webmanifest|sw\\.js|workbox-.*\\.js|registerSW\\.js).*)", "destination": "/index.html" }
   ]
 }
