@@ -1,4 +1,9 @@
 import { handle } from '@hono/node-server/vercel';
-import { app } from '../src/index.js';
+import { app, ensureServerBootstrap } from '../src/index.js';
 
-export default handle(app);
+const handler = handle(app);
+
+export default async function vercelHandler(req: any, res: any) {
+  await ensureServerBootstrap();
+  return handler(req, res);
+}
