@@ -1,8 +1,25 @@
 # Konto
 
-Personal & professional finance dashboard. Track bank accounts, investments, crypto, real estate, and budget — all in one place.
+Konto is a finance app to help you see your real money situation in one place.
 
-Built for freelancers and micro-entrepreneurs in France, but adaptable to any context.
+It combines your personal and business finances so you can answer simple questions fast:
+- How much money do I actually have right now?
+- Where is my money going every month?
+- Is my net worth going up or down?
+- What is the performance of my crypto and investments?
+
+Built for freelancers and small business owners in France, but adaptable to other contexts.
+
+## What This App Is For
+
+Use Konto if you want to:
+- connect your bank accounts and wallets
+- follow budget, cash flow, and net worth over time
+- track investments (stocks, funds, crypto, real estate)
+- view personal and professional finances separately or together
+- export clear reports for your own follow-up
+
+In short: Konto is a practical money cockpit, not just a technical dashboard.
 
 ![MIT License](https://img.shields.io/badge/license-MIT-green)
 
@@ -149,4 +166,4 @@ PRs welcome. Please:
 
 ## License
 
-[MIT](LICENSE) — Jean-Noël Doye
+[MIT](LICENSE) — Joschim N'DOYE
