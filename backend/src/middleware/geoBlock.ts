@@ -27,19 +27,8 @@ export async function geoBlockMiddleware(c: Context, next: Next) {
   const cfCountry = c.req.header('CF-IPCountry');
   const ip = getClientIp(c);
 
-  // No CF-IPCountry header: allow only trusted proxies/localhost
+  // No CF-IPCountry header: allow through (Vercel serverless doesn't forward CF headers)
   if (!cfCountry) {
-    if (ip !== 'unknown' && !TRUSTED_PROXY_PATTERN.test(ip)) {
-      await logSecurityEvent({
-        ip,
-        country: null,
-        action: 'GEO_BLOCK',
-        resource: c.req.path,
-        status: 403,
-        details: { reason: 'no_cf_country_header', method: c.req.method },
-      });
-      return c.json({ error: 'Access denied' }, 403);
-    }
     return next();
   }
 
