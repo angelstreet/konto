@@ -423,10 +423,22 @@ async function seedDemoCryptoTransactions() {
   }
 }
 
+let serverBootstrapPromise: Promise<void> | null = null;
+
+export async function ensureServerBootstrap(): Promise<void> {
+  if (!serverBootstrapPromise) {
+    serverBootstrapPromise = (async () => {
+      await initDatabase();
+      await migrateDatabase();
+      // Keep demo seed behavior on both local and serverless cold starts.
+      await seedDemoCryptoTransactions();
+    })();
+  }
+  return serverBootstrapPromise;
+}
+
 async function main() {
-  await initDatabase();
-  await migrateDatabase();
-  await seedDemoCryptoTransactions();
+  await ensureServerBootstrap();
   const { serve } = await import('@hono/node-server');
   serve({ fetch: app.fetch, port: Number(process.env.PORT) || 5004 }, (info) => {
     console.log(`🦎 Konto API running on http://localhost:${info.port}`);
