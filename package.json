@@ -1,0 +1,31 @@
+{
+  "name": "konto",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev": "concurrently -n fe,be -c cyan,green \"npm run dev -w frontend\" \"npm run dev -w backend\"",
+    "dev:frontend": "npm run dev -w frontend",
+    "dev:backend": "npm run dev -w backend",
+    "test": "vitest run",
+    "test:api": "vitest run tests/api/",
+    "test:e2e": "vitest run tests/e2e/",
+    "test:watch": "vitest",
+    "build": "npm run build -w frontend && npm run build -w backend"
+  },
+  "devDependencies": {
+    "@types/node": "^25.2.2",
+    "concurrently": "^8.2.0",
+    "husky": "^9.1.7",
+    "playwright": "^1.58.2",
+    "puppeteer": "^24.37.2",
+    "vitest": "^4.0.18"
+  },
+  "type": "module",
+  "dependencies": {
+    "hono": "^4.12.2"
+  }
+}

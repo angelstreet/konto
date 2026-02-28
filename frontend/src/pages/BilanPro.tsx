@@ -1,0 +1,437 @@
+import { API } from '../config';
+import { useState, useEffect } from 'react';
+import { ChevronLeft, ChevronRight, TrendingUp, TrendingDown, Building2, ArrowLeft } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { useApi } from '../useApi';
+import { useAmountVisibility } from '../AmountVisibilityContext';
+import EyeToggle from '../components/EyeToggle';
+
+interface CompanySummary {
+  company_id: number;
+  name: string;
+  ca: number;
+  charges: number;
+  resultat: number;
+}
+
+interface ProBilanData {
+  year: number;
+  companies: CompanySummary[];
+  total: { ca: number; charges: number; resultat: number };
+  monthly_breakdown: Array<{ month: number; income: number; expenses: number }>;
+}
+
+interface BilanData {
+  year: number;
+  compte_de_resultat: {
+    chiffre_affaires: number;
+    charges: { total: number; details: Array<{ category: string; total: number; count: number }> };
+    resultat_net: number;
+  };
+  tva: { collectee: number; deductible: number; nette: number; from_invoices: any };
+  bilan: {
+    actif: { items: Array<{ name: string; type: string; balance: number }>; total: number };
+    passif: { items: Array<{ name: string; type: string; balance: number }>; total: number };
+    capitaux_propres: number;
+  };
+  monthly_breakdown: Array<{ month: number; income: number; expenses: number }>;
+}
+
+const MONTHS = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin', 'Juil', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
+
+const cleanName = (name: string) => {
+  const match = name.match(/^(.+?)\s*\(\1\)$/);
+  return match ? match[1] : name;
+};
+
+// 'all' = consolidated view, number = specific company
+type Selection = 'all' | number;
+
+export default function BilanPro() {
+  const navigate = useNavigate();
+  const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
+  const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
+  const [year, setYear] = useState(new Date().getFullYear());
+
+  const readSelected = (): Selection | null => {
+    const s = localStorage.getItem('konto_bilan_pro_selected');
+    if (!s) return null;
+    if (s === 'all') return 'all';
+    const n = parseInt(s, 10);
+    return isNaN(n) ? null : n;
+  };
+
+  const [selected, setSelectedState] = useState<Selection | null>(readSelected);
+
+  const setSelected = (v: Selection) => {
+    localStorage.setItem('konto_bilan_pro_selected', String(v));
+    setSelectedState(v);
+  };
+
+  const fmt = (n: number) =>
+    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+
+  const { data: proData, loading: proLoading } = useApi<ProBilanData>(`${API}/bilan-pro/${year}`);
+
+  // Default to first company once data loads (only if nothing was previously saved)
+  useEffect(() => {
+    if (proData && selected === null) {
+      const stored = readSelected();
+      if (stored !== null) {
+        // Validate stored company_id still exists
+        if (typeof stored === 'number' && !proData.companies.some(c => c.company_id === stored)) {
+          setSelected('all');
+        } else {
+          setSelectedState(stored);
+        }
+      } else {
+        setSelected(proData.companies.length > 0 ? proData.companies[0].company_id : 'all');
+      }
+    }
+  }, [proData, selected]);
+
+  // Reset selection when year changes (keep stored so default picks it up again)
+  const changeYear = (delta: number) => {
+    setYear(y => y + delta);
+    setSelectedState(null);
+  };
+
+  const { data: detailData, loading: detailLoading } = useApi<BilanData>(
+    typeof selected === 'number' ? `${API}/bilan/${year}?company_id=${selected}` : ''
+  );
+
+  const companies = proData?.companies || [];
+
+  const useDropdown = companies.length > 4;
+
+  return (
+    <div className="space-y-3">
+      {/* Header */}
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <div className="flex items-center gap-2 min-w-0">
+          <button
+            onClick={() => navigate('/more')}
+            className="md:hidden text-muted hover:text-white transition-colors p-1 -ml-1 flex-shrink-0"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <h1 className="text-xl font-semibold whitespace-nowrap">Bilan Annuel Pro</h1>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} size={16} />
+        </div>
+        <div className="flex items-center gap-3 flex-shrink-0">
+          <button
+            onClick={() => changeYear(-1)}
+            className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <span className="text-lg font-bold tabular-nums">{year}</span>
+          <button
+            onClick={() => changeYear(1)}
+            className="p-2.5 rounded-lg hover:bg-surface-hover min-w-[44px] min-h-[44px] flex items-center justify-center"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </div>
+      </div>
+
+      {proLoading ? (
+        <div className="text-center text-muted py-12">Chargement...</div>
+      ) : companies.length === 0 ? (
+        <div className="bg-surface rounded-xl border border-border p-6 text-center text-muted text-sm">
+          Aucune société avec des comptes liés
+        </div>
+      ) : (
+        <>
+          {/* Company filter — dropdown on mobile or if >4 companies, pills on desktop if ≤4 */}
+          {companies.length > 1 && (
+            <>
+              {/* Dropdown: always on mobile, also on desktop if >4 companies */}
+              <div className={useDropdown ? 'block' : 'block md:hidden'}>
+                <select
+                  value={selected ?? ''}
+                  onChange={e => setSelected(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                  className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-sm"
+                >
+                  <option value="all">Toutes les sociétés</option>
+                  {companies.map(c => (
+                    <option key={c.company_id} value={c.company_id}>{cleanName(c.name)}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Pills: desktop only, ≤4 companies */}
+              {!useDropdown && (
+                <div className="hidden md:flex gap-2 flex-wrap">
+                  <button
+                    onClick={() => setSelected('all')}
+                    className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                      selected === 'all'
+                        ? 'bg-accent-500/20 border-accent-500/50 text-accent-400'
+                        : 'border-border text-muted hover:text-white hover:border-border/80'
+                    }`}
+                  >
+                    Toutes
+                  </button>
+                  {companies.map(c => (
+                    <button
+                      key={c.company_id}
+                      onClick={() => setSelected(c.company_id)}
+                      className={`px-3 py-1.5 rounded-full text-sm border transition-colors ${
+                        selected === c.company_id
+                          ? 'bg-accent-500/20 border-accent-500/50 text-accent-400'
+                          : 'border-border text-muted hover:text-white hover:border-border/80'
+                      }`}
+                    >
+                      {cleanName(c.name)}
+                    </button>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+
+          {/* === CONSOLIDATED VIEW === */}
+          {selected === 'all' && proData && (
+            <>
+              {/* Résultat net hero */}
+              {(() => {
+                const isProfit = proData.total.resultat >= 0;
+                return (
+                  <div className={`rounded-xl p-4 text-center border ${isProfit ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                    <div className="text-sm text-muted mb-1">Résultat Net consolidé</div>
+                    <div className={`text-3xl font-bold ${isProfit ? 'text-green-400' : 'text-red-400'}`}>
+                      {mask(fmt(proData.total.resultat))}
+                    </div>
+                    <div className="flex justify-center gap-3 mt-3 text-sm">
+                      <span className="text-green-400 flex items-center gap-1">
+                        <TrendingUp size={14} /> CA: {mask(fmt(proData.total.ca))}
+                      </span>
+                      <span className="text-red-400 flex items-center gap-1">
+                        <TrendingDown size={14} /> Charges: {mask(fmt(proData.total.charges))}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* Monthly chart */}
+              <div className="bg-surface rounded-xl border border-border p-3">
+                <h2 className="text-sm font-semibold mb-3">Évolution mensuelle (toutes sociétés)</h2>
+                <div className="grid grid-cols-12 gap-1 items-end" style={{ height: 120 }}>
+                  {proData.monthly_breakdown.map((m, i) => {
+                    const maxVal = Math.max(...proData.monthly_breakdown.map(x => Math.max(x.income, x.expenses)), 1);
+                    const incH = (m.income / maxVal) * 100;
+                    const expH = (m.expenses / maxVal) * 100;
+                    return (
+                      <div key={i} className="flex flex-col items-center gap-0.5 h-full justify-end">
+                        <div className="flex gap-px items-end flex-1 w-full">
+                          <div className="flex-1 bg-green-500/40 rounded-t" style={{ height: `${incH}%`, minHeight: m.income > 0 ? 2 : 0 }} />
+                          <div className="flex-1 bg-red-500/40 rounded-t" style={{ height: `${expH}%`, minHeight: m.expenses > 0 ? 2 : 0 }} />
+                        </div>
+                        <span className="text-[9px] text-muted">{MONTHS[i]}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="flex justify-center gap-4 mt-2 text-[10px] text-muted">
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-green-500/40" /> Revenus</span>
+                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-red-500/40" /> Dépenses</span>
+                </div>
+              </div>
+
+              {/* Per-company table */}
+              <div className="bg-surface rounded-xl border border-border p-3">
+                <h2 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                  <Building2 size={16} /> Détail par société
+                </h2>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="text-xs text-muted">
+                        <th className="text-left pb-2 font-medium">Société</th>
+                        <th className="text-right pb-2 font-medium">CA</th>
+                        <th className="text-right pb-2 font-medium">Charges</th>
+                        <th className="text-right pb-2 font-medium">Résultat</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {companies.map(c => (
+                        <tr key={c.company_id} className="border-t border-border/40">
+                          <td className="py-2 pr-2 font-medium">{cleanName(c.name)}</td>
+                          <td className="py-2 text-right text-green-400 tabular-nums">{mask(fmt(c.ca))}</td>
+                          <td className="py-2 text-right text-red-400 tabular-nums">{mask(fmt(c.charges))}</td>
+                          <td className={`py-2 text-right font-semibold tabular-nums ${c.resultat >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                            {mask(fmt(c.resultat))}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr className="border-t-2 border-border font-bold">
+                        <td className="pt-2.5 text-sm">Total</td>
+                        <td className="pt-2.5 text-right text-green-400 tabular-nums">{mask(fmt(proData.total.ca))}</td>
+                        <td className="pt-2.5 text-right text-red-400 tabular-nums">{mask(fmt(proData.total.charges))}</td>
+                        <td className={`pt-2.5 text-right tabular-nums ${proData.total.resultat >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                          {mask(fmt(proData.total.resultat))}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* === COMPANY DETAIL VIEW === */}
+          {typeof selected === 'number' && (
+            detailLoading ? (
+              <div className="text-center text-muted py-8">Chargement...</div>
+            ) : detailData ? (
+              <>
+                {/* Résultat net hero */}
+                {(() => {
+                  const cr = detailData.compte_de_resultat;
+                  const isProfit = cr.resultat_net >= 0;
+                  return (
+                    <div className={`rounded-xl p-4 text-center border ${isProfit ? 'bg-green-500/10 border-green-500/30' : 'bg-red-500/10 border-red-500/30'}`}>
+                      <div className="text-sm text-muted mb-1">Résultat Net</div>
+                      <div className={`text-3xl font-bold ${isProfit ? 'text-green-400' : 'text-red-400'}`}>
+                        {mask(fmt(cr.resultat_net))}
+                      </div>
+                      <div className="flex justify-center gap-3 mt-3 text-sm">
+                        <span className="text-green-400 flex items-center gap-1">
+                          <TrendingUp size={14} /> CA: {mask(fmt(cr.chiffre_affaires))}
+                        </span>
+                        <span className="text-red-400 flex items-center gap-1">
+                          <TrendingDown size={14} /> Charges: {mask(fmt(cr.charges.total))}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Monthly chart */}
+                <div className="bg-surface rounded-xl border border-border p-3">
+                  <h2 className="text-sm font-semibold mb-3">Évolution mensuelle</h2>
+                  <div className="grid grid-cols-12 gap-1 items-end" style={{ height: 120 }}>
+                    {detailData.monthly_breakdown.map((m, i) => {
+                      const maxVal = Math.max(...detailData.monthly_breakdown.map(x => Math.max(x.income, x.expenses)), 1);
+                      const incH = (m.income / maxVal) * 100;
+                      const expH = (m.expenses / maxVal) * 100;
+                      return (
+                        <div key={i} className="flex flex-col items-center gap-0.5 h-full justify-end">
+                          <div className="flex gap-px items-end flex-1 w-full">
+                            <div className="flex-1 bg-green-500/40 rounded-t" style={{ height: `${incH}%`, minHeight: m.income > 0 ? 2 : 0 }} />
+                            <div className="flex-1 bg-red-500/40 rounded-t" style={{ height: `${expH}%`, minHeight: m.expenses > 0 ? 2 : 0 }} />
+                          </div>
+                          <span className="text-[9px] text-muted">{MONTHS[i]}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex justify-center gap-4 mt-2 text-[10px] text-muted">
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-green-500/40" /> Revenus</span>
+                    <span className="flex items-center gap-1"><span className="w-2 h-2 rounded bg-red-500/40" /> Dépenses</span>
+                  </div>
+                </div>
+
+                {/* Charges by category */}
+                {detailData.compte_de_resultat.charges.details.length > 0 && (
+                  <div className="bg-surface rounded-xl border border-border p-3">
+                    <h2 className="text-sm font-semibold mb-3">Charges par catégorie</h2>
+                    <div className="space-y-2">
+                      {detailData.compte_de_resultat.charges.details.map((ch, i) => {
+                        const pct = detailData.compte_de_resultat.charges.total > 0
+                          ? (ch.total / detailData.compte_de_resultat.charges.total) * 100
+                          : 0;
+                        return (
+                          <div key={i}>
+                            <div className="flex justify-between text-xs mb-0.5">
+                              <span>{ch.category}</span>
+                              <span className="text-muted">{mask(fmt(ch.total))} ({ch.count})</span>
+                            </div>
+                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                              <div className="h-full bg-accent-500/60 rounded-full" style={{ width: `${pct}%` }} />
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                {/* TVA */}
+                <div className="bg-surface rounded-xl border border-border p-3">
+                  <h2 className="text-sm font-semibold mb-3">TVA</h2>
+                  <div className="grid grid-cols-3 gap-2.5 text-center">
+                    <div>
+                      <div className="text-xs text-muted">Collectée</div>
+                      <div className="text-sm font-medium">{mask(fmt(detailData.tva.collectee))}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted">Déductible</div>
+                      <div className="text-sm font-medium">{mask(fmt(detailData.tva.deductible))}</div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted">À payer</div>
+                      <div className={`text-sm font-bold ${detailData.tva.nette > 0 ? 'text-red-400' : 'text-green-400'}`}>
+                        {mask(fmt(detailData.tva.nette))}
+                      </div>
+                    </div>
+                  </div>
+                  {detailData.tva.from_invoices && (
+                    <div className="mt-2 text-xs text-muted text-center">
+                      📄 TVA depuis factures: {mask(fmt(detailData.tva.from_invoices.tva))} (sur {mask(fmt(detailData.tva.from_invoices.ht))} HT)
+                    </div>
+                  )}
+                </div>
+
+                {/* Bilan simplifié */}
+                <div className="bg-surface rounded-xl border border-border p-3">
+                  <h2 className="text-sm font-semibold mb-3 flex items-center gap-2">
+                    <Building2 size={16} /> Bilan simplifié
+                  </h2>
+                  <div className="grid grid-cols-2 gap-2.5">
+                    <div>
+                      <div className="text-xs text-muted mb-2 font-medium">ACTIF</div>
+                      {detailData.bilan.actif.items.length === 0 ? (
+                        <p className="text-xs text-muted">—</p>
+                      ) : detailData.bilan.actif.items.map((a, i) => (
+                        <div key={i} className="flex justify-between text-xs py-0.5">
+                          <span className="truncate">{a.name}</span>
+                          <span className="ml-2 tabular-nums">{mask(fmt(a.balance))}</span>
+                        </div>
+                      ))}
+                      <div className="border-t border-border mt-2 pt-1 flex justify-between text-xs font-bold">
+                        <span>Total</span><span>{mask(fmt(detailData.bilan.actif.total))}</span>
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-xs text-muted mb-2 font-medium">PASSIF</div>
+                      {detailData.bilan.passif.items.length === 0 ? (
+                        <p className="text-xs text-muted">—</p>
+                      ) : detailData.bilan.passif.items.map((p, i) => (
+                        <div key={i} className="flex justify-between text-xs py-0.5">
+                          <span className="truncate">{p.name}</span>
+                          <span className="ml-2 tabular-nums">{mask(fmt(p.balance))}</span>
+                        </div>
+                      ))}
+                      <div className="border-t border-border mt-2 pt-1 flex justify-between text-xs font-bold">
+                        <span>Total</span><span>{mask(fmt(detailData.bilan.passif.total))}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="mt-3 text-center text-sm font-semibold">
+                    Capitaux propres:{' '}
+                    <span className={detailData.bilan.capitaux_propres >= 0 ? 'text-green-400' : 'text-red-400'}>
+                      {mask(fmt(detailData.bilan.capitaux_propres))}
+                    </span>
+                  </div>
+                </div>
+              </>
+            ) : null
+          )}
+        </>
+      )}
+    </div>
+  );
+}

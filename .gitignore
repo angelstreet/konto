@@ -1,0 +1,68 @@
+node_modules/
+dist/
+*.db
+.env
+tests/e2e/screenshots/
+backend/.env.bak
+backend/.env.local
+backups/
+frontend/.env.local.backup
+*.db-shm
+*.db-wal
+*.db-journal
+backend/db/backups/
+.vercel
+
+# Screenshots (generated)
+screenshots/hires/
+screenshots/thumbs/
+screenshots/REPORT.md
+screenshots/mobile/
+screenshots/konto-showcase.pdf
+
+# DB backups & corrupt files
+*.bak
+*.corrupt*
+*.backup*
+backend/db/*.bak*
+backend/db/*.corrupt*
+backend/db/*.backup*
+
+# Internal scripts
+backend/manual-sync-*.js
+backend/scripts/encrypt-*.ts
+
+# Proofs & screenshots (internal QA)
+proofs/
+proof-*
+screenshots/
+scripts/screenshot-*.ts
+
+# PDFs (may contain personal data)
+docs/*.pdf
+frontend/public/*.pdf
+
+# Env locals
+frontend/.env.local
+
+# Internal docs
+SNAPSHOT_IMPLEMENTATION_SUMMARY.md
+TROUBLESHOOTING.md
+CLAUDE.md
+backend/CRON_MONITORING.md
+
+# Internal scripts & test files
+scripts/fix-database.sh
+scripts/health-check.sh
+scripts/restore-backup.sh
+scripts/screenshot-all.cjs
+test-*.js
+
+# Git backup artifacts
+.git-backup-*
+
+# Loose screenshots
+*.png
+!frontend/public/*.png
+AGENTS.md
+backup.sh
