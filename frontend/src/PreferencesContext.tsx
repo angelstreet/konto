@@ -31,6 +31,20 @@ export function usePreferences() {
   return useContext(PreferencesContext);
 }
 
+const DEFAULT_PREFERENCES: UserPreferences = {
+  onboarded: 1,
+  display_currency: 'EUR',
+  crypto_display: 'native',
+  kozy_enabled: 0,
+};
+
+function normalizePreferences(input: any): UserPreferences {
+  return {
+    ...DEFAULT_PREFERENCES,
+    ...(input || {}),
+  };
+}
+
 // Exchange rates cache (EUR-based: 1 EUR = X units)
 const RATES: Record<string, number> = { EUR: 1, USD: 1.08, GBP: 0.86, CHF: 0.94, CAD: 1.47, JPY: 162, XOF: 655.96 };
 
@@ -46,7 +60,7 @@ async function getHeaders(getToken?: () => Promise<string | null>): Promise<Reco
 }
 
 export function PreferencesProvider({ children }: { children: ReactNode }) {
-  const [prefs, setPrefs] = useState<UserPreferences | null>(null);
+  const [prefs, setPrefs] = useState<UserPreferences | null>(DEFAULT_PREFERENCES);
   const [loading, setLoading] = useState(true);
 
   let getToken: (() => Promise<string | null>) | undefined;
@@ -59,13 +73,17 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const fetchPrefs = useCallback(() => {
     getHeaders(getTokenRef.current).then(headers =>
       fetch(`${API}/preferences`, { headers })
-        .then(r => r.json())
+        .then(async r => {
+          const data = await r.json().catch(() => null);
+          if (!r.ok) throw new Error('preferences_fetch_failed');
+          return data;
+        })
         .then(data => {
-          setPrefs(data);
+          setPrefs(normalizePreferences(data));
           setLoading(false);
         })
         .catch(() => {
-          setPrefs({ onboarded: 1, display_currency: 'EUR', crypto_display: 'native', kozy_enabled: 0 });
+          setPrefs(DEFAULT_PREFERENCES);
           setLoading(false);
         })
     );
@@ -75,13 +93,18 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
 
   const update = async (partial: Partial<UserPreferences>) => {
     const headers = await getHeaders(getTokenRef.current);
-    const res = await fetch(`${API}/preferences`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json', ...headers },
-      body: JSON.stringify(partial),
-    });
-    const data = await res.json();
-    setPrefs(data);
+    try {
+      const res = await fetch(`${API}/preferences`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(partial),
+      });
+      const data = await res.json().catch(() => null);
+      if (!res.ok) throw new Error('preferences_update_failed');
+      setPrefs(normalizePreferences(data));
+    } catch {
+      setPrefs(prev => normalizePreferences({ ...(prev || DEFAULT_PREFERENCES), ...partial }));
+    }
   };
 
   const convertToDisplay = useCallback((amount: number, fromCurrency?: string) => {
