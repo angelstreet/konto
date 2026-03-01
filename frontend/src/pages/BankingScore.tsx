@@ -75,10 +75,16 @@ function normalizedLabel(v: string) {
   return v.replace(/\s+/g, ' ').trim();
 }
 
+const BIC_TO_BANK: Record<string, string> = {
+  CMCIFRPPXXX: 'CIC',
+  AGRIFRPP887: 'Credit Agricole',
+};
+
 function bankIdentity(account: AccountRow): { key: string; label: string } {
-  const providerName = account.provider && normalizedLabel(account.provider) && account.provider !== 'manual'
-    ? normalizedLabel(account.provider).toUpperCase()
-    : 'Manual / Other';
+  // Provider-level overrides
+  if (account.provider === 'blockchain') {
+    return { key: 'crypto', label: 'Crypto' };
+  }
 
   if (account.provider_bank_id && account.provider_bank_name) {
     const label = normalizedLabel(account.provider_bank_name);
@@ -88,11 +94,29 @@ function bankIdentity(account: AccountRow): { key: string; label: string } {
     const label = normalizedLabel(account.provider_bank_name);
     return { key: `powens-name:${label.toLowerCase()}`, label };
   }
-  if (account.bank_name && normalizedLabel(account.bank_name)) {
-    const label = normalizedLabel(account.bank_name);
-    return { key: `bank-name:${label.toLowerCase()}`, label };
+  if (account.bank_name) {
+    const raw = account.bank_name.trim();
+    const mapped = BIC_TO_BANK[raw];
+    if (mapped) {
+      // BIC code — use friendly name, group by BIC key
+      return { key: `bic:${raw}`, label: mapped };
+    }
+    const label = normalizedLabel(raw);
+    if (label) return { key: `bank-name:${label.toLowerCase()}`, label };
   }
-  return { key: `provider:${providerName.toLowerCase()}`, label: providerName };
+  // NULL bank_name: try to infer from account name for powens accounts
+  if (account.provider === 'powens' || account.provider === 'manual') {
+    if (account.provider === 'manual') {
+      return { key: 'manual-other', label: 'Other' };
+    }
+    // Powens with no bank_name — group as CIC (most NULL powens accounts are CIC)
+    const name = (account as any).name ?? '';
+    if (/cic|contrat|PEA/i.test(name)) {
+      return { key: 'bic:CMCIFRPPXXX', label: 'CIC' };
+    }
+    return { key: 'powens-unknown', label: 'CIC' };
+  }
+  return { key: 'other', label: 'Other' };
 }
 
 function scoreFor(m: Omit<BankMetric, 'score' | 'suggestedLoan' | 'lowLoan' | 'highLoan'>) {
