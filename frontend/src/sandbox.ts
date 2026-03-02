@@ -28,6 +28,8 @@ export function enableSandbox() {
     data.profile = sanitizeSandboxProfile(data.profile);
     saveSandboxData(data);
   }
+  // Install the fetch interceptor after enabling sandbox
+  installSandboxInterceptor();
 }
 
 export function disableSandbox() {

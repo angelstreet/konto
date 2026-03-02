@@ -76,8 +76,34 @@ function normalizedLabel(v: string) {
 }
 
 const BIC_TO_BANK: Record<string, string> = {
+  // CIC Group
   CMCIFRPPXXX: 'CIC',
+  CMCIFRPP: 'CIC',
+  // Credit Agricole
   AGRIFRPP887: 'Credit Agricole',
+  AGRIFRPP: 'Credit Agricole',
+  // BNP Paribas
+  BNPAFRPP: 'BNP Paribas',
+  BNPAFRPPXXX: 'BNP Paribas',
+  // Société Générale
+  SOGEFRPP: 'Société Générale',
+  SOGEFRPPXXX: 'Société Générale',
+  // LCL
+  LYCFRPP: 'LCL',
+  LYCFRPPXXX: 'LCL',
+  // Banque Populaire
+  CCBPFRPP: 'Banque Populaire',
+  // Crédit Mutuel
+  // HSBC
+  CCFRFRPP: 'HSBC France',
+  // La Banque Postale
+  PSSTFRPP: 'La Banque Postale',
+  // Fortuneo
+  FTNOFRPP: 'Fortuneo',
+  // Boursorama
+  BOUSFRPP: 'Boursorama',
+  // Hello Bank
+  HELLFRPP: 'Hello bank!',
 };
 
 function bankIdentity(account: AccountRow): { key: string; label: string } {
