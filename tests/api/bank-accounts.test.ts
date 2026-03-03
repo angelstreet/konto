@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-const API = 'http://localhost:3004';
+const API = process.env.TEST_API_BASE || 'http://localhost:3004';
 
 describe('GET /api/bank/accounts', () => {
   it('returns an array of bank accounts', async () => {

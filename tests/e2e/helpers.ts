@@ -2,7 +2,7 @@ import puppeteer, { type Browser, type Page } from 'puppeteer';
 import path from 'node:path';
 
 const SCREENSHOT_DIR = path.resolve(import.meta.dirname, 'screenshots');
-const BASE = 'http://localhost:5176/konto/';
+const BASE = process.env.TEST_WEB_BASE || 'http://localhost:3004/konto/';
 
 const VIEWPORTS = {
   desktop: { width: 1280, height: 800 },
@@ -37,18 +37,7 @@ export async function dualScreenshot(page: Page, name: string): Promise<void> {
 }
 
 export async function login(page: Page): Promise<void> {
-  await page.goto(url(), { waitUntil: 'networkidle2' });
-
-  // Wait for React to mount
-  await page.waitForSelector('input', { timeout: 10_000 });
-
-  // Type credentials
-  const inputs = await page.$$('input');
-  await inputs[0].type('user');
-  await inputs[1].type('user');
-
-  // Submit
-  await page.click('button[type="submit"]');
+  await page.goto(`${url()}?demo=1`, { waitUntil: 'networkidle2' });
 
   // Wait for dashboard to load (sidebar appears)
   await page.waitForFunction(

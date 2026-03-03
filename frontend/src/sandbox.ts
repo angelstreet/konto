@@ -144,6 +144,115 @@ function routeSandboxRequest(path: string, method: string, body: any, data: any)
     return buildDashboardHistory(data, query);
   }
 
+  // Loans
+  if (route === '/loans' && method === 'GET') return buildLoansPayload(data, query);
+  if (route === '/loans/learn' && method === 'GET') {
+    return {
+      items: [
+        { id: 'rate-negotiation', title: 'Negotiate your rate', summary: 'Compare at least 3 lenders and request a matching offer.' },
+        { id: 'insurance-switch', title: 'Switch borrower insurance', summary: 'Delegating insurance often reduces total cost.' },
+        { id: 'early-repayment', title: 'Use early repayments smartly', summary: 'Prioritize the most expensive loan first.' },
+      ],
+    };
+  }
+  if (route === '/loans/notifications' && method === 'GET') return { notifications: data.loan_notifications || [] };
+  if (route === '/loans/export.csv' && method === 'GET') {
+    const payload = buildLoansPayload(data, query);
+    const lines = ['loan_id,name,provider,remaining,monthly_payment,interest_rate,end_date'];
+    for (const loan of payload.loans) {
+      lines.push([
+        loan.loan_id,
+        loan.name,
+        loan.provider || '',
+        loan.remaining,
+        loan.monthly_payment ?? '',
+        loan.interest_rate ?? '',
+        loan.end_date ?? '',
+      ].join(','));
+    }
+    return lines.join('\n');
+  }
+  if (route.match(/^\/loans\/\d+$/) && method === 'GET') {
+    return buildLoanDetailPayload(data, parseInt(route.split('/').pop() || '0', 10));
+  }
+  if (route === '/loans' && method === 'POST') {
+    const nextId = Math.max(0, ...(data.accounts || []).map((a: any) => Number(a.id || 0))) + 1;
+    const remaining = Number(parsed.remaining || 0);
+    const account = {
+      id: nextId,
+      provider: 'manual',
+      provider_account_id: null,
+      name: parsed.name || 'Nouveau prêt',
+      custom_name: null,
+      bank_name: parsed.provider_name || 'Manuel',
+      account_number: null,
+      iban: null,
+      balance: -Math.abs(remaining),
+      hidden: 0,
+      type: 'loan',
+      usage: parsed.usage || 'personal',
+      currency: 'EUR',
+      last_sync: new Date().toISOString(),
+      blockchain_address: null,
+      blockchain_network: null,
+      company_id: parsed.company_id ?? null,
+    };
+    data.accounts = [...(data.accounts || []), account];
+    const details = {
+      bank_account_id: nextId,
+      principal_amount: parsed.principal_amount ?? remaining,
+      start_date: parsed.start_date ?? null,
+      end_date: parsed.end_date ?? null,
+      duration_months: parsed.duration_months ?? null,
+      installments_paid: parsed.installments_paid ?? null,
+      interest_rate: parsed.interest_rate ?? null,
+      monthly_payment: parsed.monthly_payment ?? null,
+      insurance_monthly: parsed.insurance_monthly ?? 0,
+      fees_total: parsed.fees_total ?? 0,
+      loan_type: parsed.loan_type || 'amortizing',
+      source: 'manual',
+    };
+    data.loan_details = [...(data.loan_details || []), details];
+    return { ok: true, loan_id: nextId };
+  }
+  if (route.match(/^\/loans\/\d+$/) && method === 'PATCH') {
+    const id = parseInt(route.split('/').pop() || '0', 10);
+    const idx = (data.accounts || []).findIndex((a: any) => a.id === id && a.type === 'loan');
+    if (idx === -1) return { error: 'Loan not found' };
+    const acc = data.accounts[idx];
+    if (parsed.name !== undefined) acc.name = parsed.name;
+    if (parsed.provider_name !== undefined) acc.bank_name = parsed.provider_name;
+    if (parsed.remaining !== undefined) acc.balance = -Math.abs(Number(parsed.remaining || 0));
+    if (parsed.usage !== undefined) acc.usage = parsed.usage;
+    if (parsed.company_id !== undefined) acc.company_id = parsed.company_id;
+    acc.last_sync = new Date().toISOString();
+    data.accounts[idx] = acc;
+    const detailsIdx = (data.loan_details || []).findIndex((d: any) => d.bank_account_id === id);
+    const nextDetails = {
+      bank_account_id: id,
+      principal_amount: parsed.principal_amount ?? null,
+      start_date: parsed.start_date ?? null,
+      end_date: parsed.end_date ?? null,
+      duration_months: parsed.duration_months ?? null,
+      installments_paid: parsed.installments_paid ?? null,
+      interest_rate: parsed.interest_rate ?? null,
+      monthly_payment: parsed.monthly_payment ?? null,
+      insurance_monthly: parsed.insurance_monthly ?? 0,
+      fees_total: parsed.fees_total ?? 0,
+      loan_type: parsed.loan_type || 'amortizing',
+      source: parsed.source || 'manual',
+    };
+    if (detailsIdx >= 0) data.loan_details[detailsIdx] = { ...data.loan_details[detailsIdx], ...nextDetails };
+    else data.loan_details = [...(data.loan_details || []), nextDetails];
+    return { ok: true };
+  }
+  if (route.match(/^\/loans\/\d+$/) && method === 'DELETE') {
+    const id = parseInt(route.split('/').pop() || '0', 10);
+    data.accounts = (data.accounts || []).map((a: any) => (a.id === id ? { ...a, hidden: 1 } : a));
+    data.loan_details = (data.loan_details || []).filter((d: any) => d.bank_account_id !== id);
+    return { ok: true };
+  }
+
   // Transactions
   if (route.startsWith('/transactions') && method === 'GET') {
     const params = new URLSearchParams(query);
@@ -747,6 +856,190 @@ function buildDashboardHistory(data: any, query: string) {
   };
 }
 
+function toLoanComputed(account: any, details: any) {
+  const remaining = Math.abs(Math.min(Number(account.balance || 0), 0));
+  const principal = Number(details?.principal_amount || remaining);
+  const repaidCapital = Math.max(0, principal - remaining);
+  const repaidPct = principal > 0 ? Math.round((repaidCapital / principal) * 100) : null;
+  const durationMonths = details?.duration_months != null
+    ? Number(details.duration_months)
+    : (details?.start_date && details?.end_date)
+      ? Math.max(1, (new Date(details.end_date).getFullYear() - new Date(details.start_date).getFullYear()) * 12
+        + (new Date(details.end_date).getMonth() - new Date(details.start_date).getMonth()))
+      : null;
+  const installmentsPaid = details?.installments_paid != null
+    ? Number(details.installments_paid)
+    : (durationMonths && repaidPct != null ? Math.round(durationMonths * (repaidPct / 100)) : null);
+  const installmentsLeft = durationMonths != null
+    ? Math.max(0, durationMonths - Number(installmentsPaid || 0))
+    : null;
+  const monthlyPayment = details?.monthly_payment != null ? Number(details.monthly_payment) : null;
+  const rate = details?.interest_rate != null ? Number(details.interest_rate) : null;
+  const insurance = Number(details?.insurance_monthly || 0);
+  const interestMonthly = monthlyPayment != null && rate != null ? Math.round((remaining * (rate / 100) / 12) * 100) / 100 : null;
+  const capitalMonthly = monthlyPayment != null
+    ? Math.max(0, Math.round((monthlyPayment - (interestMonthly || 0) - insurance) * 100) / 100)
+    : null;
+
+  return {
+    loan_id: account.id,
+    name: account.custom_name || account.name,
+    provider: account.bank_name || null,
+    remaining,
+    principal_amount: principal,
+    monthly_payment: monthlyPayment,
+    interest_rate: rate,
+    repaid_pct: repaidPct,
+    start_date: details?.start_date || null,
+    end_date: details?.end_date || null,
+    duration_months: durationMonths,
+    installments_paid: installmentsPaid,
+    installments_left: installmentsLeft,
+    monthly_breakdown: {
+      capital: capitalMonthly,
+      interest: interestMonthly,
+      insurance,
+    },
+    usage: account.usage || 'personal',
+    company_id: account.company_id || null,
+  };
+}
+
+function buildLoansPayload(data: any, query = '') {
+  const params = new URLSearchParams(query);
+  const usage = params.get('usage');
+  const companyId = params.get('company_id');
+
+  let accounts = (data.accounts || []).filter((a: any) => a.type === 'loan' && !a.hidden);
+  if (usage) accounts = accounts.filter((a: any) => a.usage === usage);
+  if (companyId) accounts = accounts.filter((a: any) => String(a.company_id || '') === companyId);
+
+  const byId = new Map((data.loan_details || []).map((d: any) => [Number(d.bank_account_id), d]));
+  const loans = accounts.map((acc: any) => toLoanComputed(acc, byId.get(Number(acc.id))));
+  const totalOutstanding = loans.reduce((s: number, l: any) => s + Number(l.remaining || 0), 0);
+  const monthlyTotal = loans.reduce((s: number, l: any) => s + Number(l.monthly_payment || 0), 0);
+  const monthlyCapital = loans.reduce((s: number, l: any) => s + Number(l.monthly_breakdown.capital || 0), 0);
+  const monthlyInterest = loans.reduce((s: number, l: any) => s + Number(l.monthly_breakdown.interest || 0), 0);
+  const monthlyInsurance = loans.reduce((s: number, l: any) => s + Number(l.monthly_breakdown.insurance || 0), 0);
+
+  const weightedRateRows = loans.filter((l: any) => l.interest_rate != null && l.remaining > 0);
+  const weightedRateDen = weightedRateRows.reduce((s: number, l: any) => s + l.remaining, 0);
+  const avgRate = weightedRateDen > 0
+    ? weightedRateRows.reduce((s: number, l: any) => s + l.remaining * l.interest_rate, 0) / weightedRateDen
+    : null;
+
+  const durationRows = loans.filter((l: any) => l.duration_months != null && l.remaining > 0);
+  const durationDen = durationRows.reduce((s: number, l: any) => s + l.remaining, 0);
+  const avgDuration = durationDen > 0
+    ? durationRows.reduce((s: number, l: any) => s + l.remaining * l.duration_months, 0) / durationDen / 12
+    : null;
+
+  const distribution = loans.map((l: any) => ({
+    loan_id: l.loan_id,
+    name: l.name,
+    remaining: l.remaining,
+    share_pct: totalOutstanding > 0 ? Math.round((l.remaining / totalOutstanding) * 100) : 0,
+  })).sort((a: any, b: any) => b.remaining - a.remaining);
+
+  const startYear = new Date().getFullYear();
+  const maxEndYear = loans
+    .map((l: any) => (l.end_date ? new Date(l.end_date).getFullYear() : null))
+    .filter((x: any) => x != null)
+    .reduce((m: number, y: number) => Math.max(m, y), startYear + 20);
+  const span = Math.max(2, maxEndYear - startYear);
+  const timeline = Array.from({ length: span + 1 }, (_, i) => ({
+    year: startYear + i,
+    remaining: Math.max(0, Math.round(totalOutstanding * (1 - (i / span)))),
+  }));
+
+  return {
+    date: new Date().toISOString().slice(0, 10),
+    total_outstanding: Math.round(totalOutstanding * 100) / 100,
+    currency: 'EUR',
+    summary: {
+      monthly_total: Math.round(monthlyTotal * 100) / 100,
+      monthly_breakdown: {
+        capital: Math.round(monthlyCapital * 100) / 100,
+        interest: Math.round(monthlyInterest * 100) / 100,
+        insurance: Math.round(monthlyInsurance * 100) / 100,
+      },
+      avg_duration_years: avgDuration != null ? Math.round(avgDuration * 10) / 10 : null,
+      avg_rate: avgRate != null ? Math.round(avgRate * 100) / 100 : null,
+      capacity_available: null,
+    },
+    distribution,
+    timeline,
+    loans,
+    notifications: data.loan_notifications || [],
+  };
+}
+
+function buildLoanDetailPayload(data: any, loanId: number) {
+  const payload = buildLoansPayload(data, '');
+  const loan = payload.loans.find((l: any) => Number(l.loan_id) === Number(loanId));
+  if (!loan) return { error: 'Loan not found' };
+
+  const installmentsPaid = Number(loan.installments_paid || 0);
+  const installmentsLeft = Number(loan.installments_left || 0);
+  const interestMonthly = Number(loan.monthly_breakdown.interest || 0);
+  const insuranceMonthly = Number(loan.monthly_breakdown.insurance || 0);
+  const repaidCapital = Math.max(0, Number(loan.principal_amount || 0) - Number(loan.remaining || 0));
+  const repaidInterest = Math.round(installmentsPaid * interestMonthly * 100) / 100;
+  const repaidInsurance = Math.round(installmentsPaid * insuranceMonthly * 100) / 100;
+  const remainingToRepay = Math.round((Number(loan.monthly_payment || 0) * installmentsLeft) * 100) / 100;
+  const totalInterestInsurance = Math.round((interestMonthly + insuranceMonthly) * (installmentsPaid + installmentsLeft) * 100) / 100;
+  const totalCost = Math.round((Number(loan.principal_amount || 0) + totalInterestInsurance) * 100) / 100;
+
+  const startYear = new Date().getFullYear();
+  const endYear = loan.end_date ? new Date(loan.end_date).getFullYear() : startYear + 20;
+  const span = Math.max(2, endYear - startYear);
+  const timeline = Array.from({ length: span + 1 }, (_, i) => ({
+    year: startYear + i,
+    remaining: Math.max(0, Math.round(Number(loan.remaining || 0) * (1 - (i / span)))),
+  }));
+
+  const linked = (data.assets || [])
+    .filter((a: any) => Number(a.linked_loan_account_id || 0) === Number(loanId))
+    .map((a: any) => ({
+      asset_id: a.id,
+      name: a.address || a.name,
+      usage: a.property_usage || null,
+      allocation_pct: 100,
+      allocation_amount: Number(a.current_value || a.purchase_price || 0),
+    }));
+
+  return {
+    loan: {
+      loan_id: loan.loan_id,
+      name: loan.name,
+      type_label: 'Prêt amortissable (standard)',
+      remaining: loan.remaining,
+      monthly_payment: loan.monthly_payment,
+      interest_rate: loan.interest_rate,
+      repaid_pct: loan.repaid_pct,
+      installments_paid: loan.installments_paid,
+      installments_left: loan.installments_left,
+      end_date: loan.end_date,
+    },
+    monthly_breakdown: loan.monthly_breakdown,
+    totals: {
+      loan_cost: totalCost,
+      capital_total: Number(loan.principal_amount || 0),
+      interest_insurance_total: totalInterestInsurance,
+      fees_total: 0,
+      repaid_total: Math.round((repaidCapital + repaidInterest + repaidInsurance) * 100) / 100,
+      repaid_capital: Math.round(repaidCapital * 100) / 100,
+      repaid_interest: repaidInterest,
+      repaid_insurance: repaidInsurance,
+      remaining_total: Number(loan.remaining || 0),
+      remaining_to_repay: remainingToRepay,
+      remaining_pct: Math.round((100 - Number(loan.repaid_pct || 0)) * 100) / 100,
+    },
+    timeline,
+    linked_assets: linked,
+  };
+}
+
 function generateMockData() {
   const now = new Date().toISOString();
   const accounts = [
@@ -764,6 +1057,8 @@ function generateMockData() {
     { id: 12, provider: 'blockchain', provider_account_id: null, name: 'MetaMask ETH', custom_name: null, bank_name: null, account_number: null, iban: null, balance: 3.21, hidden: 0, type: 'investment', subtype: 'crypto', usage: 'personal', currency: 'ETH', last_sync: now, blockchain_address: '0x742d35Cc6634C0532925a3b844Bc9e7595f2bD18', blockchain_network: 'ethereum', company_id: null },
     { id: 13, provider: 'blockchain', provider_account_id: null, name: 'MetaMask SOL', custom_name: null, bank_name: null, account_number: null, iban: null, balance: 42.5, hidden: 0, type: 'investment', subtype: 'crypto', usage: 'personal', currency: 'SOL', last_sync: now, blockchain_address: '7YQf9h7Q8r4JgLrZr2f9d2rV7qJ5mH2WvA9xq5u8s3Pn', blockchain_network: 'solana', company_id: null },
     { id: 14, provider: 'powens', provider_account_id: '108', name: 'Compte Pro', custom_name: null, bank_name: 'BNP Paribas', account_number: '00040782200', iban: 'FR7630004008900004078220076', balance: 12580.40, hidden: 0, type: 'checking', usage: 'professional', currency: 'EUR', last_sync: now, blockchain_address: null, blockchain_network: null, company_id: 1 },
+    { id: 15, provider: 'powens', provider_account_id: '109', name: 'Prêt Tout Habitat', custom_name: null, bank_name: 'Crédit Agricole', account_number: null, iban: null, balance: -144769, hidden: 0, type: 'loan', usage: 'personal', currency: 'EUR', last_sync: now, blockchain_address: null, blockchain_network: null, company_id: null },
+    { id: 16, provider: 'powens', provider_account_id: '110', name: 'Cic Immo Prêt Modulable', custom_name: null, bank_name: 'CIC', account_number: null, iban: null, balance: -122491, hidden: 0, type: 'loan', usage: 'personal', currency: 'EUR', last_sync: now, blockchain_address: null, blockchain_network: null, company_id: null },
   ];
 
   const connections = [
@@ -970,8 +1265,57 @@ function generateMockData() {
     { id: 5, bank_account_id: 13, account_name: 'MetaMask SOL', account_custom_name: null, label: 'Solana', isin_code: null, quantity: 0.08, unit_price: 290, unit_value: 340, valuation: 27, diff: 4, diff_percent: 17.2, currency: 'EUR' },
   ];
 
+  const loan_details = [
+    {
+      bank_account_id: 8,
+      principal_amount: 455000,
+      start_date: '2024-01-01',
+      end_date: '2048-03-01',
+      duration_months: 301,
+      installments_paid: 38,
+      interest_rate: 2.6,
+      monthly_payment: 2121,
+      insurance_monthly: 0,
+      fees_total: 0,
+      loan_type: 'Prêt amortissable',
+      source: 'provider',
+    },
+    {
+      bank_account_id: 15,
+      principal_amount: 210000,
+      start_date: '2022-04-01',
+      end_date: '2043-04-01',
+      duration_months: 252,
+      installments_paid: 78,
+      interest_rate: 1.35,
+      monthly_payment: 635,
+      insurance_monthly: 18,
+      fees_total: 0,
+      loan_type: 'Prêt amortissable',
+      source: 'provider',
+    },
+    {
+      bank_account_id: 16,
+      principal_amount: 180000,
+      start_date: '2021-09-01',
+      end_date: '2040-09-01',
+      duration_months: 228,
+      installments_paid: 73,
+      interest_rate: 1.15,
+      monthly_payment: 813,
+      insurance_monthly: 14,
+      fees_total: 0,
+      loan_type: 'Prêt amortissable',
+      source: 'provider',
+    },
+  ];
+
+  const loan_notifications = [
+    { loan_id: 8, loan_name: 'Prêt Immobilier', milestone: 10, repaid_pct: 13 },
+  ];
+
   const preferences = { onboarded: 1, display_currency: 'EUR', crypto_display: 'native', kozy_enabled: 0 };
   const profile = { ...SANDBOX_PROFILE };
 
-  return { accounts, connections, companies, transactions, investments, assets, preferences, profile };
+  return { accounts, connections, companies, transactions, investments, assets, preferences, profile, loan_details, loan_notifications };
 }
