@@ -39,6 +39,8 @@ import Crypto from './pages/Crypto';
 import ActionsFunds from './pages/ActionsFunds';
 import Subscriptions from './pages/Subscriptions';
 import AnalysisSynthesis from './pages/AnalysisSynthesis';
+import LoansDashboard from './pages/LoansDashboard';
+import LoanDetail from './pages/LoanDetail';
 
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -79,6 +81,8 @@ function AppRoutes() {
         <Route path="/settings" element={<Settings />} />
         <Route path="/profile" element={<Profile />} />
         <Route path="/assets" element={<Assets />} />
+        <Route path="/loans" element={<LoansDashboard />} />
+        <Route path="/loans/:loanId" element={<LoanDetail />} />
         <Route path="/analysis" element={<Analytics />} />
         <Route path="/cashflow" element={<ComingSoon titleKey="nav_cashflow" />} />
         <Route path="/ledger" element={<ComingSoon titleKey="nav_ledger" />} />

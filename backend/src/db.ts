@@ -345,6 +345,34 @@ export async function initDatabase() {
       payload_json TEXT NOT NULL,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+
+    CREATE TABLE IF NOT EXISTS loan_details (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      bank_account_id INTEGER NOT NULL UNIQUE REFERENCES bank_accounts(id) ON DELETE CASCADE,
+      loan_type TEXT NOT NULL DEFAULT 'amortizing',
+      principal_amount REAL,
+      start_date TEXT,
+      end_date TEXT,
+      duration_months INTEGER,
+      installments_paid INTEGER,
+      interest_rate REAL,
+      monthly_payment REAL,
+      insurance_monthly REAL DEFAULT 0,
+      fees_total REAL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'manual',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS loan_milestone_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      bank_account_id INTEGER NOT NULL REFERENCES bank_accounts(id) ON DELETE CASCADE,
+      milestone INTEGER NOT NULL,
+      triggered_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, bank_account_id, milestone)
+    );
   `);
 }
 
@@ -564,6 +592,38 @@ export async function migrateDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       last_used_at TEXT,
       active INTEGER NOT NULL DEFAULT 1
+    )
+  `);
+
+  // Loan details and milestone notifications tables
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS loan_details (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      bank_account_id INTEGER NOT NULL UNIQUE REFERENCES bank_accounts(id) ON DELETE CASCADE,
+      loan_type TEXT NOT NULL DEFAULT 'amortizing',
+      principal_amount REAL,
+      start_date TEXT,
+      end_date TEXT,
+      duration_months INTEGER,
+      installments_paid INTEGER,
+      interest_rate REAL,
+      monthly_payment REAL,
+      insurance_monthly REAL DEFAULT 0,
+      fees_total REAL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'manual',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS loan_milestone_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      bank_account_id INTEGER NOT NULL REFERENCES bank_accounts(id) ON DELETE CASCADE,
+      milestone INTEGER NOT NULL,
+      triggered_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, bank_account_id, milestone)
     )
   `);
 }

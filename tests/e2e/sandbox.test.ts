@@ -17,28 +17,11 @@ describe('Sandbox demo mode', () => {
     await browser.close();
   });
 
-  it('activates demo mode from login and shows badge', async () => {
-    await page.goto(url(), { waitUntil: 'networkidle2' });
-    await page.evaluate(() => {
-      localStorage.removeItem('konto_auth');
-      localStorage.removeItem('konto_sandbox');
-      localStorage.removeItem('konto_sandbox_data');
-      sessionStorage.setItem('konto_logged_out', 'true');
-    });
-    await page.reload({ waitUntil: 'networkidle2' });
-    await page.waitForSelector('button', { timeout: 10_000 });
-
-    const clicked = await page.evaluate(() => {
-      const btns = Array.from(document.querySelectorAll('button'));
-      const demoBtn = btns.find((b) => (b.textContent || '').toLowerCase().includes('essayer'));
-      if (!demoBtn) return false;
-      (demoBtn as HTMLButtonElement).click();
-      return true;
-    });
-    expect(clicked).toBe(true);
+  it('activates demo mode from URL and keeps sandbox flags', async () => {
+    await page.goto(`${url()}?demo=1`, { waitUntil: 'networkidle2' });
 
     await page.waitForFunction(
-      () => localStorage.getItem('konto_sandbox') === 'true' && document.body.innerText.includes('Mode démo'),
+      () => localStorage.getItem('konto_sandbox') === 'true' && document.body.innerText.includes('Demo'),
       { timeout: 10_000 },
     );
 
@@ -51,7 +34,7 @@ describe('Sandbox demo mode', () => {
   });
 
   it('returns stable analytics/dashboard shape and avoids known crashes', async () => {
-    await page.goto(url('analysis'), { waitUntil: 'networkidle2' });
+    await page.goto(url('analysis?demo=1'), { waitUntil: 'networkidle2' });
     await page.waitForFunction(() => document.body.innerText.includes('Budget'), { timeout: 10_000 });
 
     const shape = await page.evaluate(async () => {

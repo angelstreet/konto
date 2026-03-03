@@ -29,6 +29,7 @@ import toolsRoutes from './routes/tools.js';
 import driveRoutes from './routes/drive.js';
 import preferencesRoutes from './routes/preferences.js';
 import apiV1Routes from './routes/api_v1.js';
+import loansRoutes from './routes/loans.js';
 
 // Lazy-load Bitcoin modules (contain WASM that breaks Vercel serverless)
 let bip32: any = null;
@@ -293,6 +294,7 @@ app.route('', toolsRoutes);
 app.route('', driveRoutes);
 app.route('', preferencesRoutes);
 app.route('', apiV1Routes);
+app.route('', loansRoutes);
 
 // ========== START SERVER ==========
 

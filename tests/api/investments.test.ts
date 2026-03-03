@@ -1,19 +1,21 @@
-// investments.test.ts
-import { test, expect, beforeEach } from 'vitest'
-import { app } from '../../../backend/src/index.js' // adjust path
-import request from 'supertest'
+import { describe, it, expect } from 'vitest';
 
-// Note: Requires DB setup with investments for full tests
-// Run with: cd konto && npm test
+const API = process.env.TEST_API_BASE || 'http://localhost:3004';
 
-test('GET /api/investments returns 200 and array', async () => {
-  const res = await request(app).get('/api/investments')
-  expect(res.status).toBe(200)
-  expect(Array.isArray(res.body)).toBe(true)
-})
+describe('GET /api/investments', () => {
+  it('returns 200 and valid payload shape', async () => {
+    const res = await fetch(`${API}/api/investments`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('investments');
+    expect(Array.isArray(body.investments)).toBe(true);
+  });
 
-test('GET /api/investments?company_id=1 filters by company', async () => {
-  const res = await request(app).get('/api/investments?company_id=1')
-  expect(res.status).toBe(200)
-  expect(Array.isArray(res.body)).toBe(true)
-})
+  it('supports company filter query', async () => {
+    const res = await fetch(`${API}/api/investments?company_id=1`);
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body).toHaveProperty('investments');
+    expect(Array.isArray(body.investments)).toBe(true);
+  });
+});

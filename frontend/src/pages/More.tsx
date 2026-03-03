@@ -76,6 +76,7 @@ const menuGroups: MenuGroup[] = [
     labelKey: 'nav_group_patrimoine',
     items: [
       { path: '/assets', icon: Home, labelKey: 'nav_assets' },
+      { path: '/loans', icon: Banknote, labelKey: 'nav_loans' },
       { path: '/crypto', icon: Bitcoin, labelKey: 'nav_crypto' },
       { path: '/actions-fonds', icon: TrendingUp, labelKey: 'nav_actions_funds' },
       { path: '/property-roi', icon: TrendingUp, labelKey: 'nav_property_roi' },
