@@ -494,6 +494,13 @@ export async function migrateDatabase() {
     await db.execute("ALTER TABLE user_profiles ADD COLUMN country TEXT");
   }
 
+  // Add city to user_profiles (PII cleanup task #950)
+  try {
+    await db.execute("SELECT city FROM user_profiles LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE user_profiles ADD COLUMN city TEXT");
+  }
+
   // PII separation: migrate name/email/phone/address from users → user_profiles
   // Create table if needed
   await db.execute(`
