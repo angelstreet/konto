@@ -1,16 +1,21 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, User, Mail, Phone, MapPin, Save, Loader2 } from 'lucide-react';
+import { ArrowLeft, User, Mail, Phone, MapPin, Save, Loader2, Globe } from 'lucide-react';
 import { API } from '../config';
 import { useAuthFetch } from '../useApi';
+
+const STORAGE_KEYS = {
+  name: 'konto_user_name',
+  phone: 'konto_user_phone',
+  address: 'konto_user_address',
+};
 
 interface ProfileData {
   id: number;
   email: string;
-  name: string;
-  phone: string | null;
-  address: string | null;
+  city: string | null;
+  country: string | null;
   created_at: string;
 }
 
@@ -22,22 +27,54 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [form, setForm] = useState({ name: '', phone: '', address: '' });
+  const [localSaved, setLocalSaved] = useState({ name: false, phone: false, address: false });
+  const [form, setForm] = useState({
+    name: '',
+    phone: '',
+    address: '',
+    city: '',
+    country: '',
+  });
+
+  // Load localStorage values
+  const loadFromStorage = () => ({
+    name: localStorage.getItem(STORAGE_KEYS.name) || '',
+    phone: localStorage.getItem(STORAGE_KEYS.phone) || '',
+    address: localStorage.getItem(STORAGE_KEYS.address) || '',
+  });
+
+  // Save to localStorage
+  const saveToStorage = (key: 'name' | 'phone' | 'address', value: string) => {
+    localStorage.setItem(STORAGE_KEYS[key], value);
+    setLocalSaved(prev => ({ ...prev, [key]: true }));
+    setTimeout(() => setLocalSaved(prev => ({ ...prev, [key]: false })), 1500);
+  };
 
   useEffect(() => {
+    // Load local values first (instant)
+    const stored = loadFromStorage();
+    setForm(prev => ({ ...prev, ...stored }));
+
+    // Then fetch API for city/country
     authFetch(`${API}/profile`)
       .then(r => r.json())
       .then((data: ProfileData) => {
         setProfile(data);
-        setForm({
-          name: data.name || '',
-          phone: data.phone || '',
-          address: data.address || '',
-        });
+        setForm(prev => ({
+          ...prev,
+          city: data.city || '',
+          country: data.country || '',
+        }));
+        
         setLoading(false);
       })
       .catch(() => setLoading(false));
   }, []);
+
+  const handleFieldChange = (field: 'name' | 'phone' | 'address', value: string) => {
+    setForm(f => ({ ...f, [field]: value }));
+    saveToStorage(field, value);
+  };
 
   const handleSave = async () => {
     setSaving(true);
@@ -45,7 +82,7 @@ export default function Profile() {
     try {
       const res = await authFetch(`${API}/profile`, {
         method: 'PUT',
-        body: JSON.stringify(form),
+        body: JSON.stringify({ city: form.city, country: form.country }),
       });
       const data = await res.json();
       setProfile(data);
@@ -56,10 +93,9 @@ export default function Profile() {
     }
   };
 
-  const hasChanges = profile && (
-    form.name !== (profile.name || '') ||
-    form.phone !== (profile.phone || '') ||
-    form.address !== (profile.address || '')
+  const hasApiChanges = profile && (
+    form.city !== (profile.city || '') ||
+    form.country !== (profile.country || '')
   );
 
   if (loading) {
@@ -95,14 +131,17 @@ export default function Profile() {
 
         {/* Name */}
         <div>
-          <label className="flex items-center gap-2 text-xs text-muted mb-1.5">
-            <User size={14} />
-            {t('name')}
+          <label className="flex items-center justify-between text-xs text-muted mb-1.5">
+            <span className="flex items-center gap-2">
+              <User size={14} />
+              {t('name')}
+            </span>
+            {localSaved.name && <span className="text-green-400 text-[10px]">✓ {t('saved_locally')}</span>}
           </label>
           <input
             type="text"
             value={form.name}
-            onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+            onChange={e => handleFieldChange('name', e.target.value)}
             className="w-full bg-transparent rounded-lg px-3 py-2.5 text-sm border border-border focus:border-accent-500 focus:outline-none transition-colors"
             placeholder={t('your_name')}
           />
@@ -110,14 +149,17 @@ export default function Profile() {
 
         {/* Phone */}
         <div>
-          <label className="flex items-center gap-2 text-xs text-muted mb-1.5">
-            <Phone size={14} />
-            {t('phone')}
+          <label className="flex items-center justify-between text-xs text-muted mb-1.5">
+            <span className="flex items-center gap-2">
+              <Phone size={14} />
+              {t('phone')}
+            </span>
+            {localSaved.phone && <span className="text-green-400 text-[10px]">✓ {t('saved_locally')}</span>}
           </label>
           <input
             type="tel"
             value={form.phone}
-            onChange={e => setForm(f => ({ ...f, phone: e.target.value }))}
+            onChange={e => handleFieldChange('phone', e.target.value)}
             className="w-full bg-transparent rounded-lg px-3 py-2.5 text-sm border border-border focus:border-accent-500 focus:outline-none transition-colors"
             placeholder={t('your_phone')}
           />
@@ -125,17 +167,57 @@ export default function Profile() {
 
         {/* Address */}
         <div>
-          <label className="flex items-center gap-2 text-xs text-muted mb-1.5">
-            <MapPin size={14} />
-            {t('address')}
+          <label className="flex items-center justify-between text-xs text-muted mb-1.5">
+            <span className="flex items-center gap-2">
+              <MapPin size={14} />
+              {t('address')}
+            </span>
+            {localSaved.address && <span className="text-green-400 text-[10px]">✓ {t('saved_locally')}</span>}
           </label>
           <textarea
             value={form.address}
-            onChange={e => setForm(f => ({ ...f, address: e.target.value }))}
+            onChange={e => handleFieldChange('address', e.target.value)}
             rows={2}
             className="w-full bg-transparent rounded-lg px-3 py-2.5 text-sm border border-border focus:border-accent-500 focus:outline-none transition-colors resize-none"
             placeholder={t('your_address')}
           />
+        </div>
+
+        {/* City */}
+        <div>
+          <label className="flex items-center gap-2 text-xs text-muted mb-1.5">
+            <Globe size={14} />
+            {t('city')}
+          </label>
+          <input
+            type="text"
+            value={form.city}
+            onChange={e => setForm(f => ({ ...f, city: e.target.value }))}
+            className="w-full bg-transparent rounded-lg px-3 py-2.5 text-sm border border-border focus:border-accent-500 focus:outline-none transition-colors"
+            placeholder={t('your_city')}
+          />
+        </div>
+
+        {/* Country */}
+        <div>
+          <label className="flex items-center gap-2 text-xs text-muted mb-1.5">
+            <Globe size={14} />
+            {t('country')}
+          </label>
+          <select
+            value={form.country}
+            onChange={e => setForm(f => ({ ...f, country: e.target.value }))}
+            className="w-full bg-transparent rounded-lg px-3 py-2.5 text-sm border border-border focus:border-accent-500 focus:outline-none transition-colors"
+          >
+            <option value="">{t('select_country')}</option>
+            <option value="FR">France</option>
+            <option value="CH">Switzerland</option>
+            <option value="DE">Germany</option>
+            <option value="BE">Belgium</option>
+            <option value="UK">United Kingdom</option>
+            <option value="US">United States</option>
+            <option value="其他">Other</option>
+          </select>
         </div>
 
         {/* Member since */}
@@ -147,11 +229,11 @@ export default function Profile() {
       {/* Save button */}
       <button
         onClick={handleSave}
-        disabled={!hasChanges || saving}
+        disabled={!hasApiChanges || saving}
         className={`w-full mt-4 flex items-center justify-center gap-2 px-4 py-3 rounded-xl text-sm font-medium transition-colors ${
           saved
             ? 'bg-green-500/20 text-green-400 border border-green-500/30'
-            : hasChanges
+            : hasApiChanges
               ? 'bg-accent-500 text-white hover:bg-accent-600'
               : 'bg-surface text-muted border border-border cursor-not-allowed'
         }`}
