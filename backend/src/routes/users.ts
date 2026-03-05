@@ -62,11 +62,10 @@ router.get('/api/admin/audit-log', async (c) => {
 
 // --- Users ---
 router.get('/api/users', async (c) => {
+  // PII cleanup task #950: remove name, phone, address from response
   const result = await db.execute(`
     SELECT u.id, u.role, u.clerk_id, u.created_at,
-           COALESCE(up.email, '') AS email,
-           COALESCE(up.name, '') AS name,
-           up.phone, up.address
+           COALESCE(up.email, '') AS email, up.city, up.country
     FROM users u
     LEFT JOIN user_profiles up ON up.user_id = u.id
   `);
@@ -132,8 +131,7 @@ router.post('/api/settings/api-keys/:id/renew', async (c) => {
 router.get('/api/profile', async (c) => {
   const userId = await getUserId(c);
   const result = await db.execute({
-    sql: `SELECT u.id, COALESCE(up.email, '') AS email, COALESCE(up.name, '') AS name,
-                 up.phone, up.address, u.created_at
+    sql: `SELECT u.id, COALESCE(up.email, '') AS email, up.city, up.country, u.created_at
           FROM users u
           LEFT JOIN user_profiles up ON up.user_id = u.id
           WHERE u.id = ?`,
@@ -146,20 +144,19 @@ router.get('/api/profile', async (c) => {
 router.put('/api/profile', async (c) => {
   const userId = await getUserId(c);
   const body = await c.req.json();
-  const { name, phone, address } = body;
-  // Upsert into user_profiles (PII table)
+  // PII cleanup task #950: reject name, phone, address; accept city, country
+  const { city, country } = body;
+  // Upsert into user_profiles (city, country only)
   await db.execute({
-    sql: `INSERT INTO user_profiles (user_id, name, phone, address)
-          VALUES (?, ?, ?, ?)
+    sql: `INSERT INTO user_profiles (user_id, city, country)
+          VALUES (?, ?, ?)
           ON CONFLICT(user_id) DO UPDATE SET
-            name = excluded.name,
-            phone = excluded.phone,
-            address = excluded.address`,
-    args: [userId, name || '', phone || null, address || null]
+            city = excluded.city,
+            country = excluded.country`,
+    args: [userId, city || null, country || null]
   });
   const result = await db.execute({
-    sql: `SELECT u.id, COALESCE(up.email, '') AS email, COALESCE(up.name, '') AS name,
-                 up.phone, up.address, u.created_at
+    sql: `SELECT u.id, COALESCE(up.email, '') AS email, up.city, up.country, u.created_at
           FROM users u
           LEFT JOIN user_profiles up ON up.user_id = u.id
           WHERE u.id = ?`,
@@ -207,9 +204,9 @@ router.delete('/api/account', async (c) => {
 // --- RGPD: Data export (right to portability) ---
 router.get('/api/account/data', async (c) => {
   const userId = await getUserId(c);
+  // PII cleanup task #950: remove name, phone, address from export
   const user = await db.execute({
-    sql: `SELECT u.id, COALESCE(up.email, '') AS email, COALESCE(up.name, '') AS name,
-                 up.phone, up.address, u.created_at
+    sql: `SELECT u.id, COALESCE(up.email, '') AS email, up.city, up.country, u.created_at
           FROM users u LEFT JOIN user_profiles up ON up.user_id = u.id
           WHERE u.id = ?`,
     args: [userId]

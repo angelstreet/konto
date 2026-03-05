@@ -49,6 +49,16 @@ function toYearlyTimeline(startYear: number, endYear: number, startValue: number
   return rows;
 }
 
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+function dateOnly(d: Date): string {
+  return d.toISOString().slice(0, 10);
+}
+
 function csvEscape(value: string | number | null | undefined): string {
   if (value === null || value === undefined) return '';
   const s = String(value);
@@ -70,6 +80,151 @@ function buildScopeWhere(usage: string | undefined, companyId: string | undefine
     args.push(companyId);
   }
   return { where, args };
+}
+
+async function inferAndPersistLoanDetails(userId: number): Promise<void> {
+  const ratesRes = await db.execute({
+    sql: 'SELECT duration, avg_rate FROM market_rates WHERE avg_rate IS NOT NULL ORDER BY duration ASC',
+    args: [],
+  });
+  const marketRates = ratesRes.rows as any[];
+  const pickRate = (durationMonths: number): number => {
+    const years = Math.max(1, Math.round(durationMonths / 12));
+    if (!marketRates.length) return 1.9;
+    let best = marketRates[0];
+    let bestDiff = Math.abs(Number(best.duration || 0) - years);
+    for (const row of marketRates) {
+      const diff = Math.abs(Number(row.duration || 0) - years);
+      if (diff < bestDiff) {
+        best = row;
+        bestDiff = diff;
+      }
+    }
+    const rate = Number(best.avg_rate);
+    return Number.isFinite(rate) ? rate : 1.9;
+  };
+
+  const loansRes = await db.execute({
+    sql: `SELECT ba.id, ba.balance, ba.last_sync, ld.*
+          FROM bank_accounts ba
+          LEFT JOIN loan_details ld ON ld.bank_account_id = ba.id AND ld.user_id = ba.user_id
+          WHERE ba.user_id = ? AND ba.type = 'loan' AND ba.hidden = 0`,
+    args: [userId],
+  });
+
+  const txRes = await db.execute({
+    sql: `SELECT t.bank_account_id, t.date, ABS(t.amount) as amount
+          FROM transactions t
+          JOIN bank_accounts ba ON ba.id = t.bank_account_id
+          WHERE ba.user_id = ? AND ba.type = 'loan' AND t.amount < 0 AND t.date >= date('now', '-540 day')
+          ORDER BY t.date DESC`,
+    args: [userId],
+  });
+
+  const txByLoan = new Map<number, { date: string; amount: number }[]>();
+  for (const row of txRes.rows as any[]) {
+    const loanId = Number(row.bank_account_id);
+    const amount = Number(row.amount || 0);
+    if (!Number.isFinite(loanId) || !Number.isFinite(amount) || amount <= 0) continue;
+    if (!txByLoan.has(loanId)) txByLoan.set(loanId, []);
+    txByLoan.get(loanId)!.push({ date: String(row.date || ''), amount });
+  }
+
+  for (const row of loansRes.rows as any[]) {
+    const loanId = Number(row.id);
+    const source = String(row.source || '');
+    if (source === 'manual') continue;
+
+    const txs = txByLoan.get(loanId) || [];
+    const hasTx = txs.length > 0;
+
+    let median: number | null = null;
+    if (hasTx) {
+      const amounts = txs.map((t) => t.amount).sort((a, b) => a - b);
+      const mid = Math.floor(amounts.length / 2);
+      median = amounts.length % 2 === 0 ? (amounts[mid - 1] + amounts[mid]) / 2 : amounts[mid];
+      if (!Number.isFinite(median) || median <= 0) median = null;
+    }
+
+    const remaining = Math.abs(Math.min(Number(row.balance || 0), 0));
+    if (remaining <= 0) continue;
+    if (median === null && row.monthly_payment) {
+      const m = Number(row.monthly_payment);
+      if (Number.isFinite(m) && m > 0) median = m;
+    }
+    if (median === null) {
+      // Last-resort estimate when connector provides no schedule and no tx history.
+      const assumedRemainingMonths = String(row.loan_type || '').includes('mortgage') ? 300 : 120;
+      median = Math.max(50, Math.round((remaining / assumedRemainingMonths) * 100) / 100);
+    }
+
+    const tolerance = Math.max(5, median * 0.2);
+    const recurring = txs.filter((t) => Math.abs(t.amount - median) <= tolerance);
+    const monthSet = new Set(recurring.map((t) => t.date.slice(0, 7)));
+    const inferredInstallmentsPaid = monthSet.size >= 2 ? monthSet.size : 0;
+    const remainingMonths = Math.max(1, Math.ceil(remaining / median));
+    const inferredDuration = inferredInstallmentsPaid + remainingMonths;
+    const inferredStartDate = dateOnly(addMonths(new Date(), -inferredInstallmentsPaid));
+    const inferredEndDate = dateOnly(addMonths(new Date(), remainingMonths));
+
+    let inferredPrincipal: number | null = null;
+    if (inferredDuration > inferredInstallmentsPaid) {
+      const ratio = inferredInstallmentsPaid / inferredDuration;
+      if (ratio > 0 && ratio < 0.98) {
+        inferredPrincipal = Math.round((remaining / (1 - ratio)) * 100) / 100;
+      }
+    }
+    if (inferredPrincipal === null) inferredPrincipal = remaining;
+
+    const next = {
+      loan_type: row.loan_type || 'amortizing',
+      principal_amount: row.principal_amount ?? inferredPrincipal,
+      start_date: row.start_date ?? inferredStartDate,
+      end_date: row.end_date ?? inferredEndDate,
+      duration_months: row.duration_months ?? inferredDuration,
+      installments_paid: row.installments_paid ?? inferredInstallmentsPaid,
+      interest_rate: row.interest_rate ?? pickRate(inferredDuration),
+      monthly_payment: row.monthly_payment ?? Math.round(median * 100) / 100,
+      insurance_monthly: row.insurance_monthly ?? 0,
+      fees_total: row.fees_total ?? 0,
+      source: row.source || (hasTx ? 'inferred' : 'estimated'),
+    };
+
+    await db.execute({
+      sql: `INSERT INTO loan_details
+            (user_id, bank_account_id, loan_type, principal_amount, start_date, end_date, duration_months,
+             installments_paid, interest_rate, monthly_payment, insurance_monthly, fees_total, source, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            ON CONFLICT(bank_account_id) DO UPDATE SET
+              loan_type = COALESCE(loan_details.loan_type, excluded.loan_type),
+              principal_amount = COALESCE(loan_details.principal_amount, excluded.principal_amount),
+              start_date = COALESCE(loan_details.start_date, excluded.start_date),
+              end_date = COALESCE(loan_details.end_date, excluded.end_date),
+              duration_months = COALESCE(loan_details.duration_months, excluded.duration_months),
+              installments_paid = COALESCE(loan_details.installments_paid, excluded.installments_paid),
+              interest_rate = COALESCE(loan_details.interest_rate, excluded.interest_rate),
+              monthly_payment = COALESCE(loan_details.monthly_payment, excluded.monthly_payment),
+              insurance_monthly = COALESCE(loan_details.insurance_monthly, excluded.insurance_monthly),
+              fees_total = COALESCE(loan_details.fees_total, excluded.fees_total),
+              source = CASE WHEN loan_details.source = 'manual' THEN loan_details.source ELSE excluded.source END,
+              updated_at = datetime('now')`,
+      args: [
+        userId,
+        loanId,
+        next.loan_type,
+        next.principal_amount,
+        next.start_date,
+        next.end_date,
+        next.duration_months,
+        next.installments_paid,
+        next.interest_rate,
+        next.monthly_payment,
+        next.insurance_monthly,
+        next.fees_total,
+        next.source,
+      ],
+    });
+  }
 }
 
 async function loadMonthlyPaymentFallbacks(userId: number): Promise<Map<number, number>> {
@@ -110,18 +265,21 @@ function buildLoanComputed(raw: any, monthlyFallback: number | null) {
     ?? monthsBetween(d(raw.start_date), d(raw.end_date));
 
   const repaidCapital = principal !== null ? Math.max(0, principal - remaining) : null;
-  const repaidPct = principal !== null && principal > 0
-    ? Math.round(clamp((repaidCapital! / principal) * 100) * 100) / 100
-    : null;
 
   const installmentsPaid = n(raw.installments_paid)
-    ?? (durationMonths !== null && repaidPct !== null
-      ? Math.round(durationMonths * (repaidPct / 100))
+    ?? (durationMonths !== null && repaidCapital !== null && principal && principal > 0
+      ? Math.round(durationMonths * (repaidCapital / principal))
       : null);
 
   const installmentsLeft = durationMonths !== null
     ? Math.max(0, Math.round(durationMonths - (installmentsPaid || 0)))
     : null;
+
+  const repaidPct = principal !== null && principal > 0
+    ? Math.round(clamp((repaidCapital! / principal) * 100) * 100) / 100
+    : (durationMonths !== null && installmentsPaid !== null && durationMonths > 0
+      ? Math.round(clamp((installmentsPaid / durationMonths) * 100) * 100) / 100
+      : null);
 
   const rate = n(raw.interest_rate);
   const insurance = n(raw.insurance_monthly) ?? 0;
@@ -240,6 +398,7 @@ router.get('/api/loans/export.csv', async (c) => {
 
 router.get('/api/loans', async (c) => {
   const userId = await getUserId(c);
+  await inferAndPersistLoanDetails(userId);
   const usage = c.req.query('usage');
   const companyId = c.req.query('company_id');
   const { where, args } = buildScopeWhere(usage, companyId);
@@ -338,6 +497,7 @@ router.get('/api/loans', async (c) => {
 
 router.get('/api/loans/:loanId', async (c) => {
   const userId = await getUserId(c);
+  await inferAndPersistLoanDetails(userId);
   const loanId = Number(c.req.param('loanId'));
   if (!Number.isFinite(loanId)) return c.json({ error: 'Invalid loan id' }, 400);
 
