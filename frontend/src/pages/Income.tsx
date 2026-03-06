@@ -87,6 +87,7 @@ export default function Income() {
   // Collapsible sections
   const [incomeOpen, setIncomeOpen] = useState(true);
   const [benchmarkOpen, setBenchmarkOpen] = useState(true);
+  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['salary', 'rental', 'dividend']));
 
   const handleSave = async () => {
     const body = {
@@ -989,31 +990,45 @@ function PassiveIncomeSection() {
             )}
           </div>
 
-          {/* By source breakdown */}
+          {/* By source breakdown - collapsible */}
           {data.by_source.length > 0 && (
             <div className="pt-2 border-t border-border/40">
               <div className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Par source</div>
-              <div className="space-y-2.5">
-                {data.by_source.map((src) => (
-                  <div key={src.type}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2 text-sm">
-                        <span>{typeIcon(src.type)}</span>
-                        <span className="font-medium">{src.label}</span>
-                      </div>
-                      <div className="flex items-center gap-3 text-sm">
-                        <span className="font-mono text-muted">{fmt(src.monthly)}/mois</span>
-                        <span className="text-muted text-xs w-8 text-right">{src.pct}%</span>
-                      </div>
+              <div className="space-y-2">
+                {data.by_source.map((src) => {
+                  const isExpanded = expandedCategories.has(src.type);
+                  return (
+                    <div key={src.type} className="bg-surface-2 rounded-lg overflow-hidden">
+                      <button
+                        onClick={() => {
+                          const next = new Set(expandedCategories);
+                          if (next.has(src.type)) next.delete(src.type);
+                          else next.add(src.type);
+                          setExpandedCategories(next);
+                        }}
+                        className="w-full flex items-center justify-between p-3 hover:bg-surface-hover transition-colors"
+                      >
+                        <div className="flex items-center gap-2">
+                          <ChevronDown size={16} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-muted`} />
+                          <span>{typeIcon(src.type)}</span>
+                          <span className="font-medium">{src.label}</span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="font-mono text-muted">{fmt(src.monthly)}/mois</span>
+                          <span className="text-muted text-xs w-8 text-right">{src.pct}%</span>
+                        </div>
+                      </button>
+                      {isExpanded && (
+                        <div className="px-3 pb-3 border-t border-border/40">
+                          <div className="h-1.5 bg-surface rounded-full overflow-hidden mt-3 mb-2">
+                            <div className="h-full bg-accent-500 rounded-full" style={{ width: `${src.pct}%` }} />
+                          </div>
+                          <div className="text-xs text-muted">{src.label} - {src.pct}% du revenu total</div>
+                        </div>
+                      )}
                     </div>
-                    <div className="h-1.5 bg-surface-2 rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-accent-500 rounded-full"
-                        style={{ width: `${src.pct}%` }}
-                      />
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
