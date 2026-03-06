@@ -285,8 +285,8 @@ async function extractFiscalFromPDF(file: File): Promise<{
           revenuBrutGlobal: parsed.revenuBrutGlobal,
           revenuImposable: parsed.revenuImposable,
           partsFiscales: parsed.partsFiscales,
-          tauxMarginal: null,
-          tauxMoyen: null,
+          tauxMarginal: parsed.tauxMarginal,
+          tauxMoyen: parsed.tauxMoyen,
           breakdown: (parsed.salaries || parsed.lmnp || parsed.revenusFonciers) ? {
             salaries: parsed.salaries,
             lmnp: parsed.lmnp,
