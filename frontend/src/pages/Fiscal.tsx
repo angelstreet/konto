@@ -257,10 +257,11 @@ export default function Fiscal() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
+        <div className="flex items-center gap-2">
           <h1 className="text-2xl font-bold">{t('fiscal_title') || 'Fiscalité'}</h1>
-          <p className="text-muted text-sm">{t('fiscal_subtitle') || 'Données fiscales et éligibilité aux aides'}</p>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
+        <p className="text-muted text-sm">{t('fiscal_subtitle') || 'Données fiscales et éligibilité aux aides'}</p>
         <div className="flex gap-2">
           <button
             onClick={() => fileInputRef.current?.click()}
@@ -284,7 +285,6 @@ export default function Fiscal() {
             <Plus size={18} />
             {t('manual_entry') || 'Saisie manuelle'}
           </button>
-          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
       </div>
 
