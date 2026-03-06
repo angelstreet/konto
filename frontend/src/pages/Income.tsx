@@ -81,6 +81,8 @@ export default function Income() {
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [form, setForm] = useState({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '' });
+  const [swissUploading, setSwissUploading] = useState(false);
+  const [swissResult, setSwissResult] = useState<{year: number; employer: string; grossCHF: number; netCHF: number} | null>(null);
   const [expandedYears, setExpandedYears] = useState<Set<number> | null>(null); // null = default (last 3 years expanded)
   const [benchmarkCountry, setBenchmarkCountry] = useState<string | null>(null); // null = auto from entries
 
@@ -116,6 +118,48 @@ export default function Income() {
     // Refetch to update cache
     const updated = await authFetch(`${API}/income`).then(r => r.json());
     setIncomeData(updated);
+  };
+
+  // Swiss salary certificate (Lohnausweis) import
+  const handleSwissImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setSwissUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await authFetch(`${API}/income/parse-swiss`, { method: 'POST', body: formData });
+      const data = await res.json();
+      if (data.success) {
+        setSwissResult(data.data);
+      } else {
+        alert(data.error || 'Failed to parse PDF');
+      }
+    } catch (err) {
+      alert('Error parsing Swiss salary certificate');
+    } finally {
+      setSwissUploading(false);
+      e.target.value = '';
+    }
+  };
+
+  const confirmSwissImport = async () => {
+    if (!swissResult) return;
+    // Save to income table
+    await authFetch(`${API}/income`, {
+      method: 'POST',
+      body: JSON.stringify({
+        year: swissResult.year,
+        employer: swissResult.employer,
+        country: 'CH',
+        gross_annual: swissResult.grossCHF,
+        net_annual: swissResult.netCHF,
+      }),
+    });
+    // Refetch
+    const updated = await authFetch(`${API}/income`).then(r => r.json());
+    setIncomeData(updated);
+    setSwissResult(null);
   };
 
   const startEdit = (e: IncomeEntry) => {
@@ -349,12 +393,18 @@ export default function Income() {
             <ChevronDown size={16} className={`text-muted transition-transform ${incomeOpen ? '' : '-rotate-90'}`} />
           </h2>
           {incomeOpen && (
-            <button
-              onClick={() => { setShowForm(true); setEditId(null); setForm({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '' }); }}
-              className="flex items-center gap-1.5 px-3 py-2.5 bg-accent-500 text-white rounded-lg text-sm min-h-[44px] font-medium hover:bg-accent-600 transition-colors"
-            >
-              <Plus size={16} /> <span className="hidden sm:inline">{t('add_employer')}</span>
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={() => { setShowForm(true); setEditId(null); setForm({ year: new Date().getFullYear(), employer: '', job_title: '', country: 'FR', gross_annual: '', net_annual: '', start_date: '', end_date: '' }); }}
+                className="flex items-center gap-1.5 px-3 py-2.5 bg-accent-500 text-white rounded-lg text-sm min-h-[44px] font-medium hover:bg-accent-600 transition-colors"
+              >
+                <Plus size={16} /> <span className="hidden sm:inline">{t('add_employer')}</span>
+              </button>
+              <label className="flex items-center gap-1.5 px-3 py-2.5 border border-border rounded-lg text-sm min-h-[44px] font-medium hover:bg-surface-hover transition-colors cursor-pointer">
+                <Upload size={16} /> <span className="hidden sm:inline">Swiss Lohnausweis</span>
+                <input type="file" accept=".pdf" className="hidden" onChange={handleSwissImport} disabled={swissUploading} />
+              </label>
+            </div>
           )}
         </div>
         {incomeOpen && (<>
@@ -867,6 +917,26 @@ export default function Income() {
           )}
         </section>
       )}
+      {/* Swiss salary import confirmation */}
+      {swissResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setSwissResult(null)} />
+          <div className="relative bg-surface border border-border rounded-xl shadow-2xl max-w-md w-full p-6">
+            <h3 className="text-lg font-bold mb-4">Importer薪资单 Swiss</h3>
+            <div className="space-y-3 mb-6">
+              <div className="flex justify-between"><span className="text-muted">Année</span><span className="font-medium">{swissResult.year}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Employeur</span><span className="font-medium">{swissResult.employer}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Brut (CHF)</span><span className="font-medium font-mono">{swissResult.grossCHF.toLocaleString('fr-CH')}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Net (CHF)</span><span className="font-medium font-mono">{swissResult.netCHF.toLocaleString('fr-CH')}</span></div>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setSwissResult(null)} className="flex-1 px-4 py-2 border border-border rounded-lg hover:bg-surface-hover">Annuler</button>
+              <button onClick={confirmSwissImport} className="flex-1 px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600">Importer</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ===== SECTION 4: Revenus Passifs ===== */}
       <PassiveIncomeSection />
       </div>
