@@ -1031,6 +1031,12 @@ function PassiveIncomeSection() {
   const [passiveOpen, setPassiveOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'received'>('upcoming');
   const { data, loading } = useApi<PassiveIncomeData>(`${API}/analysis/passive-income?usage=personal`);
+  const upcomingNextMonth = useMemo(() => {
+    if (!data?.upcoming?.length) return [];
+    const sorted = [...data.upcoming].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+    const firstMonth = sorted[0]?.date.slice(0, 7);
+    return firstMonth ? sorted.filter(i => i.date.startsWith(firstMonth)) : sorted;
+  }, [data]);
 
   const fmt = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 
@@ -1046,7 +1052,7 @@ function PassiveIncomeSection() {
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   };
 
-  const displayItems = data ? (activeTab === 'upcoming' ? data.upcoming || [] : data.received || []) : [];
+  const displayItems = data ? (activeTab === 'upcoming' ? upcomingNextMonth : data.received || []) : [];
 
 
   return (
@@ -1054,7 +1060,6 @@ function PassiveIncomeSection() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-base font-semibold flex items-center gap-2 cursor-pointer select-none" onClick={() => setPassiveOpen(!passiveOpen)}>Revenus passifs <ChevronDown size={16} className={`text-muted transition-transform ${passiveOpen ? '' : '-rotate-90'}`} /></h2>
-        {passiveOpen && <span className="text-xs text-muted px-2 py-1 bg-surface-2 rounded-lg">Personnel</span>}
       </div>
 
       {passiveOpen && (loading ? (
