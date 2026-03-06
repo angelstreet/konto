@@ -20,10 +20,15 @@ async function parse(filePath) {
   
   const allText = text2 + ' ' + text3;
 
-  // Parts fiscales - look for "C 1,50" or "C 1,00" format (page 2)
+  // Parts fiscales - look for "1,50" or "1,00" pattern (frequently near "C" but not adjacent in text)
   let partsFiscales = null;
-  const partsMatch = text2.match(/C\s+(\d+)[,.](\d+)/);
+  const partsMatch = text2.match(/(\d+)[,.](\d+)/);
   if (partsMatch) partsFiscales = parseFloat(partsMatch[1] + '.' + partsMatch[2]);
+  // Also try specifically for 1,5 or 1,50 patterns which are common for parts fiscales
+  if (!partsFiscales || partsFiscales > 10) {
+    const partsMatch2 = text2.match(/1[,.](\d+)/);
+    if (partsMatch2) partsFiscales = 1.0 + parseFloat('0.' + partsMatch2[1]);
+  }
 
   // Salaires nets (page 2)
   let salaries = null;
