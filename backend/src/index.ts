@@ -69,7 +69,7 @@ function normalizeOrigin(value: string): string {
 const allowedOriginsRaw = process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGINS;
 const ALLOWED_ORIGINS = (allowedOriginsRaw
   ? allowedOriginsRaw.split(',')
-  : ['http://localhost:5003', 'http://localhost:5173'])
+  : ['http://localhost:5003', 'http://localhost:5173', 'https://65.108.14.251:8080', 'https://konto.angelstreet.io'])
   .map(normalizeOrigin)
   .filter(Boolean);
 

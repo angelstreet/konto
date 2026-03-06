@@ -5,6 +5,8 @@ import { Upload, Save, Trash2, Calculator, CheckCircle, AlertCircle, FileText, D
 import EyeToggle from '../components/EyeToggle';
 import { useAuth } from '@clerk/clerk-react';
 import { useAmountVisibility } from '../AmountVisibilityContext';
+import ConfirmDialog from '../components/ConfirmDialog';
+import AlertDialog from '../components/AlertDialog';
 
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -55,6 +57,8 @@ export default function Fiscal() {
   const [eligibilities, setEligibilities] = useState<Eligibility[]>([]);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear() - 1);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [alertDialog, setAlertDialog] = useState<{open: boolean; title: string; message: string; variant: 'success' | 'error' | 'info'}>({open: false, title: '', message: '', variant: 'info'});
+  const [confirmDialog, setConfirmDialog] = useState<{open: boolean; year: number | null}>({open: false, year: null});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<{
@@ -136,17 +140,17 @@ export default function Fiscal() {
         await loadFiscalData();
         // Check if we got actual data or just defaults
         if (data.fiscalData && (data.fiscalData.revenu_imposable || data.fiscalData.revenu_brut_global)) {
-          alert(t('fiscal_upload_success') || 'Fiscal data extracted successfully');
+          setAlertDialog({ open: true, title: t('success'), message: t('fiscal_upload_success') || 'Fiscal data extracted successfully', variant: 'success' });
         } else {
-          alert(t('fiscal_upload_partial') || 'PDF uploaded but some data could not be extracted. You can edit manually.');
+          setAlertDialog({ open: true, title: t('warning'), message: t('fiscal_upload_partial') || 'PDF uploaded but some data could not be extracted. You can edit manually.', variant: 'info' });
         }
       } else {
         const err = await res.json();
-        alert(err.error || 'Failed to parse PDF');
+        setAlertDialog({ open: true, title: t('error'), message: err.error || 'Failed to parse PDF', variant: 'error' });
       }
     } catch (e) {
       console.error('Upload error:', e);
-      alert('Failed to upload PDF');
+      setAlertDialog({ open: true, title: t('error'), message: 'Failed to upload PDF', variant: 'error' });
     }
     setUploading(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
@@ -184,7 +188,7 @@ export default function Fiscal() {
         resetForm();
       } else {
         const err = await res.json();
-        alert(err.error || 'Failed to save');
+        setAlertDialog({ open: true, title: t('error'), message: err.error || 'Failed to save', variant: 'error' });
       }
     } catch (e) {
       console.error('Save error:', e);
@@ -193,13 +197,20 @@ export default function Fiscal() {
   };
 
   const handleDelete = async (year: number) => {
-    if (!confirm(`Delete fiscal data for ${year}?`)) return;
+    setConfirmDialog({ open: true, year });
+  };
+
+  const confirmDelete = async () => {
+    const year = confirmDialog.year;
+    setConfirmDialog({ open: false, year: null });
+    if (!year) return;
     
     try {
       await apiFetch(`${API}/fiscal/${year}`, { method: 'DELETE' });
       await loadFiscalData();
     } catch (e) {
       console.error('Delete error:', e);
+      setAlertDialog({ open: true, title: t('error'), message: 'Failed to delete fiscal data', variant: 'error' });
     }
   };
 
@@ -586,6 +597,24 @@ export default function Fiscal() {
           </div>
         </>
       ) : null}
+
+      <AlertDialog
+        open={alertDialog.open}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        variant={alertDialog.variant}
+        onClose={() => setAlertDialog(prev => ({ ...prev, open: false }))}
+      />
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={t('confirm_delete') || 'Confirmer la suppression'}
+        message={confirmDialog.year ? `Delete fiscal data for ${confirmDialog.year}?` : ''}
+        confirmLabel={t('delete') || 'Supprimer'}
+        variant="danger"
+        onConfirm={confirmDelete}
+        onCancel={() => setConfirmDialog({ open: false, year: null })}
+      />
     </div>
   );
 }
