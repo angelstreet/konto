@@ -1,17 +1,9 @@
-import { createRequire } from 'module';
-const require = createRequire(import.meta.url);
-import { readFileSync, existsSync, unlinkSync } from 'fs';
-import { fileURLToPath } from 'url';
-import { dirname } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-const pdfjs = require('pdfjs-dist/legacy/build/pdf.mjs');
+const fs = require('fs');
+const { getDocument } = require('pdfjs-dist/legacy/build/pdf.mjs');
 
 async function parse(filePath) {
-  const data = readFileSync(filePath);
-  const pdf = await pdfjs.getDocument({data: new Uint8Array(data)}).promise;
+  const data = fs.readFileSync(filePath);
+  const pdf = await getDocument({ data: new Uint8Array(data) }).promise;
   const page = await pdf.getPage(2);
   const tc = await page.getTextContent();
   const text = tc.items.map(i => i.str).join(' ');
@@ -49,6 +41,6 @@ async function parse(filePath) {
 }
 
 const filePath = process.argv[2];
-if (filePath && existsSync(filePath)) {
+if (filePath && fs.existsSync(filePath)) {
   parse(filePath).catch(e => { console.error(e.message); process.exit(1); });
 }
