@@ -33,7 +33,13 @@ interface Eligibility {
 }
 
 function useAuthToken() {
-  const { getToken } = useAuth();
+  let getToken: (() => Promise<string | null>) | undefined;
+  if (clerkEnabled) {
+    try {
+      const auth = useAuth();
+      getToken = auth.getToken;
+    } catch {}
+  }
   return getToken;
 }
 
