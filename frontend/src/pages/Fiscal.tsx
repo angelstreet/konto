@@ -436,51 +436,50 @@ export default function Fiscal() {
       )}
 
       {fiscalData.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex gap-2 flex-wrap items-center">
-            {fiscalData.map(f => (
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          {fiscalData.map(f => (
+            <div key={f.year} className="relative">
               <button
-                key={f.year}
                 onClick={() => setSelectedYear(f.year)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`w-full px-4 py-3 rounded-xl font-medium transition-all ${
                   selectedYear === f.year
-                    ? 'bg-accent-500/20 text-accent-400 border border-accent-500/30'
+                    ? 'bg-accent-500/20 text-accent-400 border-2 border-accent-500/50'
                     : 'bg-surface border border-border hover:bg-surface-hover'
                 }`}
               >
-                {f.year}
+                <div className="text-lg">{f.year}</div>
+                <div className="text-2xl mt-1">
+                  {f.fiscal_residency === 'FR' ? '🇫🇷' : 
+                   f.fiscal_residency?.startsWith('CH') ? '🇨🇭' :
+                   f.fiscal_residency === 'BE' ? '🇧🇪' :
+                   f.fiscal_residency === 'DE' ? '🇩🇪' : '🌍'}
+                </div>
               </button>
-            ))}
-          </div>
-          
-          {/* Residency selector for selected year */}
-          {currentData && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted">Résidence fiscale {selectedYear}:</span>
               <select
-                value={currentData.fiscal_residency || 'FR'}
+                value={f.fiscal_residency || 'FR'}
                 onChange={async (e) => {
                   const newResidency = e.target.value;
-                  await authFetch(`${API}/fiscal/${selectedYear}`, {
+                  await authFetch(`${API}/fiscal/${f.year}`, {
                     method: 'PATCH',
                     body: JSON.stringify({ fiscal_residency: newResidency }),
                   });
-                  setFiscalData(prev => prev.map(f => f.year === selectedYear ? { ...f, fiscal_residency: newResidency } : f));
+                  setFiscalData(prev => prev.map(item => item.year === f.year ? { ...item, fiscal_residency: newResidency } : item));
                 }}
-                className="px-3 py-2 bg-surface border border-border rounded-lg text-sm"
+                className="absolute bottom-1 right-1 w-6 h-4 opacity-0 cursor-pointer"
+                title="Changer la résidence"
               >
-                <option value="FR">🇫🇷 France</option>
-                <option value="CH-ZH">🇨🇭 Zurich</option>
-                <option value="CH-VD">🇨🇭 Vaud</option>
-                <option value="CH-GE">🇨🇭 Genève</option>
-                <option value="CH-BE">🇨🇭 Bern</option>
-                <option value="CH-OTHER">🇨🇭 Autres cantons</option>
-                <option value="BE">🇧🇪 Belgique</option>
-                <option value="DE">🇩🇪 Deutschland</option>
-                <option value="OTHER">Autre</option>
+                <option value="FR">🇫🇷</option>
+                <option value="CH-ZH">🇨🇭</option>
+                <option value="CH-VD">🇨🇭</option>
+                <option value="CH-GE">🇨🇭</option>
+                <option value="CH-BE">🇨🇭</option>
+                <option value="CH-OTHER">🇨🇭</option>
+                <option value="BE">🇧🇪</option>
+                <option value="DE">🇩🇪</option>
+                <option value="OTHER">🌍</option>
               </select>
             </div>
-          )}
+          ))}
         </div>
       )}
 
