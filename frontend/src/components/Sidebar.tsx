@@ -32,6 +32,7 @@ import {
   TrendingUp,
   Trophy,
   Bitcoin,
+  FileText,
 } from 'lucide-react';
 
 /* ── Navigation data structure ──────────────────────────────────────── */
@@ -81,6 +82,12 @@ const navGroups: NavGroup[] = [
     labelKey: 'nav_group_transactions',
     children: [
       { kind: 'leaf', path: '/transactions', icon: ArrowLeftRight, labelKey: 'nav_transactions' },
+    ],
+  },
+  {
+    labelKey: 'nav_group_fiscal',
+    children: [
+      { kind: 'leaf', path: '/fiscal', icon: FileText, labelKey: 'nav_fiscal' },
     ],
   },
   {
