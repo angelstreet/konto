@@ -138,10 +138,8 @@ export default function Fiscal() {
       if (res.ok) {
         const data = await res.json();
         await loadFiscalData();
-        // Check if we got actual data or just defaults
-        if (data.fiscalData && (data.fiscalData.revenu_imposable || data.fiscalData.revenu_brut_global)) {
-          setAlertDialog({ open: true, title: t('success'), message: t('fiscal_upload_success') || 'Fiscal data extracted successfully', variant: 'success' });
-        } else {
+        // No popup needed - data will show directly on page
+        if (!data.fiscalData?.revenu_imposable && !data.fiscalData?.revenu_brut_global) {
           setAlertDialog({ open: true, title: t('warning'), message: t('fiscal_upload_partial') || 'PDF uploaded but some data could not be extracted. You can edit manually.', variant: 'info' });
         }
       } else {
