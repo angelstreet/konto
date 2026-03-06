@@ -132,18 +132,18 @@ export default function Income() {
       if (!yearData) return null;
       const popPercentile = getPercentile(convertSalary(gross, benchCurrency, benchCurrency), yearData);
       const top = Math.max(1, 100 - popPercentile);
-      const above = Math.min(99, popPercentile);
+      const median = yearData.find(d => d.p === 50)?.gross ?? yearData[Math.floor(yearData.length / 2)].gross;
       return {
         key: c.value,
         label: c.label,
         flag: c.flag,
         top,
-        above,
         gross,
         net,
         currency: benchCurrency,
+        median,
       };
-    }).filter(Boolean) as { key: string; label: string; flag: string; top: number; above: number; gross: number; net: number; currency: string }[];
+    }).filter(Boolean) as { key: string; label: string; flag: string; top: number; gross: number; net: number; currency: string; median: number }[];
 
     rows.sort((a, b) => a.top - b.top);
 
@@ -152,10 +152,10 @@ export default function Income() {
         label: 'World',
         flag: '🌍',
         top: Math.max(1, 100 - worldPercentile),
-        above: Math.min(99, worldPercentile),
         gross: worldGross,
         net: worldNet,
         currency: incomeCurrency,
+        median: fromEUR(APP_USERS_PERCENTILES.find(p => p.p === 50)?.gross ?? 70000, incomeCurrency),
       },
       rows,
     };
@@ -707,26 +707,23 @@ export default function Income() {
               <div className="text-xs text-muted">Comparaison simple, tout sur une ligne, sans graph.</div>
               <div className="border border-border rounded-xl divide-y divide-border">
                 <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[13px] font-medium text-muted">
-                  <div className="col-span-3">Pays</div>
-                  <div className="col-span-2">Top %</div>
-                  <div className="col-span-2">Above %</div>
-                  <div className="col-span-5">Vous</div>
+                  <div className="col-span-4">Pays</div>
+                  <div className="col-span-3">Top %</div>
+                  <div className="col-span-5">Médiane</div>
                 </div>
                 <div className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm">
-                  <div className="col-span-3 flex items-center gap-2 font-semibold"><span>🌍</span><span>World</span></div>
-                  <div className="col-span-2 font-semibold text-accent-300">Top {positionRows.world.top}%</div>
-                  <div className="col-span-2 text-muted text-xs">Above {positionRows.world.above}%</div>
+                  <div className="col-span-4 flex items-center gap-2 font-semibold"><span>🌍</span><span>World</span></div>
+                  <div className="col-span-3 font-semibold text-accent-300">{positionRows.world.top}%</div>
                   <div className="col-span-5 text-xs md:text-sm">
-                    {mask(fmtCurrency(positionRows.world.gross, positionRows.world.currency))}{positionRows.world.net ? <> · {t('net').toLowerCase()} {mask(fmtCurrency(positionRows.world.net, positionRows.world.currency))}</> : null}
+                    {mask(fmtCurrency(positionRows.world.median, positionRows.world.currency))}
                   </div>
                 </div>
                 {positionRows.rows.map(r => (
                   <div key={r.key} className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm">
-                    <div className="col-span-3 flex items-center gap-2 font-semibold"><span>{r.flag}</span><span>{r.label}</span></div>
-                    <div className="col-span-2 font-semibold text-accent-300">Top {r.top}%</div>
-                    <div className="col-span-2 text-muted text-xs">Above {r.above}%</div>
+                    <div className="col-span-4 flex items-center gap-2 font-semibold"><span>{r.flag}</span><span>{r.label}</span></div>
+                    <div className="col-span-3 font-semibold text-accent-300">{r.top}%</div>
                     <div className="col-span-5 text-xs md:text-sm">
-                      {mask(fmtCurrency(r.gross, r.currency))}{r.net ? <> · {t('net').toLowerCase()} {mask(fmtCurrency(r.net, r.currency))}</> : null}
+                      {mask(fmtCurrency(r.median, r.currency))}
                     </div>
                   </div>
                 ))}
