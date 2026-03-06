@@ -128,7 +128,7 @@ export default function Fiscal() {
     try {
       const formDataObj = new FormData();
       formDataObj.append('file', file);
-      formDataObj.append('year', String(selectedYear));
+      // Year is auto-detected from PDF
 
       const res = await apiFetch(`${API}/fiscal/upload`, {
         method: 'POST',
