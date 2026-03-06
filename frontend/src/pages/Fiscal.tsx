@@ -456,14 +456,6 @@ export default function Fiscal() {
               </button>
             );
           })}
-          {/* Add year button */}
-          <button
-            onClick={() => {/* TODO: add year modal */}}
-            className="px-3 py-2 rounded-lg border border-dashed border-border text-muted hover:text-white hover:border-accent-500 transition-colors"
-            title="Ajouter une année"
-          >
-            <Plus size={16} />
-          </button>
           {/* Change residency for selected year */}
           {currentData && (
             <select
