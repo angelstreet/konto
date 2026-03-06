@@ -107,15 +107,16 @@ export default function LoansDashboard() {
   const learn = useApi<{ items: LearnItem[] }>(`${API}/loans/learn`);
 
   const loans = data?.loans || [];
+  const providerLabel = (loan?: LoanRow) => (loan?.provider && loan.provider.trim()) || '';
   const providers = Array.from(new Set(loans.map((l) => l.provider).filter(Boolean) as string[]));
 
   const filteredLoans = useMemo(() => {
     if (selectedProvider === 'all') return loans;
-    return loans.filter((l) => (l.provider || 'Manual') === selectedProvider);
+    return loans.filter((l) => providerLabel(l) === selectedProvider);
   }, [loans, selectedProvider]);
   const filteredDistribution = useMemo(() => {
     if (!data) return [];
-    return data.distribution.filter((d) => selectedProvider === 'all' || (loans.find((l) => l.loan_id === d.loan_id)?.provider || 'Manual') === selectedProvider);
+    return data.distribution.filter((d) => selectedProvider === 'all' || providerLabel(loans.find((l) => l.loan_id === d.loan_id)) === selectedProvider);
   }, [data, loans, selectedProvider]);
 
   const fc = (amount: number | null | undefined) => {
@@ -402,7 +403,7 @@ export default function LoansDashboard() {
                       <tr key={loan.loan_id} className="border-b border-border/70 hover:bg-surface-hover">
                         <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/loans/${loan.loan_id}`)}>
                           <div>{loan.name}</div>
-                          <div className="text-xs text-muted">{loan.provider || 'Manual'}</div>
+                          {providerLabel(loan) ? <div className="text-xs text-muted">{providerLabel(loan)}</div> : null}
                           <div className="text-xs text-muted">
                             {t('start_date') || 'Début'}: {formatLoanDate(loan.start_date)} · {t('loan_end_date') || 'Date de fin'}: {formatLoanDate(loan.end_date)}
                           </div>
@@ -428,7 +429,7 @@ export default function LoansDashboard() {
                   <div key={loan.loan_id} className="bg-surface rounded-xl border border-border p-3">
                     <button className="w-full text-left" onClick={() => navigate(`/loans/${loan.loan_id}`)}>
                       <div className="font-medium truncate">{loan.name}</div>
-                      <div className="text-xs text-muted mb-2">{loan.provider || 'Manual'}</div>
+                      {providerLabel(loan) ? <div className="text-xs text-muted mb-2">{providerLabel(loan)}</div> : null}
                       <div className="text-2xl font-semibold text-accent-400 mb-1">{fc(loan.remaining)}</div>
                       <div className="text-xs text-muted mb-1">{loan.repaid_pct != null ? `${t('loan_repaid_sentence') || 'Vous avez remboursé'} ${Math.round(loan.repaid_pct)} %` : (t('loan_no_data') || 'Pas de données')}</div>
                       <div className="h-1.5 bg-background rounded-full overflow-hidden">
