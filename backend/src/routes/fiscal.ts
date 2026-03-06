@@ -281,7 +281,8 @@ async function extractFiscalFromPDF(file: File): Promise<{
       
       try {
         const parsed = JSON.parse(stdout.trim());
-        resolve({
+        console.log('Parsed fiscal data:', JSON.stringify(parsed));
+        const result = {
           revenuBrutGlobal: parsed.revenuBrutGlobal,
           revenuImposable: parsed.revenuImposable,
           partsFiscales: parsed.partsFiscales,
@@ -293,7 +294,9 @@ async function extractFiscalFromPDF(file: File): Promise<{
             dividendes: null,
             revenusFonciers: parsed.revenusFonciers
           } : null
-        });
+        };
+        console.log('Returning result:', JSON.stringify(result));
+        resolve(result);
       } catch {
         resolve({
           revenuBrutGlobal: null,
