@@ -242,9 +242,10 @@ async function extractFiscalFromPDF(file: File): Promise<{
   let text = '';
   
   try {
+    // Use dynamic import for pdfjs-dist
     const fileBuffer = await file.arrayBuffer();
-    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
-    const pdf = await pdfjs.getDocument({ data: new Uint8Array(fileBuffer) }).promise;
+    const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdf = await pdfjsModule.getDocument({ data: new Uint8Array(fileBuffer) }).promise;
     const page = await pdf.getPage(1);
     const textContent = await page.getTextContent();
     text = textContent.items.map((i: any) => i.str).join(' ');
