@@ -282,7 +282,10 @@ async function extractFiscalFromPDF(file: File): Promise<{
       }
       
       try {
-        const parsed = JSON.parse(stdout.trim());
+        // Warnings go to stdout too — extract only the JSON line
+        const jsonLine = stdout.trim().split('\n').find(l => l.trim().startsWith('{'));
+        if (!jsonLine) throw new Error('No JSON in output');
+        const parsed = JSON.parse(jsonLine);
         console.log('Parsed fiscal data:', JSON.stringify(parsed));
         const result = {
           revenuBrutGlobal: parsed.revenuBrutGlobal,
