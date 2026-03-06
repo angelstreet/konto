@@ -132,8 +132,14 @@ export default function Fiscal() {
       });
       
       if (res.ok) {
+        const data = await res.json();
         await loadFiscalData();
-        alert(t('fiscal_upload_success') || 'Fiscal data extracted successfully');
+        // Check if we got actual data or just defaults
+        if (data.fiscalData && (data.fiscalData.revenu_imposable || data.fiscalData.revenu_brut_global)) {
+          alert(t('fiscal_upload_success') || 'Fiscal data extracted successfully');
+        } else {
+          alert(t('fiscal_upload_partial') || 'PDF uploaded but some data could not be extracted. You can edit manually.');
+        }
       } else {
         const err = await res.json();
         alert(err.error || 'Failed to parse PDF');
@@ -274,8 +280,9 @@ export default function Fiscal() {
       </div>
 
       {showAddForm && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-surface border border-border rounded-xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/50" onClick={() => setShowAddForm(false)} />
+          <div className="relative bg-surface border border-border rounded-xl shadow-2xl max-w-lg w-full max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between p-4 border-b border-border">
               <h2 className="text-lg font-bold">{t('fiscal_data_entry') || 'Saisie des données fiscales'}</h2>
               <button onClick={() => setShowAddForm(false)} className="p-1 hover:bg-surface-hover rounded">
