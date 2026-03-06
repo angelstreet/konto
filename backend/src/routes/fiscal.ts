@@ -250,8 +250,6 @@ async function extractFiscalFromPDF(file: File): Promise<{
     const page = await pdf.getPage(2);
     const textContent = await page.getTextContent();
     text = textContent.items.map((i: any) => i.str).join(' ');
-    const textContent = await page.getTextContent();
-    text = textContent.items.map((i: any) => i.str).join(' ');
     
     // Validate this is an "avis d'imposition" (French tax notice)
     const isAvisImposition = text.includes('avis') && (text.includes('impôt') || text.includes('IR'));
@@ -260,9 +258,7 @@ async function extractFiscalFromPDF(file: File): Promise<{
     }
   } catch (e: any) {
     console.error('PDF parse error:', e.message);
-    if (e.message.startsWith('NOT_AVIS_IMPOSITION:')) {
-      return c.json({ error: e.message.replace('NOT_AVIS_IMPOSITION:', '') }, 400);
-    }
+    // Return empty data on parse error - let the caller handle it
     return {
       revenuBrutGlobal: null,
       revenuImposable: null,
@@ -313,6 +309,10 @@ async function extractFiscalFromPDF(file: File): Promise<{
   }
 
   console.log('Extracted:', { revenuBrutGlobal, revenuImposable, partsFiscales, salaries, lmnp });
+
+  // Taux - not easily extractable from PDF, set to null
+  const tauxMarginal: number | null = null;
+  const tauxMoyen: number | null = null;
 
   const breakdown = (salaries || lmnp || revenuImposable) ? {
     salaries,
