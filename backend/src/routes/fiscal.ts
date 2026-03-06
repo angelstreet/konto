@@ -249,8 +249,17 @@ async function extractFiscalFromPDF(file: File): Promise<{
     const page = await pdf.getPage(1);
     const textContent = await page.getTextContent();
     text = textContent.items.map((i: any) => i.str).join(' ');
+    
+    // Validate this is an "avis d'imposition" (French tax notice)
+    const isAvisImposition = text.includes('avis') && (text.includes('impôt') || text.includes('IR'));
+    if (!isAvisImposition) {
+      throw new Error('NOT_AVIS_IMPOSITION:Ce document ne semble pas être un avis d\'imposition français.');
+    }
   } catch (e: any) {
     console.error('PDF parse error:', e.message);
+    if (e.message.startsWith('NOT_AVIS_IMPOSITION:')) {
+      return c.json({ error: e.message.replace('NOT_AVIS_IMPOSITION:', '') }, 400);
+    }
     return {
       revenuBrutGlobal: null,
       revenuImposable: null,
