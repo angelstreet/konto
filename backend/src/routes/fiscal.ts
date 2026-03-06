@@ -307,20 +307,6 @@ async function extractFiscalFromPDF(file: File): Promise<{
 
   console.log('Extracted:', { revenuBrutGlobal, revenuImposable, partsFiscales, tauxMarginal, salaries, revenusFonciers });
 
-  // Breakdown - Dividendes
-  let dividendes: number | null = null;
-  const divMatch = text.match(/dividendes?[^\d]*?([\d\s]+[.,]\d{0,2})/i);
-  if (divMatch) {
-    dividendes = parseFloat(divMatch[1].replace(/\s/g, '').replace(',', '.'));
-  }
-
-  // Breakdown - Revenus fonciers
-  let revenusFonciers: number | null = null;
-  const fonMatch = text.match(/revenus?\s+fonciers?[^\d]*?([\d\s]+[.,]\d{0,2})/i);
-  if (fonMatch) {
-    revenusFonciers = parseFloat(fonMatch[1].replace(/\s/g, '').replace(',', '.'));
-  }
-
   const breakdown = (salaries || revenusFonciers) ? {
     salaries,
     lmnp: null,
