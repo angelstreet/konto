@@ -257,8 +257,13 @@ router.post('/api/bank/sync', async (c) => {
   for (const rawConn of connections.rows as any[]) {
     const conn = decryptBankConn(rawConn);
     try {
+      let token = conn.powens_token;
+      if (!conn.powens_refresh_token) {
+        const recoveredToken = await refreshPowensToken(conn.id);
+        if (recoveredToken) token = recoveredToken;
+      }
       const res = await fetch(`${POWENS_API}/users/me/accounts`, {
-        headers: { 'Authorization': `Bearer ${conn.powens_token}` },
+        headers: { 'Authorization': `Bearer ${token}` },
       });
       const data = await res.json() as any;
       const accounts = data.accounts || [];
@@ -392,6 +397,10 @@ router.post('/api/bank/accounts/:id/sync', async (c) => {
     let token = conn.powens_token;
 
     try {
+      if (!conn.powens_refresh_token) {
+        const recoveredToken = await refreshPowensToken(conn.id);
+        if (recoveredToken) token = recoveredToken;
+      }
       let accountsRes = await fetch(`${POWENS_API}/users/me/accounts`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
@@ -612,19 +621,26 @@ router.post('/api/bank/sync-all', async (c) => {
   let errors = 0;
 
   for (const conn of connections) {
-    const token = conn.powens_token;
+    let token = conn.powens_token;
 
     try {
+      if (!conn.powens_refresh_token) {
+        const recoveredToken = await refreshPowensToken(conn.id);
+        if (recoveredToken) token = recoveredToken;
+      }
       // Fetch accounts visible to this connection
-      const accountsRes = await fetch(`${POWENS_API}/users/me/accounts`, {
+      let accountsRes = await fetch(`${POWENS_API}/users/me/accounts`, {
         headers: { 'Authorization': `Bearer ${token}` },
       });
       if (!accountsRes.ok) {
         // Try refresh
         const refreshedToken = await refreshPowensToken(conn.id);
         if (!refreshedToken) { errors++; continue; }
-        // Retry not needed here — move on
-        continue;
+        token = refreshedToken;
+        accountsRes = await fetch(`${POWENS_API}/users/me/accounts`, {
+          headers: { 'Authorization': `Bearer ${token}` },
+        });
+        if (!accountsRes.ok) { errors++; continue; }
       }
       const accountsData = await accountsRes.json() as any;
       const powensAccounts = accountsData.accounts || [];
