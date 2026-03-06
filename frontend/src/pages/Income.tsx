@@ -537,6 +537,36 @@ export default function Income() {
                   byYear.get(e.year)!.push(e);
                 });
                 const years = [...byYear.keys()].sort((a, b) => b - a);
+                if (years.length === 1) {
+                  const yearEntries = byYear.get(years[0])!;
+                  return (
+                    <div key="single-year" className="bg-surface-hover rounded-lg overflow-hidden">
+                      <div className="px-3 pb-2 space-y-1">
+                        {yearEntries.map(e => {
+                          const fmtE = e.country === 'CH' ? fmtCHF : fmt;
+                          const months = e.start_date && e.end_date
+                            ? `${new Date(e.start_date).toLocaleDateString('fr-FR', { month: 'short' })}–${new Date(e.end_date).toLocaleDateString('fr-FR', { month: 'short' })}`
+                            : e.start_date
+                            ? `${new Date(e.start_date).toLocaleDateString('fr-FR', { month: 'short' })}–…`
+                            : '';
+                          return (
+                            <div key={e.id} className="flex items-center justify-between py-1.5 pl-2 border-l-2 border-accent-500/30">
+                              <div className="flex items-center gap-2 min-w-0 flex-1">
+                                <span className="text-sm truncate">{e.employer}</span>
+                                {months && <span className="text-[10px] text-muted flex-shrink-0">({months})</span>}
+                              </div>
+                              <div className="flex items-center gap-1 flex-shrink-0">
+                                <span className="text-sm font-mono text-green-400">{mask(fmtE(e.gross_annual))}</span>
+                                <button onClick={(ev) => { ev.stopPropagation(); startEdit(e); }} className="p-1.5 text-muted hover:text-white"><Edit3 size={12} /></button>
+                                <button onClick={(ev) => { ev.stopPropagation(); handleDeleteIncome(e.id); }} className="p-1.5 text-muted hover:text-red-400"><Trash2 size={12} /></button>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                }
                 const defaultExpanded = new Set(years.slice(0, 3));
                 return years.map(year => {
                   const yearEntries = byYear.get(year)!;
@@ -609,6 +639,52 @@ export default function Income() {
                   byYear.get(e.year)!.push(e);
                 });
                 const years = [...byYear.keys()].sort((a, b) => b - a);
+                if (years.length === 1) {
+                  const yearEntries = byYear.get(years[0])!;
+                  return (
+                    <div key="single-year-table" className="bg-surface-hover rounded-lg overflow-hidden">
+                      <div className="px-4 pb-3">
+                        <table className="w-full text-sm">
+                          <thead>
+                            <tr className="text-muted text-xs border-b border-border/50">
+                              <th className="text-left py-1.5 px-2">{t('period')}</th>
+                              <th className="text-left py-1.5 px-2">{t('employer')}</th>
+                              <th className="text-left py-1.5 px-2">{t('job_title')}</th>
+                              <th className="text-left py-1.5 px-2">{t('country')}</th>
+                              <th className="text-right py-1.5 px-2">{t('gross_annual')}</th>
+                              <th className="text-right py-1.5 px-2">{t('net_annual')}</th>
+                              <th className="text-right py-1.5 px-2"></th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {yearEntries.map(e => {
+                              const fmtE = e.country === 'CH' ? fmtCHF : fmt;
+                              const period = e.start_date
+                                ? `${e.start_date.slice(5)}${e.end_date ? ' → ' + e.end_date.slice(5) : ' → …'}`
+                                : '—';
+                              return (
+                                <tr key={e.id} className="border-b border-border/30 hover:bg-white/5 transition-colors">
+                                  <td className="py-2 px-2 text-xs text-muted">{period}</td>
+                                  <td className="py-2 px-2">
+                                    {e.employer}
+                                  </td>
+                                  <td className="py-2 px-2 text-muted">{e.job_title || '—'}</td>
+                                  <td className="py-2 px-2">{countries.find(c => c.value === e.country)?.label || e.country}</td>
+                                  <td className="py-2 px-2 text-right font-mono font-medium text-green-400">{mask(fmtE(e.gross_annual))}</td>
+                                  <td className="py-2 px-2 text-right font-mono text-emerald-300">{e.net_annual ? mask(fmtE(e.net_annual)) : '—'}</td>
+                                  <td className="py-2 px-2 text-right">
+                                    <button onClick={() => startEdit(e)} className="p-1 text-muted hover:text-white"><Edit3 size={14} /></button>
+                                    <button onClick={() => handleDeleteIncome(e.id)} className="p-1 text-muted hover:text-red-400 ml-1"><Trash2 size={14} /></button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  );
+                }
                 const defaultExpanded = new Set(years.slice(0, 3));
                 return years.map(year => {
                   const yearEntries = byYear.get(year)!;
