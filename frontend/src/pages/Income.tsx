@@ -77,6 +77,13 @@ export default function Income() {
   const { data: benchmarkDb } = useApi<Record<string, Record<number, { p: number; gross: number }[]>>>(`${API}/salary-benchmarks`);
 
   const entries = incomeData?.entries || [];
+  const availableYears = useMemo(() => [...new Set(entries.map(e => e.year))].sort((a, b) => b - a), [entries]);
+  const [activeYear, setActiveYear] = useState<number>(() => availableYears[0] ?? new Date().getFullYear());
+  useEffect(() => {
+    if (availableYears.length === 0) return;
+    if (!availableYears.includes(activeYear)) setActiveYear(availableYears[0]);
+  }, [availableYears, activeYear]);
+  const entriesForYear = useMemo(() => entries.filter(e => e.year === activeYear), [entries, activeYear]);
 
   const [showForm, setShowForm] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
@@ -91,12 +98,12 @@ export default function Income() {
 
   // Quick position rows (world + countries)
   const positionRows = useMemo(() => {
-    if (!benchmarkDb || entries.length === 0) return null;
+    if (!benchmarkDb || entriesForYear.length === 0) return null;
 
     // Aggregate by year overall and per country
     const byYearTotal: Record<number, { gross: number; net: number }> = {};
     const byCountry: Record<string, Record<number, { gross: number; net: number }>> = {};
-    entries.forEach(e => {
+    entriesForYear.forEach(e => {
       byYearTotal[e.year] = byYearTotal[e.year] || { gross: 0, net: 0 };
       byYearTotal[e.year].gross += e.gross_annual;
       byYearTotal[e.year].net += e.net_annual || 0;
@@ -106,8 +113,8 @@ export default function Income() {
       byCountry[e.country][e.year].net += e.net_annual || 0;
     });
 
-    const latestYear = Math.max(...Object.keys(byYearTotal).map(Number));
-    const latestCountry = entries.find(e => e.year === latestYear)?.country || 'FR';
+    const latestYear = activeYear;
+    const latestCountry = entriesForYear.find(e => e.year === latestYear)?.country || 'FR';
     const incomeCurrency = latestCountry === 'CH' ? 'CHF' : 'EUR';
 
     const worldGross = byYearTotal[latestYear]?.gross ?? 0;
@@ -152,7 +159,7 @@ export default function Income() {
       },
       rows,
     };
-  }, [benchmarkDb, entries]);
+  }, [benchmarkDb, entriesForYear, activeYear]);
 
 
   const handleSave = async () => {
@@ -239,9 +246,9 @@ export default function Income() {
   // Chart data: salary progression by year
   const chartData = useMemo(() => {
     const byYear: Record<number, number> = {};
-    entries.forEach(e => { byYear[e.year] = (byYear[e.year] || 0) + e.gross_annual; });
+    entriesForYear.forEach(e => { byYear[e.year] = (byYear[e.year] || 0) + e.gross_annual; });
     return Object.entries(byYear).sort(([a], [b]) => Number(a) - Number(b)).map(([year, total]) => ({ year: Number(year), total }));
-  }, [entries]);
+  }, [entriesForYear]);
 
   // ===== PAYSLIPS STATE =====
   interface Payslip {
@@ -256,7 +263,7 @@ export default function Income() {
     status: string;
   }
 
-  const currentYear = new Date().getFullYear();
+  const currentYear = activeYear;
   const [payslips, setPayslips] = useState<Payslip[]>([]);
   const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
   const [folderMapping, setFolderMapping] = useState<{ folder_id: string; folder_path: string | null } | null>(null);
@@ -424,6 +431,21 @@ export default function Income() {
             </div>
           )}
         </div>
+        {incomeOpen && availableYears.length > 0 && (
+          <div className="flex flex-wrap gap-2 mt-2">
+            {availableYears.map(y => (
+              <button
+                key={y}
+                onClick={() => { setActiveYear(y); setExpandedYears(null); }}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  y === activeYear ? 'bg-accent-500 text-white' : 'bg-surface-hover text-muted hover:text-white'
+                }`}
+              >
+                {y}
+              </button>
+            ))}
+          </div>
+        )}
         {incomeOpen && (<>
 
         {/* Form */}
@@ -487,14 +509,14 @@ export default function Income() {
         )}
 
         {/* Entries — table on desktop, cards on mobile */}
-        {entries.length > 0 ? (
+        {entriesForYear.length > 0 ? (
           <>
             {/* Mobile: group by year, one line per year, expand for details */}
             <div className="sm:hidden space-y-1">
               {(() => {
                 // Group entries by year, sort descending
                 const byYear = new Map<number, IncomeEntry[]>();
-                entries.forEach(e => {
+                entriesForYear.forEach(e => {
                   if (!byYear.has(e.year)) byYear.set(e.year, []);
                   byYear.get(e.year)!.push(e);
                 });
@@ -566,7 +588,7 @@ export default function Income() {
             <div className="hidden sm:block space-y-1">
               {(() => {
                 const byYear = new Map<number, IncomeEntry[]>();
-                entries.forEach(e => {
+                entriesForYear.forEach(e => {
                   if (!byYear.has(e.year)) byYear.set(e.year, []);
                   byYear.get(e.year)!.push(e);
                 });
@@ -768,7 +790,8 @@ export default function Income() {
                   <div className="space-y-0.5">
                     {Array.from({ length: 12 }, (_, i) => i + 1).map(month => {
                       const payslip = payslips.find(p => p.month === month);
-                      const isFuture = month > new Date().getMonth() + 1;
+              const today = new Date();
+              const isFuture = currentYear === today.getFullYear() && month > today.getMonth() + 1;
                       const isEditing = editingPayslip === payslip?.id;
 
                       if (isFuture && !payslip) return (
