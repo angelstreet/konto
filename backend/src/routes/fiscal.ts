@@ -242,12 +242,14 @@ async function extractFiscalFromPDF(file: File): Promise<{
   let text = '';
   
   try {
-    // Use dynamic import for pdfjs-dist
+    // Require pdfjs-dist at runtime
     const fileBuffer = await file.arrayBuffer();
-    const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdfjsModule = require('pdfjs-dist/legacy/build/pdf.mjs');
     const pdf = await pdfjsModule.getDocument({ data: new Uint8Array(fileBuffer) }).promise;
     // Data is on page 2, not page 1 (page 1 is scanned metadata)
     const page = await pdf.getPage(2);
+    const textContent = await page.getTextContent();
+    text = textContent.items.map((i: any) => i.str).join(' ');
     const textContent = await page.getTextContent();
     text = textContent.items.map((i: any) => i.str).join(' ');
     
