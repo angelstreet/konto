@@ -821,7 +821,7 @@ router.get('/api/analysis/passive-income', async (c) => {
   }
   upcoming.sort((a: any, b: any) => a.date.localeCompare(b.date));
 
-  // Build received (last 3 months)
+  // Build received (last 3 months + past dividends)
   const received: any[] = [];
   for (let mo = 1; mo <= 3; mo++) {
     const d = new Date(now.getFullYear(), now.getMonth() - mo, 1);
@@ -829,6 +829,15 @@ router.get('/api/analysis/passive-income', async (c) => {
       const day = 5;
       const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       received.push({ source: r.source, type: r.type, amount: r.amount, date: dateStr });
+    }
+  }
+  if (divItems.length > 0) {
+    for (let quarter = 1; quarter <= 3; quarter++) {
+      const quarterDate = new Date(now.getFullYear(), now.getMonth() - quarter * 3, 15);
+      const dateStr = `${quarterDate.getFullYear()}-${String(quarterDate.getMonth() + 1).padStart(2, '0')}-${String(quarterDate.getDate()).padStart(2, '0')}`;
+      for (const dItem of divItems) {
+        received.push({ source: dItem.source, type: dItem.type, amount: dItem.amount * 3, date: dateStr });
+      }
     }
   }
   received.sort((a: any, b: any) => b.date.localeCompare(a.date));
