@@ -436,43 +436,55 @@ export default function Fiscal() {
       )}
 
       {fiscalData.length > 0 && (
-        <div className="flex gap-2 flex-wrap items-center">
-          {fiscalData.map(f => (
-            <button
-              key={f.year}
-              onClick={() => setSelectedYear(f.year)}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-                selectedYear === f.year
-                  ? 'bg-accent-500/20 text-accent-400 border border-accent-500/30'
-                  : 'bg-surface border border-border hover:bg-surface-hover'
-              }`}
-            >
-              {f.year}
-            </button>
-          ))}
-          <select
-            value={currentData?.fiscal_residency || 'FR'}
-            onChange={async (e) => {
-              const newResidency = e.target.value;
-              await authFetch(`${API}/fiscal/${selectedYear}`, {
-                method: 'PATCH',
-                body: JSON.stringify({ fiscal_residency: newResidency }),
-              });
-              setFiscalData(prev => prev.map(f => f.year === selectedYear ? { ...f, fiscal_residency: newResidency } : f));
-            }}
-            className="ml-2 px-3 py-2 bg-surface border border-border rounded-lg text-sm"
-          >
-            <option value="FR">🇫🇷 France</option>
-            <option value="CH-ZH">🇨🇭 Zurich</option>
-            <option value="CH-VD">🇨🇭 Vaud</option>
-            <option value="CH-GE">🇨🇭 Genève</option>
-            <option value="CH-BE">🇨🇭 Bern</option>
-            <option value="CH-OTHER">🇨🇭 Autres cantons</option>
-            <option value="BE">🇧🇪 Belgique</option>
-            <option value="DE">🇩🇪 Deutschland</option>
-            <option value="OTHER">Autre</option>
-          </select>
-          <span className="text-xs text-muted">Résidence fiscale</span>
+        <div className="space-y-3">
+          <div className="flex gap-2 flex-wrap items-center">
+            {fiscalData.map(f => (
+              <button
+                key={f.year}
+                onClick={() => setSelectedYear(f.year)}
+                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                  selectedYear === f.year
+                    ? 'bg-accent-500/20 text-accent-400 border border-accent-500/30'
+                    : 'bg-surface border border-border hover:bg-surface-hover'
+                }`}
+              >
+                {f.year}
+              </button>
+            ))}
+          </div>
+          
+          {/* Fiscal residency selector - pill buttons */}
+          <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs text-muted mr-1">Fiscalité:</span>
+            {[
+              { value: 'FR', flag: '🇫🇷', label: 'France' },
+              { value: 'CH-ZH', flag: '🇨🇭', label: 'Zurich' },
+              { value: 'CH-VD', flag: '🇨🇭', label: 'Vaud' },
+              { value: 'CH-GE', flag: '🇨🇭', label: 'Genève' },
+              { value: 'CH-BE', flag: '🇨🇭', label: 'Bern' },
+              { value: 'CH-OTHER', flag: '🇨🇭', label: 'CH' },
+              { value: 'BE', flag: '🇧🇪', label: 'BE' },
+              { value: 'DE', flag: '🇩🇪', label: 'DE' },
+            ].map(opt => (
+              <button
+                key={opt.value}
+                onClick={async () => {
+                  await authFetch(`${API}/fiscal/${selectedYear}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ fiscal_residency: opt.value }),
+                  });
+                  setFiscalData(prev => prev.map(f => f.year === selectedYear ? { ...f, fiscal_residency: opt.value } : f));
+                }}
+                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                  currentData?.fiscal_residency === opt.value
+                    ? 'bg-accent-500 text-white'
+                    : 'bg-surface-2 text-muted hover:text-white hover:bg-surface-hover'
+                }`}
+              >
+                {opt.flag} {opt.label}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
