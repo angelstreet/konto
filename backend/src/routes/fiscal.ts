@@ -246,7 +246,8 @@ async function extractFiscalFromPDF(file: File): Promise<{
     const fileBuffer = await file.arrayBuffer();
     const pdfjsModule = await import('pdfjs-dist/legacy/build/pdf.mjs');
     const pdf = await pdfjsModule.getDocument({ data: new Uint8Array(fileBuffer) }).promise;
-    const page = await pdf.getPage(1);
+    // Data is on page 2, not page 1 (page 1 is scanned metadata)
+    const page = await pdf.getPage(2);
     const textContent = await page.getTextContent();
     text = textContent.items.map((i: any) => i.str).join(' ');
     
@@ -270,49 +271,36 @@ async function extractFiscalFromPDF(file: File): Promise<{
     };
   }
 
-  // French avis d'imposition patterns - match specific known values
+  // French avis d'imposition patterns - data is on page 2
   console.log('PDF text sample:', text.substring(0, 1000));
   
-  // Parts fiscales - look for "C 1,00" format
+  // Parts fiscales - look for "C 1,00" or "C 1,50" format
   let partsFiscales: number | null = null;
   const partsMatch = text.match(/C\s+(\d+)[,.]?\d*/);
   if (partsMatch) partsFiscales = parseFloat(partsMatch[1]);
 
-  // Salaires - look for 2490 in the "Montant déclaré" column area (appears with CSG/CRDS)
+  // Salaires - look for "Salaires, pensions, rentes nets" section with number
   let salaries: number | null = null;
-  if (text.includes('2490') && text.includes('CSG')) {
-    salaries = 2490;
-  }
+  const salMatch = text.match(/Salaires[,.]?\s*nets?[.\s]*(\d{4,5})/i);
+  if (salMatch) salaries = parseInt(salMatch[1]);
 
-  // Revenus fonciers - look for 6720 (appears twice with CSG)
-  let revenusFonciers: number | null = null;
-  // Count occurrences of 6720 - should appear at least twice for fonciers
-  const fonciersCount = (text.match(/6720/g) || []).length;
-  if (fonciersCount >= 1) {
-    revenusFonciers = 6720;
-  }
-
-  // Revenu imposable - 13006 appears near "Déclar. 1"
+  // Revenu imposable - look for "Revenu imposable" followed by number
   let revenuImposable: number | null = null;
-  if (text.includes('13006')) {
-    revenuImposable = 13006;
-  }
+  const revMatch = text.match(/Revenu\s+imposable[.\s]*(\d{4,5})/i);
+  if (revMatch) revenuImposable = parseInt(revMatch[1]);
 
-  // Revenue brut global - compute from salaries + fonciers
+  // Revenu brut global
   let revenuBrutGlobal: number | null = null;
-  if (salaries && revenusFonciers) {
-    revenuBrutGlobal = salaries + revenusFonciers;
-  } else if (salaries) {
-    revenuBrutGlobal = salaries;
-  }
+  const revBrutMatch = text.match(/Revenu\s+brut\s+global[.\s]*(\d{4,5})/i);
+  if (revBrutMatch) revenuBrutGlobal = parseInt(revBrutMatch[1]);
 
-  console.log('Extracted:', { revenuBrutGlobal, revenuImposable, partsFiscales, salaries, revenusFonciers });
+  console.log('Extracted:', { revenuBrutGlobal, revenuImposable, partsFiscales, salaries });
 
-  const breakdown = (salaries || revenusFonciers) ? {
+  const breakdown = (salaries || revenuImposable) ? {
     salaries,
     lmnp: null,
     dividendes: null,
-    revenusFonciers
+    revenusFonciers: null
   } : null;
 
   return {
