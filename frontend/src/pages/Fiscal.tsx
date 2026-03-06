@@ -436,55 +436,59 @@ export default function Fiscal() {
       )}
 
       {fiscalData.length > 0 && (
-        <div className="space-y-3">
-          <div className="flex gap-2 flex-wrap items-center">
-            {fiscalData.map(f => (
+        <div className="flex gap-2 flex-wrap items-center">
+          {fiscalData.map(f => {
+            const residencies = {
+              'FR': '🇫🇷', 'CH-ZH': '🇨🇭', 'CH-VD': '🇨🇭', 'CH-GE': '🇨🇭', 'CH-BE': '🇨🇭', 'CH-OTHER': '🇨🇭', 'BE': '🇧🇪', 'DE': '🇩🇪', 'OTHER': '🌍'
+            };
+            return (
               <button
                 key={f.year}
                 onClick={() => setSelectedYear(f.year)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg font-medium transition-colors ${
                   selectedYear === f.year
                     ? 'bg-accent-500/20 text-accent-400 border border-accent-500/30'
                     : 'bg-surface border border-border hover:bg-surface-hover'
                 }`}
               >
-                {f.year}
+                <span>{f.year}</span>
+                <span className="text-sm opacity-70">{residencies[f.fiscal_residency as keyof typeof residencies] || '🌍'}</span>
               </button>
-            ))}
-          </div>
-          
-          {/* Fiscal residency selector - pill buttons */}
-          <div className="flex flex-wrap gap-2 items-center">
-            <span className="text-xs text-muted mr-1">Fiscalité:</span>
-            {[
-              { value: 'FR', flag: '🇫🇷', label: 'France' },
-              { value: 'CH-ZH', flag: '🇨🇭', label: 'Zurich' },
-              { value: 'CH-VD', flag: '🇨🇭', label: 'Vaud' },
-              { value: 'CH-GE', flag: '🇨🇭', label: 'Genève' },
-              { value: 'CH-BE', flag: '🇨🇭', label: 'Bern' },
-              { value: 'CH-OTHER', flag: '🇨🇭', label: 'CH' },
-              { value: 'BE', flag: '🇧🇪', label: 'BE' },
-              { value: 'DE', flag: '🇩🇪', label: 'DE' },
-            ].map(opt => (
-              <button
-                key={opt.value}
-                onClick={async () => {
-                  await authFetch(`${API}/fiscal/${selectedYear}`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({ fiscal_residency: opt.value }),
-                  });
-                  setFiscalData(prev => prev.map(f => f.year === selectedYear ? { ...f, fiscal_residency: opt.value } : f));
-                }}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  currentData?.fiscal_residency === opt.value
-                    ? 'bg-accent-500 text-white'
-                    : 'bg-surface-2 text-muted hover:text-white hover:bg-surface-hover'
-                }`}
-              >
-                {opt.flag} {opt.label}
-              </button>
-            ))}
-          </div>
+            );
+          })}
+          {/* Add year button */}
+          <button
+            onClick={() => {/* TODO: add year modal */}}
+            className="px-3 py-2 rounded-lg border border-dashed border-border text-muted hover:text-white hover:border-accent-500 transition-colors"
+            title="Ajouter une année"
+          >
+            <Plus size={16} />
+          </button>
+          {/* Change residency for selected year */}
+          {currentData && (
+            <select
+              value={currentData.fiscal_residency || 'FR'}
+              onChange={async (e) => {
+                const newResidency = e.target.value;
+                await authFetch(`${API}/fiscal/${selectedYear}`, {
+                  method: 'PATCH',
+                  body: JSON.stringify({ fiscal_residency: newResidency }),
+                });
+                setFiscalData(prev => prev.map(f => f.year === selectedYear ? { ...f, fiscal_residency: newResidency } : f));
+              }}
+              className="ml-2 px-2 py-1.5 bg-surface border border-border rounded-lg text-xs"
+            >
+              <option value="FR">🇫🇷 France</option>
+              <option value="CH-ZH">🇨🇭 Zurich</option>
+              <option value="CH-VD">🇨🇭 Vaud</option>
+              <option value="CH-GE">🇨🇭 Genève</option>
+              <option value="CH-BE">🇨🇭 Bern</option>
+              <option value="CH-OTHER">🇨🇭 Autres</option>
+              <option value="BE">🇧🇪 Belgique</option>
+              <option value="DE">🇩🇪 Deutschland</option>
+              <option value="OTHER">Autre</option>
+            </select>
+          )}
         </div>
       )}
 
@@ -585,7 +589,14 @@ export default function Fiscal() {
 
           <div className="bg-surface border border-border rounded-xl p-4">
             <h3 className="font-medium mb-4">{t('eligibility_check') || 'Éligibilité aux aides'}</h3>
-            {eligibilities.length === 0 ? (
+            {currentData?.fiscal_residency && !currentData.fiscal_residency.startsWith('FR') ? (
+              <div className="text-muted text-sm bg-surface-2 rounded-lg p-4">
+                <AlertCircle size={16} className="inline mr-2" />
+                Les aides françaises (Prime d'activité, APL, France Rénov') ne sont disponibles que pour les résidents fiscaux français.
+                <br />
+                <span className="text-xs opacity-70">Résidence actuelle: {currentData.fiscal_residency}</span>
+              </div>
+            ) : eligibilities.length === 0 ? (
               <p className="text-muted text-sm">{t('no_eligibilities') || 'Aucune aide disponible pour votre situation'}</p>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
