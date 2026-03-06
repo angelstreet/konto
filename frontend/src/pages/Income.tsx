@@ -84,11 +84,75 @@ export default function Income() {
   const [swissUploading, setSwissUploading] = useState(false);
   const [swissResult, setSwissResult] = useState<{year: number; employer: string; grossCHF: number; netCHF: number} | null>(null);
   const [expandedYears, setExpandedYears] = useState<Set<number> | null>(null); // null = default (last 3 years expanded)
-  const [benchmarkCountry, setBenchmarkCountry] = useState<string | null>(null); // null = auto from entries
 
   // Collapsible sections
   const [incomeOpen, setIncomeOpen] = useState(true);
   const [benchmarkOpen, setBenchmarkOpen] = useState(true);
+
+  // Quick position rows (world + countries)
+  const positionRows = useMemo(() => {
+    if (!benchmarkDb || entries.length === 0) return null;
+
+    // Aggregate by year overall and per country
+    const byYearTotal: Record<number, { gross: number; net: number }> = {};
+    const byCountry: Record<string, Record<number, { gross: number; net: number }>> = {};
+    entries.forEach(e => {
+      byYearTotal[e.year] = byYearTotal[e.year] || { gross: 0, net: 0 };
+      byYearTotal[e.year].gross += e.gross_annual;
+      byYearTotal[e.year].net += e.net_annual || 0;
+      byCountry[e.country] = byCountry[e.country] || {};
+      byCountry[e.country][e.year] = byCountry[e.country][e.year] || { gross: 0, net: 0 };
+      byCountry[e.country][e.year].gross += e.gross_annual;
+      byCountry[e.country][e.year].net += e.net_annual || 0;
+    });
+
+    const latestYear = Math.max(...Object.keys(byYearTotal).map(Number));
+    const latestCountry = entries.find(e => e.year === latestYear)?.country || 'FR';
+    const incomeCurrency = latestCountry === 'CH' ? 'CHF' : 'EUR';
+
+    const worldGross = byYearTotal[latestYear]?.gross ?? 0;
+    const worldNet = byYearTotal[latestYear]?.net ?? 0;
+    const worldPercentile = getPercentile(toEUR(worldGross, incomeCurrency), APP_USERS_PERCENTILES);
+
+    const rows = BENCHMARK_COUNTRIES.map(c => {
+      const years = byCountry[c.value];
+      if (!years) return null;
+      const year = Math.max(...Object.keys(years).map(Number));
+      const gross = years[year]?.gross ?? 0;
+      const net = years[year]?.net ?? 0;
+      const benchCurrency = c.currency;
+      const yearData = benchmarkDb[c.value]?.[year] ?? benchmarkDb[c.value]?.[Math.max(...Object.keys(benchmarkDb[c.value] || {}).map(Number))];
+      if (!yearData) return null;
+      const popPercentile = getPercentile(convertSalary(gross, benchCurrency, benchCurrency), yearData);
+      const top = Math.max(1, 100 - popPercentile);
+      const above = Math.min(99, popPercentile);
+      return {
+        key: c.value,
+        label: c.label,
+        flag: c.flag,
+        top,
+        above,
+        gross,
+        net,
+        currency: benchCurrency,
+      };
+    }).filter(Boolean) as { key: string; label: string; flag: string; top: number; above: number; gross: number; net: number; currency: string }[];
+
+    rows.sort((a, b) => a.top - b.top);
+
+    return {
+      world: {
+        label: 'World',
+        flag: '🌍',
+        top: Math.max(1, 100 - worldPercentile),
+        above: Math.min(99, worldPercentile),
+        gross: worldGross,
+        net: worldNet,
+        currency: incomeCurrency,
+      },
+      rows,
+    };
+  }, [benchmarkDb, entries]);
 
 
   const handleSave = async () => {
@@ -178,53 +242,6 @@ export default function Income() {
     entries.forEach(e => { byYear[e.year] = (byYear[e.year] || 0) + e.gross_annual; });
     return Object.entries(byYear).sort(([a], [b]) => Number(a) - Number(b)).map(([year, total]) => ({ year: Number(year), total }));
   }, [entries]);
-
-  const benchmarkData = useMemo(() => {
-    if (entries.length === 0 || !benchmarkDb) return null;
-    // Group entries by year, take last 3 years
-    const byYear: Record<number, { total: number; country: string }> = {};
-    entries.forEach(e => {
-      if (!byYear[e.year]) byYear[e.year] = { total: 0, country: e.country };
-      byYear[e.year].total += e.gross_annual;
-    });
-    const allYears = Object.keys(byYear).map(Number).sort((a, b) => b - a);
-    const maxYear = allYears[0];
-    const latestCountry = byYear[maxYear]?.country || 'FR';
-    const incomeCurrency = latestCountry === 'CH' ? 'CHF' : 'EUR';
-    // Selected benchmark country
-    const autoCountry = BENCHMARK_COUNTRIES.some(c => c.value === latestCountry) ? latestCountry : 'FR';
-    const selectedCountry = benchmarkCountry ?? autoCountry;
-    const selectedConfig = BENCHMARK_COUNTRIES.find(c => c.value === selectedCountry)!;
-    const benchCurrency = selectedConfig.currency;
-    // Compute progression for last 3 years
-    const progression = allYears.slice(0, 3).map(year => {
-      const gross = byYear[year].total;
-      const comparable = convertSalary(gross, incomeCurrency, benchCurrency);
-      const yearData = benchmarkDb[selectedCountry]?.[year] ?? benchmarkDb[selectedCountry]?.[Math.max(...Object.keys(benchmarkDb[selectedCountry] || {}).map(Number))];
-      if (!yearData) return null;
-      const popPercentile = getPercentile(comparable, yearData);
-      const appPercentile = getPercentile(toEUR(gross, incomeCurrency), APP_USERS_PERCENTILES);
-      const median = yearData.find(d => d.p === 50)?.gross ?? yearData[Math.floor(yearData.length / 2)].gross;
-      return { year, gross, comparable, benchCurrency, popPercentile, appPercentile, median };
-    }).filter(Boolean) as { year: number; gross: number; comparable: number; benchCurrency: string; popPercentile: number; appPercentile: number; median: number }[];
-    if (progression.length === 0) return null;
-    const latest = progression[0];
-    // CAGR & best YoY
-    const yearTotals = allYears.map(y => ({ year: y, total: byYear[y].total })).sort((a, b) => a.year - b.year);
-    let cagr: number | null = null;
-    let bestYoY: { year: number; pct: number } | null = null;
-    if (yearTotals.length >= 2) {
-      const nYears = yearTotals[yearTotals.length - 1].year - yearTotals[0].year;
-      if (nYears > 0) cagr = Math.round(((yearTotals[yearTotals.length - 1].total / yearTotals[0].total) ** (1 / nYears) - 1) * 1000) / 10;
-      let best = { year: 0, pct: -Infinity };
-      for (let i = 1; i < yearTotals.length; i++) {
-        const pct = (yearTotals[i].total - yearTotals[i - 1].total) / yearTotals[i - 1].total * 100;
-        if (pct > best.pct) best = { year: yearTotals[i].year, pct };
-      }
-      if (best.year > 0) bestYoY = { year: best.year, pct: Math.round(best.pct) };
-    }
-    return { latestYear: maxYear, selectedCountry, benchCurrency, incomeCurrency, progression, latest, cagr, bestYoY };
-  }, [entries, benchmarkCountry, benchmarkDb]);
 
   // ===== PAYSLIPS STATE =====
   interface Payslip {
@@ -656,109 +673,44 @@ export default function Income() {
       </section>
 
       {/* ===== SECTION 2: Salary Benchmark ===== */}
-      {benchmarkData && (
-        <section className="bg-surface rounded-xl border border-border p-4 space-y-4">
+      {positionRows && (
+        <section className="bg-surface rounded-xl border border-border p-4 space-y-3">
           <h2 className="text-base font-semibold flex items-center gap-2 cursor-pointer select-none" onClick={() => setBenchmarkOpen(!benchmarkOpen)}>
             Positionnement salarial
             <ChevronDown size={16} className={`text-muted transition-transform ${benchmarkOpen ? '' : '-rotate-90'}`} />
           </h2>
 
-          {benchmarkOpen && <>
-          <div className="space-y-3">
-            <p className="text-xs text-muted">Progression sur les {benchmarkData.progression.length} dernières années</p>
-            <div className="flex flex-wrap gap-1.5">
-              {BENCHMARK_COUNTRIES.map(c => (
-                <button
-                  key={c.value}
-                  onClick={() => setBenchmarkCountry(c.value)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-colors ${
-                    benchmarkData.selectedCountry === c.value
-                      ? 'bg-accent-500 text-white'
-                      : 'bg-surface-hover text-muted hover:text-white'
-                  }`}
-                >
-                  {c.flag} {c.label}
-                </button>
-              ))}
+          {benchmarkOpen && (
+            <div className="space-y-2">
+              <div className="text-xs text-muted">Comparaison simple, tout sur une ligne, sans graph.</div>
+              <div className="border border-border rounded-xl divide-y divide-border">
+                <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[13px] font-medium text-muted">
+                  <div className="col-span-3">Pays</div>
+                  <div className="col-span-2">Top %</div>
+                  <div className="col-span-2">Above %</div>
+                  <div className="col-span-5">Vous</div>
+                </div>
+                <div className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm">
+                  <div className="col-span-3 flex items-center gap-2 font-semibold"><span>🌍</span><span>World</span></div>
+                  <div className="col-span-2 font-semibold text-accent-300">Top {positionRows.world.top}%</div>
+                  <div className="col-span-2 text-muted text-xs">Above {positionRows.world.above}%</div>
+                  <div className="col-span-5 text-xs md:text-sm">
+                    {mask(fmtCurrency(positionRows.world.gross, positionRows.world.currency))}{positionRows.world.net ? <> · {t('net').toLowerCase()} {mask(fmtCurrency(positionRows.world.net, positionRows.world.currency))}</> : null}
+                  </div>
+                </div>
+                {positionRows.rows.map(r => (
+                  <div key={r.key} className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm">
+                    <div className="col-span-3 flex items-center gap-2 font-semibold"><span>{r.flag}</span><span>{r.label}</span></div>
+                    <div className="col-span-2 font-semibold text-accent-300">Top {r.top}%</div>
+                    <div className="col-span-2 text-muted text-xs">Above {r.above}%</div>
+                    <div className="col-span-5 text-xs md:text-sm">
+                      {mask(fmtCurrency(r.gross, r.currency))}{r.net ? <> · {t('net').toLowerCase()} {mask(fmtCurrency(r.net, r.currency))}</> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
-
-          {/* 3-year progression */}
-          <div className="space-y-4">
-            {benchmarkData.progression.map((p, i) => (
-              <div key={p.year} className={i > 0 ? 'pt-4 border-t border-border/40' : ''}>
-                <div className="flex items-baseline justify-between mb-3">
-                  <span className="text-sm font-semibold text-white">{p.year}</span>
-                  <span className="text-xs text-muted font-mono">{mask(fmtCurrency(p.gross, benchmarkData.incomeCurrency))}</span>
-                </div>
-
-                {/* Slider: vs Population */}
-                <div className="mb-3">
-                  <div className="flex justify-between items-baseline mb-1.5">
-                    <span className="text-xs text-muted">
-                      {BENCHMARK_COUNTRIES.find(c => c.value === benchmarkData.selectedCountry)?.flag} Population {BENCHMARK_COUNTRIES.find(c => c.value === benchmarkData.selectedCountry)?.label}
-                    </span>
-                    <span className="text-base font-bold text-white leading-none">Top {100 - p.popPercentile}%</span>
-                  </div>
-                  <div className="relative h-1.5 rounded-full" style={{ background: 'linear-gradient(to right, #ef4444 0%, #f59e0b 35%, #22c55e 70%, #16a34a 100%)' }}>
-                    <div
-                      className="absolute top-1/2 w-3 h-3 bg-white rounded-full border-2 border-gray-800 shadow"
-                      style={{ left: `${Math.min(Math.max(p.popPercentile, 2), 98)}%`, transform: 'translateX(-50%) translateY(-50%)' }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-muted mt-1">
-                    <span>Bas</span>
-                    <span>Médiane {fmtCurrency(p.median, p.benchCurrency)}</span>
-                    <span>Haut</span>
-                  </div>
-                </div>
-
-                {/* Slider: vs App users */}
-                <div>
-                  <div className="flex justify-between items-baseline mb-1.5">
-                    <span className="text-xs text-muted">Utilisateurs de l'app</span>
-                    <span className="text-base font-bold text-white leading-none">Top {100 - p.appPercentile}%</span>
-                  </div>
-                  <div className="relative h-1.5 rounded-full" style={{ background: 'linear-gradient(to right, #ef4444 0%, #f59e0b 35%, #22c55e 70%, #16a34a 100%)' }}>
-                    <div
-                      className="absolute top-1/2 w-3 h-3 bg-white rounded-full border-2 border-gray-800 shadow"
-                      style={{ left: `${Math.min(Math.max(p.appPercentile, 2), 98)}%`, transform: 'translateX(-50%) translateY(-50%)' }}
-                    />
-                  </div>
-                  <div className="flex justify-between text-[10px] text-muted mt-1">
-                    <span>Bas</span>
-                    <span>Médiane ~{fmtCurrency(70000, 'EUR')}</span>
-                    <span>Haut</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-
-          {/* Stat cards */}
-          <div className={`grid gap-3 ${benchmarkData.cagr !== null && benchmarkData.bestYoY ? 'grid-cols-2' : 'grid-cols-1'}`}>
-            {benchmarkData.cagr !== null && (
-              <div className="bg-surface-hover rounded-xl p-3 text-center">
-                <div className={`text-xl font-bold ${benchmarkData.cagr >= 0 ? 'text-green-400' : 'text-orange-400'}`}>
-                  {benchmarkData.cagr >= 0 ? '+' : ''}{benchmarkData.cagr}%<span className="text-sm font-normal">/an</span>
-                </div>
-                <div className="text-xs text-muted mt-0.5">Croissance (CAGR)</div>
-              </div>
-            )}
-            {benchmarkData.bestYoY && (
-              <div className="bg-surface-hover rounded-xl p-3 text-center">
-                <div className="text-xl font-bold text-indigo-400">
-                  {benchmarkData.bestYoY.pct >= 0 ? '+' : ''}{benchmarkData.bestYoY.pct}%
-                </div>
-                <div className="text-xs text-muted mt-0.5">Meilleure année ({benchmarkData.bestYoY.year})</div>
-              </div>
-            )}
-          </div>
-
-          <p className="text-[10px] text-muted/60">
-            Source : INSEE / OFS / BLS / ONS / Destatis — salaires bruts annuels
-          </p>
-          </>}
+          )}
         </section>
       )}
 
