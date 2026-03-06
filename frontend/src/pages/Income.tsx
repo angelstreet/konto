@@ -424,6 +424,22 @@ export default function Income() {
         </div>
       </div>
 
+      {availableYears.length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-3">
+          {availableYears.map(y => (
+            <button
+              key={y}
+              onClick={() => { setActiveYear(y); setExpandedYears(null); }}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+                y === activeYear ? 'bg-accent-500 text-white' : 'bg-surface-hover text-muted hover:text-white'
+              }`}
+            >
+              {y}
+            </button>
+          ))}
+        </div>
+      )}
+
       <div className="space-y-4">
       {/* ===== SECTION 1: Income Tracking ===== */}
       <section className="bg-surface rounded-xl border border-border p-4 space-y-2.5">
@@ -447,21 +463,6 @@ export default function Income() {
             </div>
           )}
         </div>
-        {incomeOpen && availableYears.length > 0 && (
-          <div className="flex flex-wrap gap-2 mt-2">
-            {availableYears.map(y => (
-              <button
-                key={y}
-                onClick={() => { setActiveYear(y); setExpandedYears(null); }}
-                className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                  y === activeYear ? 'bg-accent-500 text-white' : 'bg-surface-hover text-muted hover:text-white'
-                }`}
-              >
-                {y}
-              </button>
-            ))}
-          </div>
-        )}
         {incomeOpen && (<>
 
         {/* Form */}
