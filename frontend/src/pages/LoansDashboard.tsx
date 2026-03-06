@@ -21,6 +21,7 @@ type LoanRow = {
   monthly_payment: number | null;
   interest_rate: number | null;
   repaid_pct: number | null;
+  start_date: string | null;
   end_date: string | null;
   monthly_breakdown: {
     capital: number | null;
@@ -117,6 +118,12 @@ export default function LoansDashboard() {
     const value = amount || 0;
     return hideAmounts ? <span className="amount-masked">{formatCurrency(value)}</span> : formatCurrency(value);
   };
+  const formatLoanDate = (value: string | null) => {
+    if (!value) return '-';
+    const dt = new Date(value);
+    if (Number.isNaN(dt.getTime())) return '-';
+    return dt.toLocaleDateString('fr-FR', { month: 'short', year: 'numeric' });
+  };
 
   const summary = useMemo(() => {
     const monthlyCapital = filteredLoans.reduce((s, l) => s + (l.monthly_breakdown.capital || 0), 0);
@@ -145,7 +152,7 @@ export default function LoansDashboard() {
       interest_rate: loan.interest_rate != null ? String(loan.interest_rate) : '',
       insurance_monthly: String(loan.monthly_breakdown.insurance || ''),
       fees_total: '',
-      start_date: '',
+      start_date: loan.start_date || '',
       end_date: loan.end_date || '',
       duration_months: '',
       installments_paid: '',
@@ -367,6 +374,9 @@ export default function LoansDashboard() {
                         <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/loans/${loan.loan_id}`)}>
                           <div>{loan.name}</div>
                           <div className="text-xs text-muted">{loan.provider || 'Manual'}</div>
+                          <div className="text-xs text-muted">
+                            {t('start_date') || 'Début'}: {formatLoanDate(loan.start_date)} · {t('loan_end_date') || 'Date de fin'}: {formatLoanDate(loan.end_date)}
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-right">{loan.repaid_pct != null ? `${Math.round(loan.repaid_pct)} %` : '-'}</td>
                         <td className="px-4 py-3 text-right">{loan.interest_rate != null ? `${loan.interest_rate} %` : '-'}</td>
