@@ -239,96 +239,70 @@ async function extractFiscalFromPDF(file: File): Promise<{
     revenusFonciers: number | null;
   } | null;
 }> {
-  let text = '';
+  // Save uploaded file to temp location
+  const tmpDir = '/tmp';
+  const extId = Math.random().toString(36).substring(7);
+  const tmpPath = `${tmpDir}/fiscal_${extId}.pdf`;
   
-  try {
-    // Require pdfjs-dist at runtime
-    const fileBuffer = await file.arrayBuffer();
-    const pdfjsModule = require('pdfjs-dist/legacy/build/pdf.mjs');
-    const pdf = await pdfjsModule.getDocument({ data: new Uint8Array(fileBuffer) }).promise;
-    // Data is on page 2, not page 1 (page 1 is scanned metadata)
-    const page = await pdf.getPage(2);
-    const textContent = await page.getTextContent();
-    text = textContent.items.map((i: any) => i.str).join(' ');
+  const fileBuffer = await file.arrayBuffer();
+  const fs = await import('fs');
+  fs.writeFileSync(tmpPath, Buffer.from(fileBuffer));
+  
+  // Parse using external script (runs in regular Node, not Cloudflare context)
+  const { spawn } = await import('child_process');
+  
+  return new Promise((resolve) => {
+    const child = spawn('node', [
+      '/home/jndoye/shared/projects/konto/backend/scripts/parse-fiscal-pdf.cjs',
+      tmpPath
+    ]);
     
-    // Validate this is an "avis d'imposition" (French tax notice)
-    const isAvisImposition = text.includes('avis') && (text.includes('impôt') || text.includes('IR'));
-    if (!isAvisImposition) {
-      throw new Error('NOT_AVIS_IMPOSITION:Ce document ne semble pas être un avis d\'imposition français.');
-    }
-  } catch (e: any) {
-    console.error('PDF parse error:', e.message);
-    // Return empty data on parse error - let the caller handle it
-    return {
-      revenuBrutGlobal: null,
-      revenuImposable: null,
-      partsFiscales: null,
-      tauxMarginal: null,
-      tauxMoyen: null,
-      breakdown: null
-    };
-  }
-
-  // French avis d'imposition patterns - data is on page 2
-  console.log('PDF text sample:', text.substring(0, 1000));
-  
-  // Parts fiscales - look for "C 1,00" or "C 1,50" format
-  let partsFiscales: number | null = null;
-  const partsMatch = text.match(/C\s+(\d+)[,.]?\d*/);
-  if (partsMatch) partsFiscales = parseFloat(partsMatch[1]);
-
-  // Salaires - look for 29259 in text
-  let salaries: number | null = null;
-  if (text.includes('29259')) {
-    salaries = 29259;
-  }
-
-  // LMNP - look for 1098
-  let lmnp: number | null = null;
-  if (text.includes('1098')) {
-    lmnp = 1098;
-  }
-
-  // Revenu imposable - try to find in calculation: 29259 - 3251 - 156 = 25912? 
-  // Or compute: Salaires - 10% = ~26,333
-  let revenuImposable: number | null = null;
-  // Try to find from breakdown - after CSG line
-  const csgi = text.indexOf('CSG');
-  if (csgi > 0) {
-    const afterCSG = text.substring(csgi, csgi + 200);
-    const match = afterCSG.match(/(\d{5})/);
-    if (match) revenuImposable = parseInt(match[1]);
-  }
-
-  // Revenu brut global = salaries + LMNP
-  let revenuBrutGlobal: number | null = null;
-  if (salaries && lmnp) {
-    revenuBrutGlobal = salaries + lmnp;
-  } else if (salaries) {
-    revenuBrutGlobal = salaries;
-  }
-
-  console.log('Extracted:', { revenuBrutGlobal, revenuImposable, partsFiscales, salaries, lmnp });
-
-  // Taux - not easily extractable from PDF, set to null
-  const tauxMarginal: number | null = null;
-  const tauxMoyen: number | null = null;
-
-  const breakdown = (salaries || lmnp || revenuImposable) ? {
-    salaries,
-    lmnp,
-    dividendes: null,
-    revenusFonciers: null
-  } : null;
-
-  return {
-    revenuBrutGlobal,
-    revenuImposable,
-    partsFiscales,
-    tauxMarginal,
-    tauxMoyen,
-    breakdown
-  };
+    let stdout = '';
+    child.stdout.on('data', (d) => { stdout += d.toString(); });
+    child.stderr.on('data', (d) => { console.log('PDF parse err:', d.toString()); });
+    child.on('close', (code) => {
+      // Clean up temp file
+      try { fs.unlinkSync(tmpPath); } catch {}
+      
+      if (code !== 0 || !stdout.trim()) {
+        resolve({
+          revenuBrutGlobal: null,
+          revenuImposable: null,
+          partsFiscales: null,
+          tauxMarginal: null,
+          tauxMoyen: null,
+          breakdown: null
+        });
+        return;
+      }
+      
+      try {
+        const parsed = JSON.parse(stdout.trim());
+        resolve({
+          revenuBrutGlobal: parsed.revenuBrutGlobal,
+          revenuImposable: parsed.revenuImposable,
+          partsFiscales: parsed.partsFiscales,
+          tauxMarginal: null,
+          tauxMoyen: null,
+          breakdown: (parsed.salaries || parsed.lmnp || parsed.revenusFonciers) ? {
+            salaries: parsed.salaries,
+            lmnp: parsed.lmnp,
+            dividendes: null,
+            revenusFonciers: parsed.revenusFonciers
+          } : null
+        });
+      } catch {
+        resolve({
+          revenuBrutGlobal: null,
+          revenuImposable: null,
+          partsFiscales: null,
+          tauxMarginal: null,
+          tauxMoyen: null,
+          breakdown: null
+        });
+      }
+    });
+  });
 }
 
 export default router;
