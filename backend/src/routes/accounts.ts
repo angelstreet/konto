@@ -273,8 +273,14 @@ router.get('/api/bank/accounts', async (c) => {
   const companyId = c.req.query('company_id');
   let where = 'user_id = ?';
   const params: any[] = [userId];
-  if (usage === 'personal') { where += ' AND usage = ?'; params.push('personal'); }
-  else if (usage === 'professional') { where += ' AND usage = ?'; params.push('professional'); }
+  if (usage === 'personal') {
+    where += ' AND (usage = ? OR usage IS NULL) AND company_id IS NULL';
+    params.push('personal');
+  }
+  else if (usage === 'professional') {
+    where += ' AND (usage = ? OR company_id IS NOT NULL)';
+    params.push('professional');
+  }
   else if (companyId) { where += ' AND company_id = ?'; params.push(companyId); }
   const result = await db.execute({ sql: `SELECT * FROM bank_accounts WHERE ${where}`, args: params });
 
@@ -622,7 +628,7 @@ router.post('/api/bank/sync-all', async (c) => {
         const storedBankName = meta.bankName || null;
         const accType = classifyAccountType(powensAcc.type, powensAcc.name || powensAcc.original_name || '');
         const accRes = await db.execute({
-          sql: 'SELECT id, type FROM bank_accounts WHERE user_id = ? AND provider = ? AND provider_account_id = ?',
+          sql: 'SELECT id, type, company_id FROM bank_accounts WHERE user_id = ? AND provider = ? AND provider_account_id = ?',
           args: [userId, 'powens', providerId]
         });
         if (accRes.rows.length === 0) continue;
@@ -632,7 +638,7 @@ router.post('/api/bank/sync-all', async (c) => {
         if (powensAcc.balance !== undefined) {
           await db.execute({
             sql: 'UPDATE bank_accounts SET provider_bank_id = ?, provider_bank_name = COALESCE(?, provider_bank_name), name = ?, bank_name = COALESCE(?, bank_name), account_number = COALESCE(?, account_number), iban = COALESCE(?, iban), type = ?, usage = ?, subtype = ?, balance = ?, last_sync = ? WHERE id = ?',
-            args: [meta.bankId, meta.bankName, powensAcc.name || powensAcc.original_name || 'Account', storedBankName, powensAcc.number || powensAcc.webid || null, powensAcc.iban || null, accType, classifyAccountUsage(powensAcc.usage, null), classifyAccountSubtype(accType, 'powens', powensAcc.name || powensAcc.original_name || ''), powensAcc.balance, new Date().toISOString(), localAcc.id]
+            args: [meta.bankId, meta.bankName, powensAcc.name || powensAcc.original_name || 'Account', storedBankName, powensAcc.number || powensAcc.webid || null, powensAcc.iban || null, accType, classifyAccountUsage(powensAcc.usage, localAcc.company_id || null), classifyAccountSubtype(accType, 'powens', powensAcc.name || powensAcc.original_name || ''), powensAcc.balance, new Date().toISOString(), localAcc.id]
           });
         }
 
