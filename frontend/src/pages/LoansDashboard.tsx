@@ -113,6 +113,10 @@ export default function LoansDashboard() {
     if (selectedProvider === 'all') return loans;
     return loans.filter((l) => (l.provider || 'Manual') === selectedProvider);
   }, [loans, selectedProvider]);
+  const filteredDistribution = useMemo(() => {
+    if (!data) return [];
+    return data.distribution.filter((d) => selectedProvider === 'all' || (loans.find((l) => l.loan_id === d.loan_id)?.provider || 'Manual') === selectedProvider);
+  }, [data, loans, selectedProvider]);
 
   const fc = (amount: number | null | undefined) => {
     const value = amount || 0;
@@ -311,11 +315,11 @@ export default function LoansDashboard() {
                 </div>
                 <div className="xl:col-span-2 bg-surface rounded-xl border border-border p-3">
                   <div className="flex items-center justify-between gap-2 mb-2">
-                    <div className="text-sm text-muted">{t('loans_distribution') || 'Distribution'}</div>
-                    <select
-                      value={selectedProvider}
-                      onChange={(e) => setSelectedProvider(e.target.value)}
-                      className="text-xs rounded-md border border-border bg-background px-2 py-1"
+                  <div className="text-sm text-muted">{t('loans_distribution') || 'Distribution'}</div>
+                  <select
+                    value={selectedProvider}
+                    onChange={(e) => setSelectedProvider(e.target.value)}
+                    className="text-xs rounded-md border border-border bg-background px-2 py-1"
                     >
                       <option value="all">{t('loans_all') || 'Tous les emprunts'}</option>
                       {providers.map((p) => <option key={p} value={p}>{p}</option>)}
@@ -323,12 +327,41 @@ export default function LoansDashboard() {
                   </div>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
-                      <Treemap data={data.distribution.filter((d) => selectedProvider === 'all' || (loans.find((l) => l.loan_id === d.loan_id)?.provider || 'Manual') === selectedProvider)} dataKey="remaining" stroke="#111">
-                        {data.distribution.map((_, idx) => (
+                      <Treemap
+                        data={filteredDistribution}
+                        dataKey="remaining"
+                        stroke="#111"
+                        content={({ x, y, width, height, index, name, value }) => {
+                          if (width < 40 || height < 25) return <g />;
+                          return (
+                            <g>
+                              <rect x={x} y={y} width={width} height={height} fill={TREEMAP_COLORS[(index || 0) % TREEMAP_COLORS.length]} opacity={0.9} />
+                              <text x={x + 6} y={y + 16} fill="#fff" fontSize={11} fontWeight="600" pointerEvents="none">
+                                {name}
+                              </text>
+                              <text x={x + 6} y={y + 32} fill="#d1d5db" fontSize={10} pointerEvents="none">
+                                {formatCurrency(Number(value || 0))}
+                              </text>
+                            </g>
+                          );
+                        }}
+                      >
+                        {filteredDistribution.map((_, idx) => (
                           <Cell key={idx} fill={TREEMAP_COLORS[idx % TREEMAP_COLORS.length]} />
                         ))}
                       </Treemap>
                     </ResponsiveContainer>
+                  </div>
+                  <div className="mt-3 space-y-1 text-xs text-muted">
+                    {filteredDistribution.map((d, idx) => (
+                      <div key={d.loan_id} className="flex items-center justify-between">
+                        <span className="flex items-center gap-2">
+                          <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: TREEMAP_COLORS[idx % TREEMAP_COLORS.length] }} />
+                          <span className="text-white">{d.name}</span>
+                        </span>
+                        <span className="text-muted">{formatCurrency(d.remaining)} · {d.share_pct}%</span>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>
