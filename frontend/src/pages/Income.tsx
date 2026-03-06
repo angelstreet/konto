@@ -43,6 +43,16 @@ const APP_USERS_PERCENTILES = [
   { p: 75, gross: 100000 }, { p: 90, gross: 145000 }, { p: 95, gross: 180000 }, { p: 99, gross: 280000 },
 ];
 
+// Approximate adult population counts (used for rank estimation)
+const POPULATION: Record<string, number> = {
+  FR: 67_000_000,
+  CH: 10_000_000,
+  US: 332_000_000,
+  UK: 68_000_000,
+  DE: 84_000_000,
+  WORLD: 8_000_000_000,
+};
+
 // Currency conversion (approximate, 1 unit = X EUR)
 const RATE_TO_EUR: Record<string, number> = { EUR: 1, CHF: 1.04, USD: 0.92, GBP: 1.16 };
 function toEUR(v: number, currency: string) { return v * (RATE_TO_EUR[currency] ?? 1); }
@@ -99,6 +109,7 @@ export default function Income() {
   // Quick position rows (world + countries)
   const positionRows = useMemo(() => {
     if (!benchmarkDb || entriesForYear.length === 0) return null;
+    const compact = (n: number) => new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 
     // Aggregate by year overall and per country
     const byYearTotal: Record<number, { gross: number; net: number }> = {};
@@ -133,6 +144,7 @@ export default function Income() {
       const popPercentile = getPercentile(convertSalary(gross, benchCurrency, benchCurrency), yearData);
       const top = Math.max(1, 100 - popPercentile);
       const median = yearData.find(d => d.p === 50)?.gross ?? yearData[Math.floor(yearData.length / 2)].gross;
+      const population = POPULATION[c.value] || POPULATION.WORLD;
       return {
         key: c.value,
         label: c.label,
@@ -142,8 +154,10 @@ export default function Income() {
         net,
         currency: benchCurrency,
         median,
+        population,
+        rankLabel: `~${compact(Math.max(1, Math.round(population * (top / 100))))} / ${compact(population)}`,
       };
-    }).filter(Boolean) as { key: string; label: string; flag: string; top: number; gross: number; net: number; currency: string; median: number }[];
+    }).filter(Boolean) as { key: string; label: string; flag: string; top: number; gross: number; net: number; currency: string; median: number; population: number; rankLabel: string }[];
 
     rows.sort((a, b) => a.top - b.top);
 
@@ -156,6 +170,8 @@ export default function Income() {
         net: worldNet,
         currency: incomeCurrency,
         median: fromEUR(APP_USERS_PERCENTILES.find(p => p.p === 50)?.gross ?? 70000, incomeCurrency),
+        population: POPULATION.WORLD,
+        rankLabel: `~${compact(Math.max(1, Math.round(POPULATION.WORLD * ((Math.max(1, 100 - worldPercentile)) / 100))))} / ${compact(POPULATION.WORLD)}`,
       },
       rows,
     };
@@ -709,12 +725,14 @@ export default function Income() {
                 <div className="grid grid-cols-12 gap-2 px-3 py-2 text-[13px] font-medium text-muted">
                   <div className="col-span-4">Pays</div>
                   <div className="col-span-3">Top %</div>
-                  <div className="col-span-5">Médiane</div>
+                  <div className="col-span-3">Rang pop.</div>
+                  <div className="col-span-2 text-right">Médiane</div>
                 </div>
                 <div className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm">
                   <div className="col-span-4 flex items-center gap-2 font-semibold"><span>🌍</span><span>World</span></div>
                   <div className="col-span-3 font-semibold text-accent-300">{positionRows.world.top}%</div>
-                  <div className="col-span-5 text-xs md:text-sm">
+                  <div className="col-span-3 text-xs md:text-sm text-muted">{positionRows.world.rankLabel}</div>
+                  <div className="col-span-2 text-xs md:text-sm text-right">
                     {mask(fmtCurrency(positionRows.world.median, positionRows.world.currency))}
                   </div>
                 </div>
@@ -722,7 +740,8 @@ export default function Income() {
                   <div key={r.key} className="grid grid-cols-12 gap-2 px-3 py-2 items-center text-sm">
                     <div className="col-span-4 flex items-center gap-2 font-semibold"><span>{r.flag}</span><span>{r.label}</span></div>
                     <div className="col-span-3 font-semibold text-accent-300">{r.top}%</div>
-                    <div className="col-span-5 text-xs md:text-sm">
+                    <div className="col-span-3 text-xs md:text-sm text-muted">{r.rankLabel}</div>
+                    <div className="col-span-2 text-xs md:text-sm text-right">
                       {mask(fmtCurrency(r.median, r.currency))}
                     </div>
                   </div>
