@@ -490,7 +490,9 @@ router.post('/api/bank/accounts/:id/sync', async (c) => {
     }
 
     for (const tx of transactions) {
-      const txHash = tx.id ? `powens_${tx.id}` : null;
+      const baseLabel = (tx.original_wording || tx.wording || '').trim();
+      const fallbackKey = `${account.id}|${tx.date || tx.rdate}|${tx.value}|${baseLabel}`;
+      const txHash = tx.id ? `powens_${tx.id}` : `powens_f_${sha256(fallbackKey).slice(0, 20)}`;
       await db.execute({
         sql: `INSERT INTO transactions (bank_account_id, date, amount, label, category, tx_hash)
               VALUES (?, ?, ?, ?, ?, ?)
