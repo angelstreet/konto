@@ -128,7 +128,7 @@ export default function Fiscal() {
     try {
       const formDataObj = new FormData();
       formDataObj.append('file', file);
-      formDataObj.append('year', String(formData.year || selectedYear));
+      formDataObj.append('year', String(selectedYear));
 
       const res = await apiFetch(`${API}/fiscal/upload`, {
         method: 'POST',
