@@ -119,10 +119,35 @@ router.get('/api/bank-callback', async (c) => {
 
     console.log('Powens token received:', { has_access: !!accessToken, has_refresh: !!refreshToken, expires_in: tokenData.expires_in });
 
-    await db.execute({
-      sql: 'INSERT INTO bank_connections (user_id, powens_connection_id, powens_token, powens_refresh_token, status) VALUES (?, ?, ?, ?, ?)',
-      args: [userId, connectionId || null, encrypt(accessToken), encrypt(refreshToken), 'active']
-    });
+    if (connectionId) {
+      const existingConnRes = await db.execute({
+        sql: 'SELECT * FROM bank_connections WHERE user_id = ? AND powens_connection_id = ? ORDER BY id DESC LIMIT 1',
+        args: [userId, connectionId],
+      });
+      if (existingConnRes.rows.length > 0) {
+        const existingConn = decryptBankConn(existingConnRes.rows[0] as any);
+        const mergedRefresh = refreshToken || existingConn.powens_refresh_token || null;
+        await db.execute({
+          sql: 'UPDATE bank_connections SET powens_token = ?, powens_refresh_token = ?, status = ? WHERE id = ?',
+          args: [encrypt(accessToken), encrypt(mergedRefresh), 'active', (existingConnRes.rows[0] as any).id],
+        });
+        // Keep only latest active row for this Powens connection id.
+        await db.execute({
+          sql: 'UPDATE bank_connections SET status = ? WHERE user_id = ? AND powens_connection_id = ? AND id != ? AND status = ?',
+          args: ['replaced', userId, connectionId, (existingConnRes.rows[0] as any).id, 'active'],
+        });
+      } else {
+        await db.execute({
+          sql: 'INSERT INTO bank_connections (user_id, powens_connection_id, powens_token, powens_refresh_token, status) VALUES (?, ?, ?, ?, ?)',
+          args: [userId, connectionId, encrypt(accessToken), encrypt(refreshToken), 'active']
+        });
+      }
+    } else {
+      await db.execute({
+        sql: 'INSERT INTO bank_connections (user_id, powens_connection_id, powens_token, powens_refresh_token, status) VALUES (?, ?, ?, ?, ?)',
+        args: [userId, null, encrypt(accessToken), encrypt(refreshToken), 'active']
+      });
+    }
 
     let accounts: any[] = [];
     try {
