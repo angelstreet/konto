@@ -401,7 +401,7 @@ export default function Income() {
                 <Plus size={16} /> <span className="hidden sm:inline">{t('add_employer')}</span>
               </button>
               <label className="flex items-center gap-1.5 px-3 py-2.5 border border-border rounded-lg text-sm min-h-[44px] font-medium hover:bg-surface-hover transition-colors cursor-pointer">
-                <Upload size={16} /> <span className="hidden sm:inline">{t('swiss_salary_upload')}</span>
+                <Upload size={16} /> <span className="hidden sm:inline">{t('salary_upload')}</span>
                 <input type="file" accept=".pdf" className="hidden" onChange={handleSwissImport} disabled={swissUploading} />
               </label>
             </div>
@@ -922,7 +922,7 @@ export default function Income() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSwissResult(null)} />
           <div className="relative bg-surface border border-border rounded-xl shadow-2xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold mb-4">{t('swiss_salary_modal_title')}</h3>
+            <h3 className="text-lg font-bold mb-4">{t('salary_modal_title')}</h3>
             <div className="space-y-3 mb-6">
               <div className="flex justify-between"><span className="text-muted">{t('year')}</span><span className="font-medium">{swissResult.year}</span></div>
               <div className="flex justify-between"><span className="text-muted">{t('employer')}</span><span className="font-medium">{swissResult.employer}</span></div>
