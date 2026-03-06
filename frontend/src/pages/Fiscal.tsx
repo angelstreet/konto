@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Upload, Save, Trash2, Calculator, CheckCircle, AlertCircle, FileText, DollarSign, Users, TrendingUp, Plus, X, Eye, EyeOff } from 'lucide-react';
+import { Upload, Save, Trash2, Calculator, CheckCircle, AlertCircle, FileText, DollarSign, Users, TrendingUp, Plus, X } from 'lucide-react';
 import EyeToggle from '../components/EyeToggle';
 import { useAuth } from '@clerk/clerk-react';
 import { useAmountVisibility } from '../AmountVisibilityContext';
@@ -80,18 +80,6 @@ export default function Fiscal() {
     breakdownDividendes: '',
     breakdownRevenusFonciers: ''
   });
-
-  const fmt = (n: number | null | undefined): string => {
-    if (n == null) return '-';
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
-  };
-
-  const fmtCompact = (n: number | null | undefined): string => {
-    if (n == null) return '-';
-    if (Math.abs(n) >= 1000000) return `${(n / 1000000).toFixed(1)}M€`;
-    if (Math.abs(n) >= 1000) return `${(n / 1000).toFixed(0)}k€`;
-    return `${n}€`;
-  };
 
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
 
