@@ -253,7 +253,7 @@ async function extractFiscalFromPDF(file: File): Promise<{
   
   return new Promise((resolve) => {
     const child = spawn('node', [
-      '/home/jndoye/shared/projects/konto/backend/scripts/parse-fiscal-pdf.cjs',
+      '/home/jndoye/shared/projects/konto/backend/scripts/parse-fiscal-pdf.mjs',
       tmpPath
     ]);
     
