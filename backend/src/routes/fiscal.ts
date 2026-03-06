@@ -40,8 +40,11 @@ router.post('/api/fiscal', async (c) => {
     breakdown
   } = body;
 
-  if (!year || !partsFiscales) {
-    return c.json({ error: 'year and partsFiscales are required' }, 400);
+  // Provide defaults for missing values
+  const partsWithDefault = partsFiscales ?? 1;
+  
+  if (!year) {
+    return c.json({ error: 'year is required' }, 400);
   }
 
   const breakdownSalaries = breakdown?.salaries ?? null;
@@ -61,9 +64,9 @@ router.post('/api/fiscal', async (c) => {
             breakdown_salaries = excluded.breakdown_salaries,
             breakdown_lmnp = excluded.breakdown_lmnp,
             breakdown_dividendes = excluded.breakdown_dividendes,
-            breakdown_revenus_fonciers = excluded.revenus_fonciers,
+            breakdown_revenus_fonciers = excluded.breakdown_revenus_fonciers,
             updated_at = datetime('now')`,
-    args: [userId, year, revenuBrutGlobal ?? null, revenuImposable ?? null, partsFiscales, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers]
+    args: [userId, year, revenuBrutGlobal ?? null, revenuImposable ?? null, partsWithDefault, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers]
   });
 
   // Fetch the updated record
@@ -93,7 +96,7 @@ router.post('/api/fiscal/upload', async (c) => {
   const {
     revenuBrutGlobal,
     revenuImposable,
-    partsFiscales,
+    partsWithDefault,
     tauxMarginal,
     tauxMoyen,
     breakdown
@@ -116,9 +119,9 @@ router.post('/api/fiscal/upload', async (c) => {
             breakdown_salaries = excluded.breakdown_salaries,
             breakdown_lmnp = excluded.breakdown_lmnp,
             breakdown_dividendes = excluded.breakdown_dividendes,
-            breakdown_revenus_fonciers = excluded.revenus_fonciers,
+            breakdown_revenus_fonciers = excluded.breakdown_revenus_fonciers,
             updated_at = datetime('now')`,
-    args: [userId, year, revenuBrutGlobal ?? null, revenuImposable ?? null, partsFiscales ?? null, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers]
+    args: [userId, year, revenuBrutGlobal ?? null, revenuImposable ?? null, partsFiscales ?? 1, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers]
   });
 
   // Fetch the stored record
@@ -330,7 +333,7 @@ async function extractFiscalFromPDF(file: File): Promise<{
   return {
     revenuBrutGlobal,
     revenuImposable,
-    partsFiscales,
+    partsWithDefault,
     tauxMarginal,
     tauxMoyen,
     breakdown
