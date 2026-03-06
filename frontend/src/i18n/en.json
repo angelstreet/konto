@@ -366,6 +366,8 @@
   "scan": "Scan",
   "no_payslip": "No payslip",
   "upload": "Upload",
+  "swiss_salary_upload": "Upload Swiss salary (PDF)",
+  "swiss_salary_modal_title": "Import Swiss salary certificate",
   "add": "Add",
   "gross": "Gross",
   "net": "Net",
