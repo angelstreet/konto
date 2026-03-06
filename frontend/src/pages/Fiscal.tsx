@@ -2,6 +2,7 @@ import { API } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Upload, Save, Trash2, Calculator, CheckCircle, AlertCircle, FileText, DollarSign, Users, TrendingUp, Plus, X } from 'lucide-react';
+import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import EyeToggle from '../components/EyeToggle';
 import { useAuth } from '@clerk/clerk-react';
 import { useAuthFetch } from '../useApi';
@@ -243,11 +244,14 @@ export default function Fiscal() {
     return `${v}%`;
   };
 
-  const breakdownTotal = currentData ? 
-    (currentData.breakdown_salaries || 0) + 
-    (currentData.breakdown_lmnp || 0) + 
-    (currentData.breakdown_dividendes || 0) + 
-    (currentData.breakdown_revenus_fonciers || 0) : 0;
+  const breakdownData = currentData ? [
+    { key: 'salaries', label: t('salaries') || 'Salaires', value: currentData.breakdown_salaries || 0, color: '#22c55e' },
+    { key: 'lmnp', label: t('lmnp') || 'LMNP', value: currentData.breakdown_lmnp || 0, color: '#a855f7' },
+    { key: 'dividendes', label: t('dividendes') || 'Dividendes', value: currentData.breakdown_dividendes || 0, color: '#eab308' },
+    { key: 'revenus_fonciers', label: t('revenus_fonciers') || 'Revenus fonciers', value: currentData.breakdown_revenus_fonciers || 0, color: '#3b82f6' },
+  ].filter(d => d.value > 0) : [];
+
+  const breakdownTotal = breakdownData.reduce((sum, d) => sum + d.value, 0);
 
   if (loading) {
     return (
@@ -525,55 +529,54 @@ export default function Fiscal() {
           {breakdownTotal > 0 && (
             <div className="bg-surface border border-border rounded-xl p-4">
               <h3 className="font-medium mb-4">{t('income_breakdown') || 'Répartition des revenus'}</h3>
-              <div className="space-y-3">
-                {currentData.breakdown_salaries != null && currentData.breakdown_salaries > 0 && (
-                  <div className="flex items-center gap-3">
-                    <div className="w-24 text-sm text-muted">{t('salaries') || 'Salaires'}</div>
-                    <div className="flex-1 h-6 bg-background rounded overflow-hidden">
-                      <div
-                        className="h-full bg-green-500"
-                        style={{ width: `${(currentData.breakdown_salaries / breakdownTotal) * 100}%` }}
+              <div className="flex flex-col lg:flex-row lg:items-center gap-6">
+                <div className="w-full lg:w-1/2 max-w-md h-64">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <PieChart>
+                      <Pie
+                        data={breakdownData}
+                        dataKey="value"
+                        nameKey="key"
+                        cx="50%"
+                        cy="50%"
+                        innerRadius={60}
+                        outerRadius={80}
+                        paddingAngle={2}
+                        stroke="none"
+                      >
+                        {breakdownData.map((entry) => (
+                          <Cell key={entry.key} fill={entry.color} />
+                        ))}
+                      </Pie>
+                      <Tooltip
+                        formatter={(value: any, name: any) => [hideAmounts ? '••••' : fmt(value as number), breakdownData.find(d => d.key === name)?.label || name]}
+                        contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1f2937', borderRadius: 12, fontSize: 12, color: '#e5e7eb' }}
+                        itemStyle={{ color: '#e5e7eb' }}
                       />
-                    </div>
-                    <div className="w-24 text-right font-mono text-sm">{mask(fmt(currentData.breakdown_salaries))}</div>
+                    </PieChart>
+                  </ResponsiveContainer>
+                </div>
+                <div className="flex-1 space-y-2">
+                  {breakdownData.map((d) => {
+                    const pct = breakdownTotal > 0 ? (d.value / breakdownTotal) * 100 : 0;
+                    return (
+                      <div key={d.key} className="flex items-center justify-between text-sm">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
+                          <span className="text-muted">{d.label}</span>
+                        </div>
+                        <div className="flex items-center gap-3 font-mono">
+                          <span className="text-muted">{pct.toFixed(1)}%</span>
+                          <span>{mask(fmt(d.value))}</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                  <div className="pt-2 mt-2 border-t border-border flex items-center justify-between text-sm font-medium">
+                    <span className="text-muted">Total</span>
+                    <span className="font-mono">{mask(fmt(breakdownTotal))}</span>
                   </div>
-                )}
-                {currentData.breakdown_lmnp != null && currentData.breakdown_lmnp > 0 && (
-                  <div className="flex items-center gap-3">
-                    <div className="w-24 text-sm text-muted">{t('lmnp') || 'LMNP'}</div>
-                    <div className="flex-1 h-6 bg-background rounded overflow-hidden">
-                      <div
-                        className="h-full bg-purple-500"
-                        style={{ width: `${(currentData.breakdown_lmnp / breakdownTotal) * 100}%` }}
-                      />
-                    </div>
-                    <div className="w-24 text-right font-mono text-sm">{mask(fmt(currentData.breakdown_lmnp))}</div>
-                  </div>
-                )}
-                {currentData.breakdown_dividendes != null && currentData.breakdown_dividendes > 0 && (
-                  <div className="flex items-center gap-3">
-                    <div className="w-24 text-sm text-muted">{t('dividendes') || 'Dividendes'}</div>
-                    <div className="flex-1 h-6 bg-background rounded overflow-hidden">
-                      <div
-                        className="h-full bg-yellow-500"
-                        style={{ width: `${(currentData.breakdown_dividendes / breakdownTotal) * 100}%` }}
-                      />
-                    </div>
-                    <div className="w-24 text-right font-mono text-sm">{mask(fmt(currentData.breakdown_dividendes))}</div>
-                  </div>
-                )}
-                {currentData.breakdown_revenus_fonciers != null && currentData.breakdown_revenus_fonciers > 0 && (
-                  <div className="flex items-center gap-3">
-                    <div className="w-24 text-sm text-muted">{t('revenus_fonciers') || 'Revenus fonciers'}</div>
-                    <div className="flex-1 h-6 bg-background rounded overflow-hidden">
-                      <div
-                        className="h-full bg-blue-500"
-                        style={{ width: `${(currentData.breakdown_revenus_fonciers / breakdownTotal) * 100}%` }}
-                      />
-                    </div>
-                    <div className="w-24 text-right font-mono text-sm">{mask(fmt(currentData.breakdown_revenus_fonciers))}</div>
-                  </div>
-                )}
+                </div>
               </div>
             </div>
           )}
