@@ -41,6 +41,7 @@ import Subscriptions from './pages/Subscriptions';
 import AnalysisSynthesis from './pages/AnalysisSynthesis';
 import LoansDashboard from './pages/LoansDashboard';
 import LoanDetail from './pages/LoanDetail';
+import Fiscal from './pages/Fiscal';
 
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -77,6 +78,7 @@ function AppRoutes() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/accounts" element={<Accounts />} />
         <Route path="/transactions" element={<Transactions />} />
+        <Route path="/fiscal" element={<Fiscal />} />
         <Route path="/companies" element={<Company />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/profile" element={<Profile />} />

@@ -1,11 +1,12 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { LayoutDashboard, Landmark, ArrowLeftRight, Building2, MoreHorizontal } from 'lucide-react';
+import { LayoutDashboard, Landmark, ArrowLeftRight, Building2, MoreHorizontal, FileText } from 'lucide-react';
 
 const items = [
   { path: '/', icon: LayoutDashboard, labelKey: 'nav_dashboard' },
   { path: '/accounts', icon: Landmark, labelKey: 'nav_accounts' },
   { path: '/transactions', icon: ArrowLeftRight, labelKey: 'nav_transactions' },
+  { path: '/fiscal', icon: FileText, labelKey: 'nav_fiscal' },
   { path: '/companies', icon: Building2, labelKey: 'nav_companies' },
   { path: '/more', icon: MoreHorizontal, labelKey: 'more' },
 ];
@@ -19,7 +20,7 @@ export default function BottomNav() {
     <nav className="fixed bottom-0 left-0 right-0 bg-surface border-t border-border pb-[env(safe-area-inset-bottom)]">
       <div className="flex justify-around max-w-lg mx-auto">
         {items.map(({ path, icon: Icon, labelKey }) => {
-          const morePaths = ['/more', '/income', '/assets', '/loans', '/budget', '/analysis', '/cashflow', '/bilan', '/bilan-pro', '/reports', '/ledger', '/vat', '/fec-export', '/reconciliation', '/simulators', '/import', '/outils', '/settings', '/ranking'];
+          const morePaths = ['/more', '/income', '/assets', '/loans', '/budget', '/analysis', '/cashflow', '/bilan', '/bilan-pro', '/reports', '/ledger', '/vat', '/fec-export', '/reconciliation', '/simulators', '/import', '/outils', '/settings', '/ranking', '/fiscal', '/crypto', '/actions-fonds', '/property-roi', '/banking-score', '/subscriptions', '/trends', '/rapport-patrimoine'];
           const active = path === '/more'
             ? morePaths.includes(pathname) || pathname.startsWith('/loans/')
             : pathname === path;

@@ -373,6 +373,24 @@ export async function initDatabase() {
       triggered_at TEXT NOT NULL DEFAULT (datetime('now')),
       UNIQUE(user_id, bank_account_id, milestone)
     );
+
+    CREATE TABLE IF NOT EXISTS fiscal_data (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      year INTEGER NOT NULL,
+      revenu_brut_global REAL,
+      revenu_imposable REAL,
+      parts_fiscales REAL NOT NULL DEFAULT 1,
+      taux_marginal REAL,
+      taux_moyen REAL,
+      breakdown_salaries REAL,
+      breakdown_lmnp REAL,
+      breakdown_dividendes REAL,
+      breakdown_revenus_fonciers REAL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(user_id, year)
+    );
   `);
 }
 
