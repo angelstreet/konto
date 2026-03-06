@@ -19,8 +19,7 @@ income.post('/parse-swiss', async (c) => {
   const buffer = Buffer.from(await file.arrayBuffer());
   fs.writeFileSync(tmpPath, buffer);
 
-  type SwissParseStatus = 200 | 400 | 500;
-  const payload = await new Promise<{ status: SwissParseStatus; body: any }>((resolve) => {
+  return await new Promise<Response>((resolve) => {
     const scriptPath = path.join(process.cwd(), 'scripts', 'parse-swiss-salary.cjs');
     const child = spawn('node', [scriptPath, tmpPath], { cwd: process.cwd() });
     
@@ -28,10 +27,10 @@ income.post('/parse-swiss', async (c) => {
     let stderr = '';
     let responded = false;
 
-    const finish = (status: SwissParseStatus, body: any) => {
+    const finish = (status: number, body: any): void => {
       if (responded) return;
       responded = true;
-      resolve({ status, body });
+      resolve(c.json(body, status as any));
     };
 
     child.stdout.on('data', (data) => { stdout += data.toString(); });
@@ -69,8 +68,6 @@ income.post('/parse-swiss', async (c) => {
       }
     });
   });
-
-  return c.json(payload.body, payload.status);
 });
 
 export default income;
