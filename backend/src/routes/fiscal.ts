@@ -259,84 +259,53 @@ async function extractFiscalFromPDF(file: File): Promise<{
     };
   }
 
-  // French avis d'imposition patterns - more flexible matching
-  // Revenu brut global - try multiple patterns
+  // French avis d'imposition patterns - simplified robust matching
+  // Try to extract any 4-5 digit number near the right labels
+  console.log('PDF text sample:', text.substring(0, 1000));
+  
+  // Revenue brut global - look for the number near "revenu brut global"
   let revenuBrutGlobal: number | null = null;
-  const brutPatterns = [
-    /revenu\s*brut\s*global[\s\S]{0,50}?(\d{1,3}\s\d{3})/i,
-    /Revenu\s*brut\s*global[\s\S]{0,50}?(\d{1,3}\s\d{3})/i,
-    /\b(\d{1,3}\s\d{3})\b.*revenu.*brut.*global/i
-  ];
-  for (const p of brutPatterns) {
-    const m = text.match(p);
-    if (m) {
-      revenuBrutGlobal = parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
-      break;
-    }
-  }
+  const brutMatch = text.match(/revenu\s+brut\s+global.*?(\d{4,5})/i);
+  if (brutMatch) revenuBrutGlobal = parseInt(brutMatch[1]);
 
-  // Revenu imposable
+  // Revenu imposable - critical field
   let revenuImposable: number | null = null;
-  const imposablePatterns = [
-    /revenu\s*imposable[\s\S]{0,50}?(\d{1,3}\s\d{3})/i,
-    /Revenu\s*imposable[\s\S]{0,50}?(\d{1,3}\s\d{3})/i
-  ];
-  for (const p of imposablePatterns) {
-    const m = text.match(p);
-    if (m) {
-      revenuImposable = parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
-      break;
-    }
-  }
+  const imposableMatch = text.match(/revenu\s+imposable.*?(\d{4,5})/i);
+  if (imposableMatch) revenuImposable = parseInt(imposableMatch[1]);
 
-  // Parts fiscales
+  // Parts fiscales - look for "C 1,00" or "Célibataire 1"
   let partsFiscales: number | null = null;
-  const partsMatch = text.match(/Nombre\s+de\s+parts[\s\S]{0,30}?(\d+[.,]?\d*)/i);
+  const partsMatch = text.match(/C[Sé]?l?b?a?t?a?i?r?e?\s*(\d+)[,.]?\d*/i);
   if (partsMatch) {
     partsFiscales = parseFloat(partsMatch[1].replace(',', '.'));
   }
+  // Also try "Nombre de parts"
+  if (!partsFiscales) {
+    const nbPartsMatch = text.match(/Nombre\s+de\s+parts.*?(\d+)[,.]?\d*/i);
+    if (nbPartsMatch) partsFiscales = parseFloat(nbPartsMatch[1].replace(',', '.'));
+  }
 
-  // Taux marginal d'imposition (TMI)
+  // Taux marginal
   let tauxMarginal: number | null = null;
-  const tmiMatch = text.match(/taux\s+marginal.*?(\d+)\s*%/im);
-  if (tmiMatch) {
-    tauxMarginal = parseFloat(tmiMatch[1]);
-  }
+  const tmiMatch = text.match(/taux\s+marginal.*?(\d+)/i);
+  if (tmiMatch) tauxMarginal = parseInt(tmiMatch[1]);
 
-  // Taux moyen d'imposition
+  // Taux moyen
   let tauxMoyen: number | null = null;
-  const tmmMatch = text.match(/taux\s+moyen.*?(\d+[.,]?\d*)\s*%/im);
-  if (tmmMatch) {
-    tauxMoyen = parseFloat(tmmMatch[1].replace(',', '.'));
-  }
+  const tmmMatch = text.match(/taux\s+moyen.*?(\d+)[,.]?\d*/i);
+  if (tmmMatch) tauxMoyen = parseFloat(tmmMatch[1].replace(',', '.'));
 
-  // Breakdown - Salaires (salaires nets)
+  // Breakdown - Salaires (net)
   let salaries: number | null = null;
-  const salPatterns = [
-    /salaires?[,\s\S]{0,30}?(\d{1,3}\s\d{3})/i,
-    /Salaires[\s\S]{0,50}?(\d{1,3}\s\d{3})/i
-  ];
-  for (const p of salPatterns) {
-    const m = text.match(p);
-    if (m) {
-      salaries = parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
-      break;
-    }
-  }
+  const salMatch = text.match(/salaires[\s\S]{0,20}?(\d{3,5})/i);
+  if (salMatch) salaries = parseInt(salMatch[1]);
 
-  // Breakdown - LMNP (Loueur Meublé Non Professionnel)
-  let lmnp: number | null = null;
-  const lmnpPatterns = [
-    /locations?\s*meublées?\s*non?\s*professionnelles?[\s\S]{0,30}?(\d{1,3}\s\d{3})/i,
-    /lmnp[\s\S]{0,30}?(\d{1,3}\s\d{3})/i
-  ];
-  for (const p of lmnpPatterns) {
-    const m = text.match(p);
-    if (m) {
-      lmnp = parseFloat(m[1].replace(/\s/g, '').replace(',', '.'));
-      break;
-    }
-  }
+  // Breakdown - Revenus fonciers
+  let revenusFonciers: number | null = null;
+  const fonMatch = text.match(/revenus?\s+fonciers?\s+nets?[\s\S]{0,20}?(\d{3,5})/i);
+  if (fonMatch) revenusFonciers = parseInt(fonMatch[1]);
+
+  console.log('Extracted:', { revenuBrutGlobal, revenuImposable, partsFiscales, tauxMarginal, salaries, revenusFonciers });
 
   // Breakdown - Dividendes
   let dividendes: number | null = null;
@@ -352,10 +321,10 @@ async function extractFiscalFromPDF(file: File): Promise<{
     revenusFonciers = parseFloat(fonMatch[1].replace(/\s/g, '').replace(',', '.'));
   }
 
-  const breakdown = (salaries || lmnp || dividendes || revenusFonciers) ? {
+  const breakdown = (salaries || revenusFonciers) ? {
     salaries,
-    lmnp,
-    dividendes,
+    lmnp: null,
+    dividendes: null,
     revenusFonciers
   } : null;
 
