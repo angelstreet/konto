@@ -70,10 +70,12 @@ function buildScopeWhere(usage: string | undefined, companyId: string | undefine
   let where = `${alias}.user_id = ? AND ${alias}.type = 'loan' AND ${alias}.hidden = 0`;
   const args: any[] = [];
   if (usage === 'personal') {
-    where += ` AND ${alias}.usage = ?`;
+    // Personal scope must exclude company-linked loans even if usage is mislabeled.
+    where += ` AND (${alias}.usage = ? OR ${alias}.usage IS NULL) AND ${alias}.company_id IS NULL`;
     args.push('personal');
   } else if (usage === 'professional') {
-    where += ` AND ${alias}.usage = ?`;
+    // Professional scope includes explicit professional usage or company-linked loans.
+    where += ` AND (${alias}.usage = ? OR ${alias}.company_id IS NOT NULL)`;
     args.push('professional');
   } else if (companyId) {
     where += ` AND ${alias}.company_id = ?`;
