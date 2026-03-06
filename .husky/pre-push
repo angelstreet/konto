@@ -6,7 +6,7 @@ npm run build
 
 echo "[pre-push] Generating screenshots..."
 if [ -z "$KONTO_BASE_URL" ]; then
-  for candidate in "https://127.0.0.1:8080/konto" "http://127.0.0.1:8080/konto" "http://localhost:5003/konto"; do
+  for candidate in "http://127.0.0.1:3004/konto" "http://localhost:3004/konto" "http://127.0.0.1:5003/konto"; do
     if curl -k -fsS "${candidate}/?demo=1" >/dev/null 2>&1; then
       KONTO_BASE_URL="$candidate"
       break
