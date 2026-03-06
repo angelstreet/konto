@@ -253,6 +253,7 @@ async function extractFiscalFromPDF(file: File): Promise<{
   const { spawn } = await import('child_process');
   
   return new Promise((resolve) => {
+    console.log('About to spawn child process for PDF parsing');
     const child = spawn('node', [
       '/home/jndoye/shared/projects/konto/backend/scripts/parse-fiscal-pdf.cjs',
       tmpPath
