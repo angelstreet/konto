@@ -53,9 +53,10 @@ router.post('/api/fiscal', async (c) => {
   const breakdownRevenusFonciers = breakdown?.revenusFonciers ?? null;
 
   await db.execute({
-    sql: `INSERT INTO fiscal_data (user_id, year, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    sql: `INSERT INTO fiscal_data (user_id, year, fiscal_residency, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, updated_at)
+          VALUES (?, ?, 'FR', ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
           ON CONFLICT(user_id, year) DO UPDATE SET
+            fiscal_residency = COALESCE(excluded.fiscal_residency, fiscal_residency),
             revenu_brut_global = excluded.revenu_brut_global,
             revenu_imposable = excluded.revenu_imposable,
             parts_fiscales = excluded.parts_fiscales,
@@ -111,9 +112,10 @@ router.post('/api/fiscal/upload', async (c) => {
   const breakdownRevenusFonciers = breakdown?.revenusFonciers ?? null;
 
   await db.execute({
-    sql: `INSERT INTO fiscal_data (user_id, year, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+    sql: `INSERT INTO fiscal_data (user_id, year, fiscal_residency, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, updated_at)
+          VALUES (?, ?, 'FR', ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
           ON CONFLICT(user_id, year) DO UPDATE SET
+            fiscal_residency = COALESCE(excluded.fiscal_residency, fiscal_residency),
             revenu_brut_global = excluded.revenu_brut_global,
             revenu_imposable = excluded.revenu_imposable,
             parts_fiscales = excluded.parts_fiscales,
@@ -134,6 +136,45 @@ router.post('/api/fiscal/upload', async (c) => {
   });
 
   // PDF is NOT stored - already discarded after parsing
+  return c.json({ fiscalData: result.rows[0] });
+});
+
+// Update fiscal data (e.g., fiscal_residency)
+router.patch('/api/fiscal/:year', async (c) => {
+  const userId = await getUserId(c);
+  const year = parseInt(c.req.param('year'));
+  const body = await c.req.json();
+
+  if (!year) {
+    return c.json({ error: 'year is required' }, 400);
+  }
+
+  // Build dynamic update
+  const fields: string[] = [];
+  const values: any[] = [];
+  
+  if (body.fiscal_residency !== undefined) {
+    fields.push('fiscal_residency = ?');
+    values.push(body.fiscal_residency);
+  }
+  
+  if (fields.length === 0) {
+    return c.json({ error: 'No fields to update' }, 400);
+  }
+  
+  fields.push("updated_at = datetime('now')");
+  values.push(userId, year);
+
+  await db.execute({
+    sql: `UPDATE fiscal_data SET ${fields.join(', ')} WHERE user_id = ? AND year = ?`,
+    args: values
+  });
+
+  const result = await db.execute({
+    sql: 'SELECT * FROM fiscal_data WHERE user_id = ? AND year = ?',
+    args: [userId, year]
+  });
+
   return c.json({ fiscalData: result.rows[0] });
 });
 
