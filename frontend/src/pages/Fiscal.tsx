@@ -261,7 +261,6 @@ export default function Fiscal() {
           <h1 className="text-2xl font-bold">{t('fiscal_title') || 'Fiscalité'}</h1>
           <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
-        <p className="text-muted text-sm">{t('fiscal_subtitle') || 'Données fiscales et éligibilité aux aides'}</p>
         <div className="flex gap-2">
           <button
             onClick={() => fileInputRef.current?.click()}
