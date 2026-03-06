@@ -1,7 +1,8 @@
 import { API } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Upload, Save, Trash2, Calculator, CheckCircle, AlertCircle, FileText, DollarSign, Users, TrendingUp, Plus, X } from 'lucide-react';
+import { Upload, Save, Trash2, Calculator, CheckCircle, AlertCircle, FileText, DollarSign, Users, TrendingUp, Plus, X, Eye, EyeOff } from 'lucide-react';
+import EyeToggle from '../components/EyeToggle';
 import { useAuth } from '@clerk/clerk-react';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 
@@ -45,7 +46,7 @@ function useAuthToken() {
 
 export default function Fiscal() {
   const { t } = useTranslation();
-  const { hideAmounts } = useAmountVisibility();
+  const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const getToken = useAuthToken();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -79,6 +80,20 @@ export default function Fiscal() {
     breakdownDividendes: '',
     breakdownRevenusFonciers: ''
   });
+
+  const fmt = (n: number | null | undefined): string => {
+    if (n == null) return '-';
+    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+  };
+
+  const fmtCompact = (n: number | null | undefined): string => {
+    if (n == null) return '-';
+    if (Math.abs(n) >= 1000000) return `${(n / 1000000).toFixed(1)}M€`;
+    if (Math.abs(n) >= 1000) return `${(n / 1000).toFixed(0)}k€`;
+    return `${n}€`;
+  };
+
+  const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
 
   const apiFetch = async (url: string, opts?: RequestInit) => {
     const headers: Record<string, string> = { ...(opts?.headers as Record<string, string> || {}) };
@@ -266,6 +281,7 @@ export default function Fiscal() {
             <Plus size={18} />
             {t('manual_entry') || 'Saisie manuelle'}
           </button>
+          <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
       </div>
 
@@ -445,7 +461,7 @@ export default function Fiscal() {
                 <DollarSign size={14} />
                 {t('revenu_imposable') || 'Revenu imposable'}
               </div>
-              <div className="text-2xl font-bold font-mono">{fmt(currentData.revenu_imposable)}</div>
+              <div className="text-2xl font-bold font-mono">{mask(fmt(currentData.revenu_imposable))}</div>
             </div>
             <div className="bg-surface border border-border rounded-xl p-4">
               <div className="flex items-center gap-2 text-muted text-sm mb-1">
@@ -483,7 +499,7 @@ export default function Fiscal() {
                         style={{ width: `${(currentData.breakdown_salaries / breakdownTotal) * 100}%` }}
                       />
                     </div>
-                    <div className="w-24 text-right font-mono text-sm">{fmt(currentData.breakdown_salaries)}</div>
+                    <div className="w-24 text-right font-mono text-sm">{mask(fmt(currentData.breakdown_salaries))}</div>
                   </div>
                 )}
                 {currentData.breakdown_lmnp != null && currentData.breakdown_lmnp > 0 && (
@@ -495,7 +511,7 @@ export default function Fiscal() {
                         style={{ width: `${(currentData.breakdown_lmnp / breakdownTotal) * 100}%` }}
                       />
                     </div>
-                    <div className="w-24 text-right font-mono text-sm">{fmt(currentData.breakdown_lmnp)}</div>
+                    <div className="w-24 text-right font-mono text-sm">{mask(fmt(currentData.breakdown_lmnp))}</div>
                   </div>
                 )}
                 {currentData.breakdown_dividendes != null && currentData.breakdown_dividendes > 0 && (
@@ -507,7 +523,7 @@ export default function Fiscal() {
                         style={{ width: `${(currentData.breakdown_dividendes / breakdownTotal) * 100}%` }}
                       />
                     </div>
-                    <div className="w-24 text-right font-mono text-sm">{fmt(currentData.breakdown_dividendes)}</div>
+                    <div className="w-24 text-right font-mono text-sm">{mask(fmt(currentData.breakdown_dividendes))}</div>
                   </div>
                 )}
                 {currentData.breakdown_revenus_fonciers != null && currentData.breakdown_revenus_fonciers > 0 && (
@@ -519,7 +535,7 @@ export default function Fiscal() {
                         style={{ width: `${(currentData.breakdown_revenus_fonciers / breakdownTotal) * 100}%` }}
                       />
                     </div>
-                    <div className="w-24 text-right font-mono text-sm">{fmt(currentData.breakdown_revenus_fonciers)}</div>
+                    <div className="w-24 text-right font-mono text-sm">{mask(fmt(currentData.breakdown_revenus_fonciers))}</div>
                   </div>
                 )}
               </div>
