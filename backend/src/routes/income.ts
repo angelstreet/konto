@@ -19,13 +19,20 @@ income.post('/parse-swiss', async (c) => {
   const buffer = Buffer.from(await file.arrayBuffer());
   fs.writeFileSync(tmpPath, buffer);
 
-  return new Promise((resolve) => {
+  return await new Promise<Response>((resolve) => {
     const scriptPath = path.join(process.cwd(), 'scripts', 'parse-swiss-salary.cjs');
     const child = spawn('node', [scriptPath, tmpPath], { cwd: process.cwd() });
     
     let stdout = '';
     let stderr = '';
-    
+    let responded = false;
+
+    const finish = (status: number, body: any) => {
+      if (responded) return;
+      responded = true;
+      resolve(c.json(body, status as any));
+    };
+
     child.stdout.on('data', (data) => { stdout += data.toString(); });
     child.stderr.on('data', (data) => { stderr += data.toString(); });
     
@@ -34,7 +41,7 @@ income.post('/parse-swiss', async (c) => {
       try { fs.unlinkSync(tmpPath); } catch {}
       
       if (code !== 0) {
-        resolve(c.json({ error: 'Failed to parse PDF', details: stderr }, 500));
+        finish(500, { error: 'Failed to parse PDF', details: stderr });
         return;
       }
       
@@ -42,22 +49,22 @@ income.post('/parse-swiss', async (c) => {
         // Extract JSON from output (skip warnings, find first {)
         const jsonMatch = stdout.match(/\{[\s\S]*\}/);
         if (!jsonMatch) {
-          resolve(c.json({ error: 'No parse result', output: stdout }, 500));
+          finish(500, { error: 'No parse result', output: stdout });
           return;
         }
         const result = JSON.parse(jsonMatch[0]);
         
         if (!result.grossCHF || !result.netCHF) {
-          resolve(c.json({ 
+          finish(400, {
             error: 'Could not extract salary data. Make sure this is a Swiss Lohnausweis (Form 11).',
             partial: result 
-          }, 400));
+          });
           return;
         }
         
-        resolve(c.json({ success: true, data: result }));
+        finish(200, { success: true, data: result });
       } catch (err: any) {
-        resolve(c.json({ error: 'Failed to parse result', details: err.message, output: stdout }, 500));
+        finish(500, { error: 'Failed to parse result', details: err.message, output: stdout });
       }
     });
   });
