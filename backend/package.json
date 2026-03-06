@@ -17,7 +17,9 @@
     "dotenv": "^17.2.4",
     "hono": "^4.5.0",
     "node-cron": "^4.2.1",
+    "pdf-lib": "^1.17.1",
     "pdf-parse": "^2.4.5",
+    "pdfjs-dist": "^5.5.207",
     "tiny-secp256k1": "^2.2.4"
   },
   "devDependencies": {

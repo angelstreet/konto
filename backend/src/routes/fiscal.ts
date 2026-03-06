@@ -243,10 +243,11 @@ async function extractFiscalFromPDF(file: File): Promise<{
   
   try {
     const fileBuffer = await file.arrayBuffer();
-    const { PDFParse } = await import('pdf-parse');
-    const parser = new PDFParse(new Uint8Array(fileBuffer));
-    const result = await parser.getText();
-    text = result.text || '';
+    const pdfjs = await import('pdfjs-dist/legacy/build/pdf.mjs');
+    const pdf = await pdfjs.getDocument({ data: new Uint8Array(fileBuffer) }).promise;
+    const page = await pdf.getPage(1);
+    const textContent = await page.getTextContent();
+    text = textContent.items.map((i: any) => i.str).join(' ');
   } catch (e: any) {
     console.error('PDF parse error:', e.message);
     return {
