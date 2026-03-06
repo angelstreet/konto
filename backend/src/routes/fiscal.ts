@@ -96,7 +96,7 @@ router.post('/api/fiscal/upload', async (c) => {
   const {
     revenuBrutGlobal,
     revenuImposable,
-    partsWithDefault,
+    partsFiscales,
     tauxMarginal,
     tauxMoyen,
     breakdown
@@ -333,7 +333,7 @@ async function extractFiscalFromPDF(file: File): Promise<{
   return {
     revenuBrutGlobal,
     revenuImposable,
-    partsWithDefault,
+    partsFiscales: partsWithDefault,
     tauxMarginal,
     tauxMoyen,
     breakdown
