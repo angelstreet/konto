@@ -239,6 +239,7 @@ async function extractFiscalFromPDF(file: File): Promise<{
     revenusFonciers: number | null;
   } | null;
 }> {
+  console.log('extractFiscalFromPDF called');
   // Save uploaded file to temp location
   const tmpDir = '/tmp';
   const extId = Math.random().toString(36).substring(7);
