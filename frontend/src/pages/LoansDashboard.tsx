@@ -334,7 +334,7 @@ export default function LoansDashboard() {
               </div>
 
               <div className="text-sm font-semibold mb-2">{t('loans_analysis') || 'Analyse'}</div>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 mb-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
                 <div className="bg-surface rounded-xl border border-border p-4">
                   <div className="text-xs text-muted uppercase">{t('loan_monthly') || 'Mensualité'}</div>
                   <div className="text-3xl mt-1 mb-2">{fc(summary.monthlyTotal)}</div>
@@ -349,10 +349,6 @@ export default function LoansDashboard() {
                 <div className="bg-surface rounded-xl border border-border p-4">
                   <div className="text-xs text-muted uppercase">{t('loan_avg_rate') || 'Taux moyen'}</div>
                   <div className="text-3xl mt-3">{data.summary.avg_rate != null ? `${data.summary.avg_rate} %` : (t('loan_no_data') || 'Pas de données')}</div>
-                </div>
-                <div className="bg-surface rounded-xl border border-border p-4">
-                  <div className="text-xs text-muted uppercase">{t('loan_capacity_available') || 'Capacité disponible'}</div>
-                  <div className="text-3xl mt-3">{data.summary.capacity_available != null ? fc(data.summary.capacity_available) : (t('loan_no_data') || 'Pas de données')}</div>
                 </div>
               </div>
 
