@@ -401,7 +401,7 @@ export default function Income() {
                 <Plus size={16} /> <span className="hidden sm:inline">{t('add_employer')}</span>
               </button>
               <label className="flex items-center gap-1.5 px-3 py-2.5 border border-border rounded-lg text-sm min-h-[44px] font-medium hover:bg-surface-hover transition-colors cursor-pointer">
-                <Upload size={16} /> <span className="hidden sm:inline">Swiss Lohnausweis</span>
+                <Upload size={16} /> <span className="hidden sm:inline">{t('swiss_salary_upload')}</span>
                 <input type="file" accept=".pdf" className="hidden" onChange={handleSwissImport} disabled={swissUploading} />
               </label>
             </div>
@@ -922,16 +922,16 @@ export default function Income() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/50" onClick={() => setSwissResult(null)} />
           <div className="relative bg-surface border border-border rounded-xl shadow-2xl max-w-md w-full p-6">
-            <h3 className="text-lg font-bold mb-4">Importer薪资单 Swiss</h3>
+            <h3 className="text-lg font-bold mb-4">{t('swiss_salary_modal_title')}</h3>
             <div className="space-y-3 mb-6">
-              <div className="flex justify-between"><span className="text-muted">Année</span><span className="font-medium">{swissResult.year}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Employeur</span><span className="font-medium">{swissResult.employer}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Brut (CHF)</span><span className="font-medium font-mono">{swissResult.grossCHF.toLocaleString('fr-CH')}</span></div>
-              <div className="flex justify-between"><span className="text-muted">Net (CHF)</span><span className="font-medium font-mono">{swissResult.netCHF.toLocaleString('fr-CH')}</span></div>
+              <div className="flex justify-between"><span className="text-muted">{t('year')}</span><span className="font-medium">{swissResult.year}</span></div>
+              <div className="flex justify-between"><span className="text-muted">{t('employer')}</span><span className="font-medium">{swissResult.employer}</span></div>
+              <div className="flex justify-between"><span className="text-muted">{t('gross')} (CHF)</span><span className="font-medium font-mono">{swissResult.grossCHF.toLocaleString('fr-CH')}</span></div>
+              <div className="flex justify-between"><span className="text-muted">{t('net')} (CHF)</span><span className="font-medium font-mono">{swissResult.netCHF.toLocaleString('fr-CH')}</span></div>
             </div>
             <div className="flex gap-3">
-              <button onClick={() => setSwissResult(null)} className="flex-1 px-4 py-2 border border-border rounded-lg hover:bg-surface-hover">Annuler</button>
-              <button onClick={confirmSwissImport} className="flex-1 px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600">Importer</button>
+              <button onClick={() => setSwissResult(null)} className="flex-1 px-4 py-2 border border-border rounded-lg hover:bg-surface-hover">{t('cancel')}</button>
+              <button onClick={confirmSwissImport} className="flex-1 px-4 py-2 bg-accent-500 text-white rounded-lg hover:bg-accent-600">{t('import_data')}</button>
             </div>
           </div>
         </div>
@@ -975,8 +975,7 @@ function CategoryGroupedList({
   fmtMonthLabel: (ym: string) => string;
   typeIcon: (t: string) => string;
 }) {
-  const allTypes = [...new Set(items.map(i => i.type))];
-  const [expanded, setExpanded] = useState<Set<string>>(new Set(allTypes));
+  const [expanded, setExpanded] = useState<Set<string>>(() => new Set());
 
   const toggle = (type: string) => {
     setExpanded(prev => {
