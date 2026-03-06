@@ -258,11 +258,14 @@ async function extractFiscalFromPDF(file: File): Promise<{
     ]);
     
     let stdout = '';
+    let stderr = '';
     child.stdout.on('data', (d) => { stdout += d.toString(); });
-    child.stderr.on('data', (d) => { console.log('PDF parse err:', d.toString()); });
+    child.stderr.on('data', (d) => { stderr += d.toString(); });
     child.on('close', (code) => {
       // Clean up temp file
       try { fs.unlinkSync(tmpPath); } catch {}
+      
+      console.log('PDF parse result:', code, stdout, stderr);
       
       if (code !== 0 || !stdout.trim()) {
         resolve({
