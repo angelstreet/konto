@@ -83,14 +83,17 @@ router.post('/api/fiscal/upload', async (c) => {
   const userId = await getUserId(c);
   const formData = await c.req.formData();
   const file = formData.get('file') as File;
-  const year = parseInt(formData.get('year') as string);
+  const formYear = parseInt(formData.get('year') as string);
 
-  if (!file || !year) {
-    return c.json({ error: 'file and year are required' }, 400);
+  if (!file) {
+    return c.json({ error: 'file is required' }, 400);
   }
 
   // Parse PDF and extract fiscal data
   const extracted = await extractFiscalFromPDF(file);
+
+  // Use year from PDF if available, otherwise fall back to form year
+  const year = extracted.year || formYear || new Date().getFullYear() - 1;
 
   // Store only the numbers - no PDF retention
   const {
@@ -227,6 +230,7 @@ router.get('/api/fiscal/eligibilities', async (c) => {
 // ========== PDF PARSING HELPER ==========
 
 async function extractFiscalFromPDF(file: File): Promise<{
+  year: number | null;
   revenuBrutGlobal: number | null;
   revenuImposable: number | null;
   partsFiscales: number | null;
@@ -271,6 +275,7 @@ async function extractFiscalFromPDF(file: File): Promise<{
       
       if (code !== 0 || !stdout.trim()) {
         resolve({
+          year: null,
           revenuBrutGlobal: null,
           revenuImposable: null,
           partsFiscales: null,
@@ -288,6 +293,7 @@ async function extractFiscalFromPDF(file: File): Promise<{
         const parsed = JSON.parse(jsonLine);
         console.log('Parsed fiscal data:', JSON.stringify(parsed));
         const result = {
+          year: parsed.year || null,
           revenuBrutGlobal: parsed.revenuBrutGlobal,
           revenuImposable: parsed.revenuImposable,
           partsFiscales: parsed.partsFiscales,
@@ -304,6 +310,7 @@ async function extractFiscalFromPDF(file: File): Promise<{
         resolve(result);
       } catch {
         resolve({
+          year: null,
           revenuBrutGlobal: null,
           revenuImposable: null,
           partsFiscales: null,

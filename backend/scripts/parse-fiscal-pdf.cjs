@@ -13,6 +13,17 @@ async function parse(filePath) {
   const data = fs.readFileSync(filePath);
   const pdf = await getDocument({ data: new Uint8Array(data) }).promise;
 
+  // Extract year from first pages - look for "revenus de YYYY" pattern
+  let year = null;
+  for (let i = 1; i <= Math.min(pdf.numPages, 3); i++) {
+    const text = await getText(pdf, i);
+    const yearMatch = text.match(/revenus de (202[0-9])/i);
+    if (yearMatch) {
+      year = parseInt(yearMatch[1]);
+      break;
+    }
+  }
+
   // Page 2: salaires, LMNP, parts fiscales
   const text2 = await getText(pdf, 2);
   // Page 3: revenu brut global, revenu imposable, taux
@@ -81,6 +92,7 @@ async function parse(filePath) {
   }
 
   console.log(JSON.stringify({
+    year,
     revenuBrutGlobal,
     revenuImposable,
     partsFiscales,
