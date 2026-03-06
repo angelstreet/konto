@@ -87,7 +87,7 @@ export default function Income() {
   // Collapsible sections
   const [incomeOpen, setIncomeOpen] = useState(true);
   const [benchmarkOpen, setBenchmarkOpen] = useState(true);
-  const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set(['salary', 'rental', 'dividend']));
+
 
   const handleSave = async () => {
     const body = {
@@ -884,6 +884,108 @@ interface PassiveIncomeData {
   by_source: { type: string; label: string; monthly: number; pct: number }[];
 }
 
+const CATEGORY_LABELS: Record<string, string> = {
+  rental: 'Immobilier',
+  dividend: 'Actions',
+  other: 'Autres',
+};
+
+function CategoryGroupedList({
+  items,
+  bySource,
+  fmt,
+  fmtDay,
+  fmtMonthLabel,
+  typeIcon,
+}: {
+  items: { source: string; type: string; amount: number; date: string }[];
+  bySource: { type: string; label: string; monthly: number; pct: number }[];
+  fmt: (v: number) => string;
+  fmtDay: (d: string) => string;
+  fmtMonthLabel: (ym: string) => string;
+  typeIcon: (t: string) => string;
+}) {
+  const allTypes = [...new Set(items.map(i => i.type))];
+  const [expanded, setExpanded] = useState<Set<string>>(new Set(allTypes));
+
+  const toggle = (type: string) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type); else next.add(type);
+      return next;
+    });
+  };
+
+  // Group items by type then by month
+  const byType = new Map<string, { source: string; type: string; amount: number; date: string }[]>();
+  for (const item of items) {
+    if (!byType.has(item.type)) byType.set(item.type, []);
+    byType.get(item.type)!.push(item);
+  }
+
+  const groupByMonth = (typeItems: typeof items) => {
+    const map = new Map<string, typeof items>();
+    for (const item of typeItems) {
+      const mo = item.date.slice(0, 7);
+      if (!map.has(mo)) map.set(mo, []);
+      map.get(mo)!.push(item);
+    }
+    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
+  };
+
+  return (
+    <div className="space-y-2">
+      {[...byType.entries()].map(([type, typeItems]) => {
+        const src = bySource.find(s => s.type === type);
+        const total = typeItems.reduce((s, i) => s + i.amount, 0);
+        const isOpen = expanded.has(type);
+        const label = CATEGORY_LABELS[type] ?? src?.label ?? type;
+        const monthGroups = groupByMonth(typeItems);
+
+        return (
+          <div key={type} className="border border-border/50 rounded-xl overflow-hidden">
+            {/* Category header */}
+            <button
+              onClick={() => toggle(type)}
+              className="w-full flex items-center justify-between px-4 py-3 bg-surface-2 hover:bg-surface-hover transition-colors"
+            >
+              <div className="flex items-center gap-2">
+                <ChevronDown size={15} className={`text-muted transition-transform ${isOpen ? '' : '-rotate-90'}`} />
+                <span className="text-base">{typeIcon(type)}</span>
+                <span className="font-semibold text-sm">{label}</span>
+                <span className="text-xs text-muted bg-surface rounded-full px-2 py-0.5">{typeItems.length}</span>
+              </div>
+              <span className="text-sm font-semibold font-mono text-green-400">+{fmt(total)}</span>
+            </button>
+
+            {/* Items per month */}
+            {isOpen && (
+              <div className="divide-y divide-border/20">
+                {monthGroups.map(([ym, monthItems]) => (
+                  <div key={ym} className="px-4 py-2">
+                    <div className="text-[11px] font-semibold text-muted uppercase tracking-wider mb-1 capitalize">{fmtMonthLabel(ym)}</div>
+                    <div className="space-y-0">
+                      {monthItems.map((item, i) => (
+                        <div key={i} className="flex items-center justify-between py-1.5 border-b border-border/20 last:border-0">
+                          <span className="text-sm truncate">{item.source}</span>
+                          <div className="flex items-center gap-3 flex-shrink-0">
+                            <span className="text-sm font-semibold text-green-400 font-mono">+{fmt(item.amount)}</span>
+                            <span className="text-xs text-muted w-16 text-right">{fmtDay(item.date)}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function PassiveIncomeSection() {
   const [passiveOpen, setPassiveOpen] = useState(true);
   const [activeTab, setActiveTab] = useState<'upcoming' | 'received'>('upcoming');
@@ -892,17 +994,6 @@ function PassiveIncomeSection() {
   const fmt = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 
   const typeIcon = (type: string) => type === 'rental' ? '🏠' : type === 'dividend' ? '📈' : '💰';
-
-  // Group items by month
-  const groupByMonth = (items: { source: string; type: string; amount: number; date: string }[]) => {
-    const map = new Map<string, typeof items>();
-    for (const item of items) {
-      const mo = item.date.slice(0, 7);
-      if (!map.has(mo)) map.set(mo, []);
-      map.get(mo)!.push(item);
-    }
-    return [...map.entries()].sort(([a], [b]) => a.localeCompare(b));
-  };
 
   const fmtMonthLabel = (ym: string) => {
     const [y, m] = ym.split('-').map(Number);
@@ -915,7 +1006,7 @@ function PassiveIncomeSection() {
   };
 
   const displayItems = data ? (activeTab === 'upcoming' ? data.upcoming || [] : data.received || []) : [];
-  const grouped = groupByMonth(displayItems);
+
 
   return (
     <section className="bg-surface rounded-xl border border-border p-4 space-y-4">
@@ -963,74 +1054,18 @@ function PassiveIncomeSection() {
             </button>
           </div>
 
-          {/* Income list grouped by month */}
-          <div className="space-y-4">
-            {grouped.length === 0 ? (
-              <p className="text-sm text-muted">Aucun revenu {activeTab === 'upcoming' ? 'à venir' : 'perçu'}.</p>
-            ) : (
-              grouped.map(([ym, items]) => (
-                <div key={ym}>
-                  <div className="text-xs font-semibold text-muted uppercase tracking-wider mb-2 capitalize">{fmtMonthLabel(ym)}</div>
-                  <div className="space-y-1">
-                    {items.map((item, i) => (
-                      <div key={i} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-base flex-shrink-0">{typeIcon(item.type)}</span>
-                          <span className="text-sm truncate">{item.source}</span>
-                        </div>
-                        <div className="flex items-center gap-3 flex-shrink-0">
-                          <span className="text-sm font-semibold text-green-400 font-mono">+{fmt(item.amount)}</span>
-                          <span className="text-xs text-muted w-16 text-right">{fmtDay(item.date)}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
-
-          {/* By source breakdown - collapsible */}
-          {data.by_source.length > 0 && (
-            <div className="pt-2 border-t border-border/40">
-              <div className="text-xs font-semibold text-muted uppercase tracking-wider mb-3">Par source</div>
-              <div className="space-y-2">
-                {data.by_source.map((src) => {
-                  const isExpanded = expandedCategories.has(src.type);
-                  return (
-                    <div key={src.type} className="bg-surface-2 rounded-lg overflow-hidden">
-                      <button
-                        onClick={() => {
-                          const next = new Set(expandedCategories);
-                          if (next.has(src.type)) next.delete(src.type);
-                          else next.add(src.type);
-                          setExpandedCategories(next);
-                        }}
-                        className="w-full flex items-center justify-between p-3 hover:bg-surface-hover transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <ChevronDown size={16} className={`transition-transform ${isExpanded ? 'rotate-180' : ''} text-muted`} />
-                          <span>{typeIcon(src.type)}</span>
-                          <span className="font-medium">{src.label}</span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="font-mono text-muted">{fmt(src.monthly)}/mois</span>
-                          <span className="text-muted text-xs w-8 text-right">{src.pct}%</span>
-                        </div>
-                      </button>
-                      {isExpanded && (
-                        <div className="px-3 pb-3 border-t border-border/40">
-                          <div className="h-1.5 bg-surface rounded-full overflow-hidden mt-3 mb-2">
-                            <div className="h-full bg-accent-500 rounded-full" style={{ width: `${src.pct}%` }} />
-                          </div>
-                          <div className="text-xs text-muted">{src.label} - {src.pct}% du revenu total</div>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
+          {/* Income list grouped by category then month */}
+          {displayItems.length === 0 ? (
+            <p className="text-sm text-muted">Aucun revenu {activeTab === 'upcoming' ? 'à venir' : 'perçu'}.</p>
+          ) : (
+            <CategoryGroupedList
+              items={displayItems}
+              bySource={data.by_source}
+              fmt={fmt}
+              fmtDay={fmtDay}
+              fmtMonthLabel={fmtMonthLabel}
+              typeIcon={typeIcon}
+            />
           )}
         </>
       ))}
