@@ -114,6 +114,11 @@ async function refreshStaleConnections() {
       let txsFetched = 0;
 
       for (const powensAcc of powensAccounts) {
+        // DEBUG: Log all fields for loan accounts
+        if (powensAcc.type === 'loan' || (powensAcc.name || '').toLowerCase().includes('prêt')) {
+          console.log(`[DEBUG] Loan account fields:`, JSON.stringify(powensAcc, null, 2));
+        }
+        
         const providerId = String(powensAcc.id);
         const accRes = await db.execute({
           sql: 'SELECT id, company_id FROM bank_accounts WHERE provider = "powens" AND provider_account_id = ?',
@@ -125,6 +130,32 @@ async function refreshStaleConnections() {
         const accType = classifyAccountType(powensAcc.type, powensAcc.name || powensAcc.original_name || '');
         const accUsage = classifyAccountUsage(powensAcc.usage, ba.company_id);
         const subtype = classifyAccountSubtype(accType, 'powens', powensAcc.name || powensAcc.original_name || '');
+
+        // Extract loan-specific fields if available from Powens
+        if (accType === 'loan') {
+          const loanStartDate = powensAcc.opening_date || powensAcc.start_date || powensAcc.creation_date || null;
+          const loanEndDate = powensAcc.maturity_date || powensAcc.end_date || powensAcc.closing_date || null;
+          const loanAmount = powensAcc.initial_amount || powensAcc.principal || powensAcc.loan_amount || null;
+          const loanRate = powensAcc.rate || powensAcc.interest_rate || powensAcc.apr || null;
+          
+          if (loanStartDate || loanEndDate) {
+            console.log(`[LOAN] ${powensAcc.name}: start=${loanStartDate}, end=${loanEndDate}, amount=${loanAmount}, rate=${loanRate}`);
+            
+            // Update loan_details if dates are available
+            if (loanStartDate || loanEndDate) {
+              await db.execute({
+                sql: `INSERT INTO loan_details (user_id, bank_account_id, principal_amount, start_date, end_date, interest_rate, source)
+                      VALUES (?, ?, ?, ?, ?, ?, 'powens')
+                      ON CONFLICT(bank_account_id) DO UPDATE SET
+                        principal_amount = COALESCE(loan_details.principal_amount, excluded.principal_amount),
+                        start_date = COALESCE(loan_details.start_date, excluded.start_date),
+                        end_date = COALESCE(loan_details.end_date, excluded.end_date),
+                        interest_rate = COALESCE(loan_details.interest_rate, excluded.interest_rate)`,
+                args: [userId, ba.id, loanAmount, loanStartDate, loanEndDate, loanRate],
+              });
+            }
+          }
+        }
 
         await db.execute({
           sql: `
