@@ -333,7 +333,7 @@ async function extractFiscalFromPDF(file: File): Promise<{
   return {
     revenuBrutGlobal,
     revenuImposable,
-    partsFiscales: partsWithDefault,
+    partsFiscales,
     tauxMarginal,
     tauxMoyen,
     breakdown
