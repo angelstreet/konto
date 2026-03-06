@@ -144,14 +144,66 @@ export function getClientIP(c: any): string {
 // --- Helper: refresh Powens token ---
 export async function refreshPowensToken(connectionId: number): Promise<string | null> {
   const connResult = await db.execute({
-    sql: 'SELECT powens_refresh_token FROM bank_connections WHERE id = ?',
+    sql: 'SELECT powens_token, powens_refresh_token FROM bank_connections WHERE id = ?',
     args: [connectionId]
   });
   const conn = decryptBankConn(connResult.rows[0] as any);
 
   if (!conn?.powens_refresh_token) {
-    console.log(`No refresh token for connection ${connectionId}`);
-    return null;
+    // Auto-heal legacy rows: if refresh token is missing but access token still works,
+    // generate a temporary code and exchange it for a fresh access/refresh token pair.
+    if (!conn?.powens_token) {
+      console.log(`No refresh token and no access token for connection ${connectionId}`);
+      return null;
+    }
+    try {
+      console.log(`No refresh token for connection ${connectionId}, trying code exchange recovery...`);
+      const codeRes = await fetch(`${POWENS_API}/auth/token/code`, {
+        headers: { 'Authorization': `Bearer ${conn.powens_token}` },
+      });
+      if (!codeRes.ok) {
+        const errorText = await codeRes.text();
+        console.error(`Code generation failed for connection ${connectionId}:`, errorText);
+        return null;
+      }
+      const codeData = await codeRes.json() as any;
+      if (!codeData?.code) {
+        console.error(`Code generation returned no code for connection ${connectionId}`);
+        return null;
+      }
+
+      const tokenRes = await fetch(`${POWENS_API}/auth/token/access`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          client_id: POWENS_CLIENT_ID,
+          client_secret: POWENS_CLIENT_SECRET,
+          code: codeData.code
+        }),
+      });
+      if (!tokenRes.ok) {
+        const errorText = await tokenRes.text();
+        console.error(`Code exchange failed for connection ${connectionId}:`, errorText);
+        return null;
+      }
+      const tokenData = await tokenRes.json() as any;
+      const recoveredAccessToken = tokenData.access_token || tokenData.token || conn.powens_token;
+      const recoveredRefreshToken = tokenData.refresh_token || null;
+      if (!recoveredRefreshToken) {
+        console.error(`Code exchange for connection ${connectionId} returned no refresh token`);
+        return null;
+      }
+
+      await db.execute({
+        sql: 'UPDATE bank_connections SET powens_token = ?, powens_refresh_token = ?, status = ? WHERE id = ?',
+        args: [encrypt(recoveredAccessToken), encrypt(recoveredRefreshToken), 'active', connectionId]
+      });
+      console.log(`Recovered missing refresh token for connection ${connectionId}`);
+      return recoveredAccessToken;
+    } catch (err: any) {
+      console.error(`Refresh-token recovery failed for connection ${connectionId}:`, err.message);
+      return null;
+    }
   }
 
   try {
