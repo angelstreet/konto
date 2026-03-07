@@ -42,7 +42,7 @@ async function parse(filePath) {
   // Page 3: revenu brut global, revenu imposable, taux
   const text3 = pdf.numPages >= 3 ? await getText(pdf, 3) : '';
   
-  const allText = text2 + ' ' + text3;
+  const frText = text2 + ' ' + text3;
 
   // Parts fiscales - look for "1,50" or "1,00" pattern (frequently near "C" but not adjacent in text)
   let partsFiscales = null;
@@ -74,7 +74,7 @@ async function parse(filePath) {
 
   // Revenus fonciers (page 2/3)
   let revenusFonciers = null;
-  if (allText.includes('6720')) revenusFonciers = 6720;
+  if (frText.includes('6720')) revenusFonciers = 6720;
 
   // Revenu brut global (page 3 - look for number near "revenu brut" or 29280)
   let revenuBrutGlobal = null;
@@ -118,153 +118,158 @@ async function parse(filePath) {
 }
 
 // ========== SWISS PDF PARSING ==========
+// Helper: parse Swiss number format "148 215" or "148'215" -> 148215
+function parseChf(str) {
+  if (!str) return null;
+  const n = parseInt(str.replace(/[\s']/g, ''));
+  return isNaN(n) ? null : n;
+}
+
+// Helper: extract first number from a string that may contain "X X X X X X" (duplicate col values)
+// e.g. "6 730 6 730" -> 6730, "141 485 141 485" -> 141485
+function firstChf(str) {
+  if (!str) return null;
+  const tokens = str.trim().split(/\s+/);
+  // Try to find where it starts repeating — take first half
+  for (let len = 1; len <= Math.floor(tokens.length / 2); len++) {
+    const first = tokens.slice(0, len).join('');
+    const second = tokens.slice(len, len * 2).join('');
+    if (first === second) return parseInt(first);
+  }
+  // No repeat found — just return all digits as one number
+  return parseInt(tokens.join(''));
+}
+
 async function parseSwiss(pdf, allText) {
-  // Extract year - look for "2024" or "2025" patterns
+  // Year: "Kanton Zürich 2025" or "Steuererklärung 2024" or period end date
   let year = null;
-  const yearMatch = allText.match(/(?:Steuererklärung|Steuererkla|2024|2025)[:\s]+(202[45])/i);
-  if (yearMatch) {
-    year = parseInt(yearMatch[1]);
-  } else {
-    // Try to find 4-digit year anywhere
-    const years = allText.match(/\b(202[0-9])\b/g);
-    if (years) year = parseInt(years[0]);
+  const yearKanton = allText.match(/Kanton\s+Z[üu]rich\s+(202[0-9])/i);
+  if (yearKanton) year = parseInt(yearKanton[1]);
+  if (!year) {
+    // Full form: "Steuererklärung 2024" in header
+    const m = allText.match(/Steuererklärung\s+(202[0-9])/i);
+    if (m) year = parseInt(m[1]);
+  }
+  if (!year) {
+    // Period: last year in "15.08.2024"
+    const allYears = [...allText.matchAll(/\b(202[0-9])\b/g)].map(m => parseInt(m[1]));
+    if (allYears.length) year = Math.max(...allYears);
   }
   if (!year) year = new Date().getFullYear() - 1;
 
-  // Extract name - look for "N'Doye" or similar patterns
-  let name = '';
-  const nameMatch = allText.match(/N'Doye[\s,]+([A-Za-z]+)/i) || allText.match(/([A-Z][a-z]+)\s+N'Doye/i);
-  if (nameMatch) name = nameMatch[1] || nameMatch[0];
-
-  // Extract AHV number - format 756.xxxx.xxxx.xx
-  let ahvNumber = '';
+  // AHV number - format 756.xxxx.xxxx.xx
   const ahvMatch = allText.match(/(\d{3}\.\d{4}\.\d{4}\.\d{2})/);
-  if (ahvMatch) ahvNumber = ahvMatch[1];
+  const ahvNumber = ahvMatch ? ahvMatch[1] : '';
+  const taxpayerName = (allText.match(/([A-Z][a-z']+\s+[A-Z][a-z']+)(?=\s+Einkommen|\s+ledig|\s+Details)/)?.[1] || '').trim();
 
-  // Extract income (Total Einkünfte / Total der Einkünfte)
-  // Page 1 typically shows income
+  // Income: "Total der Einkünfte   199   148 215"
+  // Pattern: line code followed by space-separated number
   let revenuBrutGlobal = null;
-  const incomePatterns = [
-    /Total\s*der\s*Einkünfte[:\s]*CHF?\s*([\d' ]+)/i,
-    /Einkünfte[:\s]*CHF?\s*([\d' ]+)/i,
-    /199\s+([\d' ]+)/i,  // Line number 199 in Kompakt form
-    /148\s*215/i,  // Joachim's specific income
-  ];
-  for (const pattern of incomePatterns) {
-    const match = allText.match(pattern);
-    if (match) {
-      const numStr = match[1] || match[0];
-      revenuBrutGlobal = parseInt(numStr.replace(/[^\d]/g, ''));
-      if (revenuBrutGlobal > 10000) break;
-    }
+  const incomeMatch = allText.match(/Total\s+der\s+Eink[üu]nfte\s+199\s+([\d ]+)/);
+  if (incomeMatch) revenuBrutGlobal = firstChf(incomeMatch[1]);
+  // Fallback: "Unselbständiger Erwerb   148 215"
+  if (!revenuBrutGlobal) {
+    const m = allText.match(/Unselbst[äa]ndiger\s+Erwerb\s+([\d ]+)/);
+    if (m) revenuBrutGlobal = firstChf(m[1]);
   }
-  // Hardcoded from the PDF for now since parsing is complex
-  if (!revenuBrutGlobal || revenuBrutGlobal < 10000) {
-    if (allText.includes('148 215') || allText.includes('148215')) {
-      revenuBrutGlobal = 148215;
+  // Full Steuerformulare: values appear in a separate block at page end
+  // Pattern: "1 491   1 491  1 060   1 060  2 551   2 551  49 674   49 674  2 551   2 551  47 123   47 123 ..."
+  // Collect all "X Y   X Y" repeated pairs (Staat  Bund columns)
+  if (!revenuBrutGlobal) {
+    const pairs = [];
+    const pairRe = /(\d{1,3}(?:\s\d{3})+)\s{2,}(\d{1,3}(?:\s\d{3})+)/g;
+    let m;
+    while ((m = pairRe.exec(allText)) !== null) {
+      const v1 = parseChf(m[1]), v2 = parseChf(m[2]);
+      if (v1 === v2) pairs.push(v1);
+    }
+    // For the full form, structure is:
+    // [0] Berufsauslagen (1491), [1] something (1060), [2] Total Abzüge (2551),
+    // [3] Total Einkünfte (49674), [4] Total Abzüge again (2551), [5] Nettoeinkommen (47123)
+    // [6+] Steuerbares (47123)
+    if (pairs.length >= 4) {
+      revenuBrutGlobal = Math.max(...pairs.slice(0, 5));
     }
   }
 
-  // Extract deductions (Total Abzüge / Total der Abzüge)
+  // Deductions: "Total der Abzüge   299   6 730  6 730"
+  // Numbers may repeat (Bund + Staat columns) — take first number group only
   let deductions = null;
-  const deductPatterns = [
-    /Total\s*der\s*Abzüge[:\s]*CHF?\s*([\d' ]+)/i,
-    /Abzüge[:\s]*CHF?\s*([\d' ]+)/i,
-    /299\s+([\d' ]+)/i,
-  ];
-  for (const pattern of deductPatterns) {
-    const match = allText.match(pattern);
-    if (match) {
-      const numStr = match[1] || match[0];
-      deductions = parseInt(numStr.replace(/[^\d]/g, ''));
-      if (deductions > 100) break;
-    }
-  }
-  if (!deductions || deductions < 100) {
-    if (allText.includes('6 730') || allText.includes('6730')) {
-      deductions = 6730;
-    }
-  }
+  const deductMatch = allText.match(/Total\s+der\s+Abz[üu]ge\s+299\s+([\d ]+)/);
+  if (deductMatch) deductions = firstChf(deductMatch[1]);
 
-  // Calculate taxable income (revenu imposable)
+  // Taxable income: "Steuerbares Einkommen   398   141 485  141 485"
   let revenuImposable = null;
-  if (revenuBrutGlobal && deductions) {
+  const taxableMatch = allText.match(/Steuerbares\s+Einkommen\s+398\s+([\d ]+)/);
+  if (taxableMatch) revenuImposable = firstChf(taxableMatch[1]);
+  // Fallback: Nettoeinkommen line 310
+  if (!revenuImposable) {
+    const m = allText.match(/Nettoeinkommen\s+310\s+([\d ]+)/);
+    if (m) revenuImposable = firstChf(m[1]);
+  }
+  // Full form fallback: "25.   Steuerbares Einkommen gesamt" then "47 123   47 123"
+  if (!revenuImposable) {
+    const m = allText.match(/Steuerbares\s+Einkommen\s+gesamt[\s\S]{0,100}?(\d{4,6}\b)/);
+    if (m) revenuImposable = parseInt(m[1]);
+  }
+  // Full form: "27.   Steuerbares Einkommen im Kanton"
+  if (!revenuImposable) {
+    const m = allText.match(/Steuerbares\s+Einkommen\s+im\s+Kanton[\s\S]{0,100}?(\d{4,6}\b)/);
+    if (m) revenuImposable = parseInt(m[1]);
+  }
+  // Full form: use pairs block to get taxable and deductions
+  if (!revenuImposable && revenuBrutGlobal) {
+    const pairs2 = [];
+    const pairRe2 = /(\d{1,3}(?:\s\d{3})+)\s{2,}(\d{1,3}(?:\s\d{3})+)/g;
+    let m2;
+    while ((m2 = pairRe2.exec(allText)) !== null) {
+      const v1 = parseChf(m2[1]), v2 = parseChf(m2[2]);
+      if (v1 === v2) pairs2.push(v1);
+    }
+    if (pairs2.length >= 4) {
+      // Taxable income = last value that is less than income but at least 50% of it
+      const candidates = pairs2.filter(v => v < revenuBrutGlobal && v > revenuBrutGlobal * 0.5);
+      revenuImposable = candidates.length ? candidates[candidates.length - 1] : null;
+      if (revenuImposable && !deductions) {
+        deductions = revenuBrutGlobal - revenuImposable;
+      }
+    }
+  }
+  // Fallback: compute from income - deductions
+  if (!revenuImposable && revenuBrutGlobal && deductions) {
     revenuImposable = revenuBrutGlobal - deductions;
-  } else {
-    const taxablePatterns = [
-      /steuerbares\s*Einkommen[:\s]*CHF?\s*([\d' ]+)/i,
-      /Taxable\s*income/i,
-      /398\s+([\d' ]+)/i,
-    ];
-    for (const pattern of taxablePatterns) {
-      const match = allText.match(pattern);
-      if (match) {
-        const numStr = match[1] || match[0];
-        revenuImposable = parseInt(numStr.replace(/[^\d]/g, ''));
-        if (revenuImposable > 10000) break;
-      }
-    }
-    if (!revenuImposable || revenuImposable < 10000) {
-      if (allText.includes('141 485') || allText.includes('141485')) {
-        revenuImposable = 141485;
-      }
-    }
   }
 
-  // Extract cantonal tax amount
+  // Cantonal tax: "Total Staats- und Gemeindesteuern ... 19 918.70"
   let cantonalTax = null;
-  const cantonalPatterns = [
-    /Staats[\s-]*und\s*Gemeindesteuern[:\s]*CHF?\s*([\d' ]+)/i,
-    /19\s*918/i,
-    /19\s*919/i,
-    /19\s*894/i,
-  ];
-  for (const pattern of cantonalPatterns) {
-    const match = allText.match(pattern);
-    if (match) {
-      const numStr = match[1] || match[0];
-      cantonalTax = parseInt(numStr.replace(/[^\d]/g, ''));
-      if (cantonalTax > 1000) break;
-    }
-  }
-  if (!cantonalTax || cantonalTax < 1000) {
-    if (allText.includes('19 918') || allText.includes('19918')) cantonalTax = 19918;
-    else if (allText.includes('19 894') || allText.includes('19894')) cantonalTax = 19894;
+  const cantonalMatch = allText.match(/Total\s+Staats[\s-]+und\s+Gemeindesteuern[\s\S]{0,200}?([\d ]+\.\d{2})/);
+  if (cantonalMatch) cantonalTax = Math.round(parseFloat(cantonalMatch[1].replace(/\s/g, '')));
+  if (!cantonalTax) {
+    // Look for first large decimal near Steuerbetrag
+    const m = allText.match(/(?:Steuerbetrag|Gemeindesteuern)[^\d]*([\d ]+\.\d{2})/);
+    if (m) cantonalTax = Math.round(parseFloat(m[1].replace(/\s/g, '')));
   }
 
-  // Extract federal tax amount
+  // Federal tax: "Total Direkte Bundessteuer   6 137.60"
   let federalTax = null;
-  const federalPatterns = [
-    /Direkte\s*Bundessteuer[:\s]*CHF?\s*([\d' ]+)/i,
-    /Bundessteuer[:\s]*CHF?\s*([\d' ]+)/i,
-    /6\s*137/i,
-  ];
-  for (const pattern of federalPatterns) {
-    const match = allText.match(pattern);
-    if (match) {
-      const numStr = match[1] || match[0];
-      federalTax = parseInt(numStr.replace(/[^\d]/g, ''));
-      if (federalTax > 100) break;
-    }
-  }
-  if (!federalTax || federalTax < 100) {
-    if (allText.includes('6 137') || allText.includes('6137')) federalTax = 6137;
+  const federalMatch = allText.match(/Total\s+Direkte\s+Bundessteuer\s+([\d ]+\.\d{2})/);
+  if (federalMatch) federalTax = Math.round(parseFloat(federalMatch[1].replace(/\s/g, '')));
+  if (!federalTax) {
+    const m = allText.match(/Direkte\s+Bundessteuer[^\d]*([\d ]+\.\d{2})/);
+    if (m) federalTax = Math.round(parseFloat(m[1].replace(/\s/g, '')));
   }
 
-  // Total tax
   const totalTax = (cantonalTax || 0) + (federalTax || 0);
 
-  // Extract number of children
+  // Children: "1 Kind" (only single digit)
   let partsFiscales = 1;
-  const childrenMatch = allText.match(/(\d+)\s*Kind/i);
-  if (childrenMatch) {
-    partsFiscales = 1 + parseInt(childrenMatch[1]);  // Base 1 + children
-  }
+  const kindMatch = allText.match(/\b([1-9])\s*Kind\b/i);
+  if (kindMatch) partsFiscales = 1 + parseInt(kindMatch[1]);
 
   console.log(JSON.stringify({
     year,
     pays: 'CH',
-    name,
+    taxpayerName,
     ahvNumber,
     revenuBrutGlobal,
     deductions,
@@ -273,9 +278,7 @@ async function parseSwiss(pdf, allText) {
     federalTax,
     totalTax,
     partsFiscales,
-    // For French compatibility
-    revenuBrutGlobal: revenuImposable,  // Use taxable as main for display
-    tauxMoyen: totalTax && revenuImposable ? Math.round((totalTax / revenuImposable) * 10000) / 100 : null,  // Effective rate in %
+    tauxMoyen: totalTax && revenuImposable ? Math.round((totalTax / revenuImposable) * 10000) / 100 : null,
   }));
 }
 
