@@ -94,7 +94,6 @@ export default function LoansDashboard() {
   const { appendScope } = useFilter();
   const { formatCurrency } = usePreferences();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
-  const [showNet, setShowNet] = useState(() => localStorage.getItem('konto_show_net_loans') !== 'false');
   const [mobileTab, setMobileTab] = useState<'loans' | 'learn'>('loans');
   const [selectedProvider, setSelectedProvider] = useState('all');
   const [showModal, setShowModal] = useState(false);
@@ -239,12 +238,6 @@ export default function LoansDashboard() {
         <div className="flex items-center gap-1 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('loans_title') || 'Emprunts'}</h1>
           <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
-          <button
-            onClick={() => setShowNet((v) => { const n = !v; localStorage.setItem('konto_show_net_loans', String(n)); return n; })}
-            className="text-xs px-2 py-1 rounded-md font-medium transition-colors text-muted hover:text-white hover:bg-surface-hover"
-          >
-            {showNet ? 'Net' : 'Brut'}
-          </button>
         </div>
         <div className="flex items-center gap-1">
           <ScopeSelect />
