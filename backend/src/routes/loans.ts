@@ -818,7 +818,9 @@ router.post('/api/loans/:loanId/enrich', async (c) => {
       }
       
       try {
-        const data = JSON.parse(stdout.trim());
+        const jsonLine = stdout.trim().split('\n').find((l: string) => l.trim().startsWith('{'));
+        if (!jsonLine) throw new Error('No JSON in output');
+        const data = JSON.parse(jsonLine);
         
         // Update loan details
         const updates: string[] = [];
