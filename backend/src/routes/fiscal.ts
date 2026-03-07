@@ -21,7 +21,7 @@ router.post('/api/fiscal', async (c) => {
   const userId = await getUserId(c);
   const body = await c.req.json();
 
-  const { year, fiscalResidency = 'FR', revenuBrutGlobal, revenuImposable, partsFiscales, tauxMarginal, tauxMoyen, breakdown } = body;
+  const { year, fiscalResidency = 'FR', revenuBrutGlobal, revenuImposable, partsFiscales, tauxMarginal, tauxMoyen, breakdown, deductions, cantonalTax, federalTax } = body;
 
   if (!year) return c.json({ error: 'year is required' }, 400);
 
@@ -34,8 +34,8 @@ router.post('/api/fiscal', async (c) => {
 
   await db.execute({
     sql: `INSERT INTO fiscal_data
-            (user_id, year, fiscal_residency, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            (user_id, year, fiscal_residency, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, deductions, cantonal_tax, federal_tax, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
           ON CONFLICT(user_id, year, fiscal_residency) DO UPDATE SET
             revenu_brut_global = excluded.revenu_brut_global,
             revenu_imposable = excluded.revenu_imposable,
@@ -46,8 +46,11 @@ router.post('/api/fiscal', async (c) => {
             breakdown_lmnp = excluded.breakdown_lmnp,
             breakdown_dividendes = excluded.breakdown_dividendes,
             breakdown_revenus_fonciers = excluded.breakdown_revenus_fonciers,
+            deductions = excluded.deductions,
+            cantonal_tax = excluded.cantonal_tax,
+            federal_tax = excluded.federal_tax,
             updated_at = datetime('now')`,
-    args: [userId, year, country, revenuBrutGlobal ?? null, revenuImposable ?? null, parts, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers],
+    args: [userId, year, country, revenuBrutGlobal ?? null, revenuImposable ?? null, parts, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers, deductions ?? null, cantonalTax ?? null, federalTax ?? null],
   });
 
   const result = await db.execute({
@@ -72,7 +75,7 @@ router.post('/api/fiscal/upload', async (c) => {
   // Use detected country if available, else form-supplied, else FR
   const country = extracted.country || formCountry || 'FR';
 
-  const { revenuBrutGlobal, revenuImposable, partsFiscales, tauxMarginal, tauxMoyen, breakdown } = extracted;
+  const { revenuBrutGlobal, revenuImposable, partsFiscales, tauxMarginal, tauxMoyen, breakdown, deductions, cantonalTax, federalTax } = extracted;
   const breakdownSalaries = breakdown?.salaries ?? null;
   const breakdownLmnp = breakdown?.lmnp ?? null;
   const breakdownDividendes = breakdown?.dividendes ?? null;
@@ -80,8 +83,8 @@ router.post('/api/fiscal/upload', async (c) => {
 
   await db.execute({
     sql: `INSERT INTO fiscal_data
-            (user_id, year, fiscal_residency, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+            (user_id, year, fiscal_residency, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, deductions, cantonal_tax, federal_tax, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
           ON CONFLICT(user_id, year, fiscal_residency) DO UPDATE SET
             revenu_brut_global = excluded.revenu_brut_global,
             revenu_imposable = excluded.revenu_imposable,
@@ -92,8 +95,11 @@ router.post('/api/fiscal/upload', async (c) => {
             breakdown_lmnp = excluded.breakdown_lmnp,
             breakdown_dividendes = excluded.breakdown_dividendes,
             breakdown_revenus_fonciers = excluded.breakdown_revenus_fonciers,
+            deductions = excluded.deductions,
+            cantonal_tax = excluded.cantonal_tax,
+            federal_tax = excluded.federal_tax,
             updated_at = datetime('now')`,
-    args: [userId, year, country, revenuBrutGlobal ?? null, revenuImposable ?? null, partsFiscales ?? 1, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers],
+    args: [userId, year, country, revenuBrutGlobal ?? null, revenuImposable ?? null, partsFiscales ?? 1, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers, deductions ?? null, cantonalTax ?? null, federalTax ?? null],
   });
 
   const result = await db.execute({
@@ -216,6 +222,9 @@ async function extractFiscalFromPDF(file: File): Promise<{
   tauxMarginal: number | null;
   tauxMoyen: number | null;
   breakdown: { salaries: number | null; lmnp: number | null; dividendes: number | null; revenusFonciers: number | null } | null;
+  deductions: number | null;
+  cantonalTax: number | null;
+  federalTax: number | null;
 }> {
   const tmpDir = '/tmp';
   const extId = Math.random().toString(36).substring(7);
@@ -238,7 +247,7 @@ async function extractFiscalFromPDF(file: File): Promise<{
       console.log('PDF parse result:', code, stdout, stderr);
 
       if (code !== 0 || !stdout.trim()) {
-        resolve({ year: null, country: null, revenuBrutGlobal: null, revenuImposable: null, partsFiscales: null, tauxMarginal: null, tauxMoyen: null, breakdown: null });
+        resolve({ year: null, country: null, revenuBrutGlobal: null, revenuImposable: null, partsFiscales: null, tauxMarginal: null, tauxMoyen: null, breakdown: null, deductions: null, cantonalTax: null, federalTax: null });
         return;
       }
 
@@ -263,9 +272,12 @@ async function extractFiscalFromPDF(file: File): Promise<{
             dividendes: null,
             revenusFonciers: parsed.revenusFonciers,
           } : null,
+          deductions: parsed.deductions ?? null,
+          cantonalTax: parsed.cantonalTax ?? null,
+          federalTax: parsed.federalTax ?? null,
         });
       } catch {
-        resolve({ year: null, country: null, revenuBrutGlobal: null, revenuImposable: null, partsFiscales: null, tauxMarginal: null, tauxMoyen: null, breakdown: null });
+        resolve({ year: null, country: null, revenuBrutGlobal: null, revenuImposable: null, partsFiscales: null, tauxMarginal: null, tauxMoyen: null, breakdown: null, deductions: null, cantonalTax: null, federalTax: null });
       }
     });
   });

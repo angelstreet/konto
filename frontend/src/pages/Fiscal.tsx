@@ -24,6 +24,9 @@ interface FiscalData {
   breakdown_lmnp: number | null;
   breakdown_dividendes: number | null;
   breakdown_revenus_fonciers: number | null;
+  deductions: number | null;       // CH: Total Abzüge
+  cantonal_tax: number | null;    // CH: Staatssteuer
+  federal_tax: number | null;     // CH: Bundessteuer
   created_at: string;
   updated_at: string;
 }
@@ -328,7 +331,10 @@ export default function Fiscal() {
                     className="w-full px-3 py-2 bg-background border border-border rounded-lg"
                   >
                     <option value="FR">🇫🇷 France</option>
-                    <option value="CH">🇨🇭 Suisse</option>
+                    <option value="CH-ZH">🇨🇭 Suisse (Zürich)</option>
+                    <option value="CH-VD">🇨🇭 Suisse (Vaud)</option>
+                    <option value="CH-GE">🇨🇭 Suisse (Genève)</option>
+                    <option value="CH-BE">🇨🇭 Suisse (Bern)</option>
                     <option value="BE">🇧🇪 Belgique</option>
                     <option value="DE">🇩🇪 Allemagne</option>
                     <option value="OTHER">🌍 Autre</option>
@@ -575,6 +581,43 @@ export default function Fiscal() {
                     <span className="font-mono">{mask(fmt(breakdownTotal))}</span>
                   </div>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Swiss Tax Breakdown */}
+          {currentData?.fiscal_residency?.startsWith('CH') && (
+            <div className="bg-surface border border-border rounded-xl p-4">
+              <h3 className="font-medium mb-4">🇨🇭 Impôts Switzerland</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="bg-surface-2 rounded-lg p-3">
+                  <div className="text-xs text-muted mb-1">Revenu brut</div>
+                  <div className="text-lg font-mono font-bold">{mask(fmt(currentData.revenu_brut_global))}</div>
+                </div>
+                <div className="bg-surface-2 rounded-lg p-3">
+                  <div className="text-xs text-muted mb-1">Déductions</div>
+                  <div className="text-lg font-mono font-bold">{mask(fmt(currentData.deductions))}</div>
+                </div>
+                <div className="bg-surface-2 rounded-lg p-3">
+                  <div className="text-xs text-muted mb-1">Staatssteuer</div>
+                  <div className="text-lg font-mono font-bold text-orange-400">{mask(fmt(currentData.cantonal_tax))}</div>
+                </div>
+                <div className="bg-surface-2 rounded-lg p-3">
+                  <div className="text-xs text-muted mb-1">Bundessteuer</div>
+                  <div className="text-lg font-mono font-bold text-blue-400">{mask(fmt(currentData.federal_tax))}</div>
+                </div>
+              </div>
+              <div className="mt-4 pt-4 border-t border-border">
+                <div className="flex justify-between items-center">
+                  <span className="text-muted">Total impôts</span>
+                  <span className="text-xl font-bold font-mono">{mask(fmt((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)))}</span>
+                </div>
+                {currentData.revenu_imposable && ((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)) > 0 && (
+                  <div className="flex justify-between items-center mt-2">
+                    <span className="text-muted text-sm">Taux effectif</span>
+                    <span className="text-sm font-mono text-blue-400">{(((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)) / currentData.revenu_imposable * 100).toFixed(1)}%</span>
+                  </div>
+                )}
               </div>
             </div>
           )}
