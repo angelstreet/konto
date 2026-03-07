@@ -85,51 +85,113 @@ async function parse(filePath) {
     return null;
   }
 
-  // Revenu brut global
-  const revenuBrutGlobal = extractByLabel('revenu brut global');
-
-  // Revenu imposable
-  const revenuImposable = extractByLabel('revenu imposable');
-
-  // Salaires nets — "Salaires, pensions, rentes nets" is more precise than raw "Salaires"
-  const salaries = extractByLabel('salaires, pensions, rentes nets', 490)
-    ?? extractByLabel('salaires, pensions, rentes nets', 250)
-    ?? extractByLabel('salaires', 490);
-
-  // Revenus fonciers nets
-  const revenusFonciers = extractByLabel('revenus fonciers nets', 490) ?? extractByLabel('revenus fonciers');
-
-  // LMNP — "locations meublées non pro. imposables"
-  const lmnp = extractByLabel('locations meublées non pro. imposables', 490);
-
-  // Taux moyen — look positionally for "Taux de l'imposition" or "taux moyen" BEFORE the prélèvements sociaux separator
-  // Rates 9.70%, 7.50%, 17.20% are always prélèvements sociaux rates — skip them
-  const PREL_SOC_RATES = new Set([9.7, 7.5, 17.2, 9.9]);
+  let revenuBrutGlobal = null;
+  let revenuImposable = null;
+  let salaries = null;
+  let lmnp = null;
+  let revenusFonciers = null;
   let tauxMoyen = null;
   let tauxMarginal = null;
+  let totalImposition = null;
+  let deductions = null;
+  let cantonalTax = null;
+  let federalTax = null;
 
-  // First try positional: look for "Taux de l'imposition" label in IR section
-  const tauxPositional = extractByLabel("taux de l'imposition", 300);
-  if (tauxPositional !== null && !PREL_SOC_RATES.has(tauxPositional)) {
-    tauxMoyen = tauxPositional;
-  }
-
-  // Also search text for % patterns outside the prélèvements sociaux section
-  // The IR section ends at "PRELEVEMENTS SOCIAUX" or the separator line
-  const irSection = fullText.split(/PRELEVEMENTS SOCIAUX|prélèvements sociaux/i)[0];
-  const irTauxMatches = [...irSection.matchAll(/(\d{1,2})[,.](\d{1,2})%/g)];
-  for (const m of irTauxMatches) {
-    const val = parseFloat(m[1] + '.' + m[2]);
-    if (val > 0 && val < 60 && !PREL_SOC_RATES.has(val)) {
-      if (tauxMoyen === null) tauxMoyen = val;
-      else if (tauxMarginal === null && val !== tauxMoyen) tauxMarginal = val;
+  if (pays === 'CH') {
+    // ── Swiss / German extraction ──────────────────────────────────────────
+    // Swiss numbers: "148 215" or "148'215" → 148215
+    function parseChf(str) {
+      if (!str) return null;
+      const n = parseInt(str.replace(/[\s']/g, ''));
+      return isNaN(n) ? null : n;
     }
-  }
+    // Values often repeat in Staat/Bund columns ("6 730  6 730") — take first
+    function firstChf(str) {
+      if (!str) return null;
+      const tokens = str.trim().split(/\s+/);
+      for (let len = 1; len <= Math.floor(tokens.length / 2); len++) {
+        if (tokens.slice(0, len).join('') === tokens.slice(len, len * 2).join(''))
+          return parseInt(tokens.slice(0, len).join(''));
+      }
+      return parseInt(tokens.join(''));
+    }
 
-  // Total à payer — "TOTAL DE VOTRE IMPOSITION NETTE RESTANT A PAYER" or "Somme qu'il vous reste à payer"
-  const totalImposition = extractByLabel('total de votre imposition nette', 400)
-    ?? extractByLabel("somme qu'il vous reste", 400)
-    ?? extractByLabel('solde des prélèvements sociaux', 490);
+    // Year: "Kanton Zürich 2025" or "Steuererklärung 2024"
+    const yrK = fullText.match(/Kanton\s+Z[üu]rich\s+(202[0-9])/i);
+    if (yrK) year = parseInt(yrK[1]);
+    if (!year) { const m = fullText.match(/Steuererklärung\s+(202[0-9])/i); if (m) year = parseInt(m[1]); }
+    if (!year) { const ys = [...fullText.matchAll(/\b(202[0-9])\b/g)].map(m => parseInt(m[1])); if (ys.length) year = Math.max(...ys); }
+
+    // Gross income
+    const incM = fullText.match(/Total\s+der\s+Eink[üu]nfte\s+199\s+([\d ]+)/);
+    if (incM) revenuBrutGlobal = firstChf(incM[1]);
+    if (!revenuBrutGlobal) { const m = fullText.match(/Unselbst[äa]ndiger\s+Erwerb\s+([\d ]+)/); if (m) revenuBrutGlobal = firstChf(m[1]); }
+
+    // Deductions
+    const dedM = fullText.match(/Total\s+der\s+Abz[üu]ge\s+299\s+([\d ]+)/);
+    if (dedM) deductions = firstChf(dedM[1]);
+
+    // Taxable income
+    const taxM = fullText.match(/Steuerbares\s+Einkommen\s+398\s+([\d ]+)/);
+    if (taxM) revenuImposable = firstChf(taxM[1]);
+    if (!revenuImposable) { const m = fullText.match(/Nettoeinkommen\s+310\s+([\d ]+)/); if (m) revenuImposable = firstChf(m[1]); }
+    if (!revenuImposable) { const m = fullText.match(/Steuerbares\s+Einkommen\s+gesamt[\s\S]{0,100}?(\d{4,6}\b)/); if (m) revenuImposable = parseInt(m[1]); }
+    if (!revenuImposable) { const m = fullText.match(/Steuerbares\s+Einkommen\s+im\s+Kanton[\s\S]{0,100}?(\d{4,6}\b)/); if (m) revenuImposable = parseInt(m[1]); }
+    if (!revenuImposable && revenuBrutGlobal && deductions) revenuImposable = revenuBrutGlobal - deductions;
+
+    // Cantonal tax
+    const canM = fullText.match(/Total\s+Staats[\s-]+und\s+Gemeindesteuern[\s\S]{0,200}?([\d ]+\.\d{2})/);
+    if (canM) cantonalTax = Math.round(parseFloat(canM[1].replace(/\s/g, '')));
+    if (!cantonalTax) { const m = fullText.match(/(?:Steuerbetrag|Gemeindesteuern)[^\d]*([\d ]+\.\d{2})/); if (m) cantonalTax = Math.round(parseFloat(m[1].replace(/\s/g, ''))); }
+
+    // Federal tax
+    const fedM = fullText.match(/Total\s+Direkte\s+Bundessteuer\s+([\d ]+\.\d{2})/);
+    if (fedM) federalTax = Math.round(parseFloat(fedM[1].replace(/\s/g, '')));
+    if (!federalTax) { const m = fullText.match(/Direkte\s+Bundessteuer[^\d]*([\d ]+\.\d{2})/); if (m) federalTax = Math.round(parseFloat(m[1].replace(/\s/g, ''))); }
+
+    // Total tax and effective rate
+    const totalTax = (cantonalTax || 0) + (federalTax || 0);
+    if (totalTax && revenuImposable) tauxMoyen = Math.round((totalTax / revenuImposable) * 10000) / 100;
+
+    // Parts fiscales: "1 Kind" → 2 parts
+    const kindM = fullText.match(/\b([1-9])\s*Kind\b/i);
+    if (kindM) partsFiscales = 1 + parseInt(kindM[1]);
+
+    // Positional fallbacks using German labels
+    if (!revenuBrutGlobal) revenuBrutGlobal = extractByLabel('bruttolohn') ?? extractByLabel('nettolohn') ?? extractByLabel('einkommen');
+    if (!revenuImposable) revenuImposable = extractByLabel('steuerbares einkommen');
+    if (!deductions) deductions = extractByLabel('abzüge') ?? extractByLabel('total abzüge');
+    if (!cantonalTax) cantonalTax = extractByLabel('staatssteuer') ?? extractByLabel('kantonssteuer');
+    if (!federalTax) federalTax = extractByLabel('bundessteuer');
+
+  } else {
+    // ── French extraction ──────────────────────────────────────────────────
+    revenuBrutGlobal = extractByLabel('revenu brut global');
+    revenuImposable = extractByLabel('revenu imposable');
+    salaries = extractByLabel('salaires, pensions, rentes nets', 490)
+      ?? extractByLabel('salaires, pensions, rentes nets', 250)
+      ?? extractByLabel('salaires', 490);
+    revenusFonciers = extractByLabel('revenus fonciers nets', 490) ?? extractByLabel('revenus fonciers');
+    lmnp = extractByLabel('locations meublées non pro. imposables', 490);
+
+    // Taux — skip prélèvements sociaux rates
+    const PREL_SOC_RATES = new Set([9.7, 7.5, 17.2, 9.9]);
+    const tauxPos = extractByLabel("taux de l'imposition", 300);
+    if (tauxPos !== null && !PREL_SOC_RATES.has(tauxPos)) tauxMoyen = tauxPos;
+    const irSection = fullText.split(/PRELEVEMENTS SOCIAUX|prélèvements sociaux/i)[0];
+    for (const m of [...irSection.matchAll(/(\d{1,2})[,.](\d{1,2})%/g)]) {
+      const val = parseFloat(m[1] + '.' + m[2]);
+      if (val > 0 && val < 60 && !PREL_SOC_RATES.has(val)) {
+        if (tauxMoyen === null) tauxMoyen = val;
+        else if (tauxMarginal === null && val !== tauxMoyen) tauxMarginal = val;
+      }
+    }
+
+    // Total à payer
+    totalImposition = extractByLabel('total de votre imposition nette', 400)
+      ?? extractByLabel("somme qu'il vous reste", 400)
+      ?? extractByLabel('solde des prélèvements sociaux', 490);
+  }
 
   console.log(JSON.stringify({
     year,
@@ -143,6 +205,9 @@ async function parse(filePath) {
     lmnp,
     revenusFonciers,
     totalImposition,
+    deductions,
+    cantonalTax,
+    federalTax,
   }));
 }
 
