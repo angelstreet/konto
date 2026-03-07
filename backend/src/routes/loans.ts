@@ -526,20 +526,67 @@ router.get('/api/loans/:loanId', async (c) => {
   const loan = buildLoanComputed(result.rows[0] as any, fallbackMap.get(loanId) ?? null);
 
   const linkedRes = await db.execute({
-    sql: `SELECT id, name, current_value, purchase_price, property_usage
+    sql: `SELECT id, name, current_value, purchase_price, property_usage,
+                 notary_fees, travaux, estimated_value, estimated_price_m2,
+                 address, surface, property_type, purchase_date,
+                 monthly_rent, tenant_name
           FROM assets
           WHERE user_id = ? AND linked_loan_account_id = ?
           ORDER BY created_at DESC`,
     args: [userId, loanId],
   });
 
-  const linkedAssets = (linkedRes.rows as any[]).map((a) => ({
-    asset_id: Number(a.id),
-    name: a.name || 'Actif',
-    usage: a.property_usage || null,
-    allocation_pct: 100,
-    allocation_amount: Math.round(Number(a.current_value || a.purchase_price || 0) * 100) / 100,
-  }));
+  // Fetch costs and revenues for linked assets
+  const linkedAssetIds = (linkedRes.rows as any[]).map(a => Number(a.id));
+  let costsMap: Record<number, any[]> = {};
+  let revenuesMap: Record<number, any[]> = {};
+  if (linkedAssetIds.length > 0) {
+    const placeholders = linkedAssetIds.map(() => '?').join(',');
+    const costsRes = await db.execute({ sql: `SELECT * FROM asset_costs WHERE asset_id IN (${placeholders})`, args: linkedAssetIds });
+    const revsRes = await db.execute({ sql: `SELECT * FROM asset_revenues WHERE asset_id IN (${placeholders})`, args: linkedAssetIds });
+    for (const c of costsRes.rows as any[]) {
+      if (!costsMap[c.asset_id]) costsMap[c.asset_id] = [];
+      costsMap[c.asset_id].push({ id: c.id, label: c.label, amount: Number(c.amount), frequency: c.frequency });
+    }
+    for (const r of revsRes.rows as any[]) {
+      if (!revenuesMap[r.asset_id]) revenuesMap[r.asset_id] = [];
+      revenuesMap[r.asset_id].push({ id: r.id, label: r.label, amount: Number(r.amount), frequency: r.frequency });
+    }
+  }
+
+  const linkedAssets = (linkedRes.rows as any[]).map((a) => {
+    const costs = costsMap[Number(a.id)] || [];
+    const revenues = revenuesMap[Number(a.id)] || [];
+    const monthlyCosts = costs.reduce((s: number, c: any) => s + (c.frequency === 'yearly' ? c.amount / 12 : c.frequency === 'one_time' ? 0 : c.amount), 0);
+    const monthlyRevenues = revenues.reduce((s: number, r: any) => s + (r.frequency === 'yearly' ? r.amount / 12 : r.amount), 0);
+    const purchasePrice = Number(a.purchase_price || 0);
+    const currentValue = Number(a.current_value || 0);
+    const pnl = purchasePrice > 0 && currentValue > 0 ? currentValue - purchasePrice : null;
+    return {
+      asset_id: Number(a.id),
+      name: a.name || 'Actif',
+      usage: a.property_usage || null,
+      allocation_pct: 100,
+      allocation_amount: Math.round((currentValue || purchasePrice) * 100) / 100,
+      purchase_price: purchasePrice || null,
+      current_value: currentValue || null,
+      notary_fees: a.notary_fees ? Number(a.notary_fees) : null,
+      travaux: a.travaux ? Number(a.travaux) : null,
+      estimated_value: a.estimated_value ? Number(a.estimated_value) : null,
+      estimated_price_m2: a.estimated_price_m2 ? Number(a.estimated_price_m2) : null,
+      address: a.address || null,
+      surface: a.surface ? Number(a.surface) : null,
+      property_type: a.property_type || null,
+      purchase_date: a.purchase_date || null,
+      monthly_rent: a.monthly_rent ? Number(a.monthly_rent) : null,
+      pnl,
+      pnl_percent: purchasePrice > 0 && pnl != null ? (pnl / purchasePrice) * 100 : null,
+      costs,
+      revenues,
+      monthly_costs: Math.round(monthlyCosts * 100) / 100,
+      monthly_revenues: Math.round(monthlyRevenues * 100) / 100,
+    };
+  });
 
   const principal = loan.principal_amount ?? loan.remaining;
   const installmentsPaid = loan.installments_paid || 0;
