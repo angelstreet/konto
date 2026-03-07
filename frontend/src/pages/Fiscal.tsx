@@ -240,10 +240,14 @@ export default function Fiscal() {
 
   const currentData = fiscalData.find(f => f.id === selectedId) ?? fiscalData[0] ?? null;
 
+  const isCH = currentData?.fiscal_residency?.startsWith('CH') ?? false;
+  const currency = isCH ? 'CHF' : 'EUR';
+  const locale = isCH ? 'de-CH' : 'fr-FR';
+
   const fmt = (v: number | null | undefined): string => {
     if (v == null) return '—';
     if (hideAmounts) return '••••';
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+    return new Intl.NumberFormat(locale, { style: 'currency', currency, maximumFractionDigits: 0 }).format(v);
   };
 
   const fmtPct = (v: number | null | undefined): string => {
@@ -251,12 +255,19 @@ export default function Fiscal() {
     return `${v}%`;
   };
 
-  const breakdownData = currentData ? [
+  const rawBreakdown = currentData ? [
     { key: 'salaries', label: t('salaries') || 'Salaires', value: currentData.breakdown_salaries || 0, color: '#22c55e' },
     { key: 'lmnp', label: t('lmnp') || 'LMNP', value: currentData.breakdown_lmnp || 0, color: '#a855f7' },
     { key: 'dividendes', label: t('dividendes') || 'Dividendes', value: currentData.breakdown_dividendes || 0, color: '#eab308' },
     { key: 'revenus_fonciers', label: t('revenus_fonciers') || 'Revenus fonciers', value: currentData.breakdown_revenus_fonciers || 0, color: '#3b82f6' },
   ].filter(d => d.value > 0) : [];
+
+  // If no breakdown data, assume all income is salary
+  const breakdownData = rawBreakdown.length > 0
+    ? rawBreakdown
+    : currentData && (currentData.revenu_imposable || currentData.revenu_brut_global)
+      ? [{ key: 'salaries', label: t('salaries') || 'Salaires', value: currentData.revenu_imposable || currentData.revenu_brut_global || 0, color: '#22c55e' }]
+      : [];
 
   const breakdownTotal = breakdownData.reduce((sum, d) => sum + d.value, 0);
 
@@ -509,118 +520,141 @@ export default function Fiscal() {
             </div>
             <div className="bg-surface border border-border rounded-xl p-4">
               <div className="flex items-center gap-2 text-muted text-sm mb-1">
-                <Users size={14} />
-                {t('parts_fiscales') || 'Parts fiscales'}
+                <Calculator size={14} />
+                {'Impôts à payer'}
               </div>
-              <div className="text-2xl font-bold font-mono">{currentData.parts_fiscales}</div>
+              <div className="text-2xl font-bold font-mono text-red-400">
+                {isCH
+                  ? mask(fmt((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)) )
+                  : currentData.taux_moyen && currentData.revenu_imposable
+                    ? mask(fmt(Math.round(currentData.taux_moyen / 100 * currentData.revenu_imposable)))
+                    : '—'}
+              </div>
             </div>
             <div className="bg-surface border border-border rounded-xl p-4">
               <div className="flex items-center gap-2 text-muted text-sm mb-1">
                 <TrendingUp size={14} />
-                {t('tmi') || 'Taux marginal'}
+                {isCH ? 'Taux effectif' : (t('tmi') || 'Taux marginal')}
               </div>
-              <div className="text-2xl font-bold font-mono text-orange-400">{fmtPct(currentData.taux_marginal)}</div>
+              <div className="text-2xl font-bold font-mono text-orange-400">
+                {isCH && currentData.revenu_imposable && ((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)) > 0
+                  ? `${(((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)) / currentData.revenu_imposable * 100).toFixed(1)}%`
+                  : fmtPct(currentData.taux_marginal)}
+              </div>
             </div>
             <div className="bg-surface border border-border rounded-xl p-4">
               <div className="flex items-center gap-2 text-muted text-sm mb-1">
-                <Calculator size={14} />
-                {t('taux_moyen') || 'Taux moyen'}
+                <Users size={14} />
+                {isCH ? 'Revenu brut' : (t('parts_fiscales') || 'Parts fiscales')}
               </div>
-              <div className="text-2xl font-bold font-mono text-blue-400">{fmtPct(currentData.taux_moyen)}</div>
+              <div className="text-2xl font-bold font-mono">
+                {isCH ? mask(fmt(currentData.revenu_brut_global)) : String(currentData.parts_fiscales)}
+              </div>
             </div>
           </div>
 
-          {breakdownTotal > 0 && (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* Left — Répartition des revenus */}
             <div className="bg-surface border border-border rounded-xl p-4">
               <h3 className="font-medium mb-4">{t('income_breakdown') || 'Répartition des revenus'}</h3>
-              <div className="flex flex-col lg:flex-row lg:items-center gap-6">
-                <div className="w-full lg:w-1/2 max-w-md h-64">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <PieChart>
-                      <Pie
-                        data={breakdownData}
-                        dataKey="value"
-                        nameKey="key"
-                        cx="50%"
-                        cy="50%"
-                        innerRadius={60}
-                        outerRadius={80}
-                        paddingAngle={2}
-                        stroke="none"
-                      >
-                        {breakdownData.map((entry) => (
-                          <Cell key={entry.key} fill={entry.color} />
-                        ))}
-                      </Pie>
-                      <Tooltip
-                        formatter={(value: any, name: any) => [hideAmounts ? '••••' : fmt(value as number), breakdownData.find(d => d.key === name)?.label || name]}
-                        contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1f2937', borderRadius: 12, fontSize: 12, color: '#e5e7eb' }}
-                        itemStyle={{ color: '#e5e7eb' }}
-                      />
-                    </PieChart>
-                  </ResponsiveContainer>
-                </div>
-                <div className="flex-1 space-y-2">
-                  {breakdownData.map((d) => {
-                    const pct = breakdownTotal > 0 ? (d.value / breakdownTotal) * 100 : 0;
-                    return (
-                      <div key={d.key} className="flex items-center justify-between text-sm">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: d.color }} />
-                          <span className="text-muted">{d.label}</span>
+              {breakdownTotal > 0 ? (
+                <div className="flex flex-col items-center gap-4">
+                  <div className="w-full h-52">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={breakdownData}
+                          dataKey="value"
+                          nameKey="key"
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={55}
+                          outerRadius={75}
+                          paddingAngle={2}
+                          stroke="none"
+                        >
+                          {breakdownData.map((entry) => (
+                            <Cell key={entry.key} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={(value: any, name: any) => [hideAmounts ? '••••' : fmt(value as number), breakdownData.find(d => d.key === name)?.label || name]}
+                          contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #1f2937', borderRadius: 12, fontSize: 12, color: '#e5e7eb' }}
+                          itemStyle={{ color: '#e5e7eb' }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="w-full space-y-2">
+                    {breakdownData.map((d) => {
+                      const pct = breakdownTotal > 0 ? (d.value / breakdownTotal) * 100 : 0;
+                      return (
+                        <div key={d.key} className="flex items-center justify-between text-sm">
+                          <div className="flex items-center gap-2">
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0" style={{ backgroundColor: d.color }} />
+                            <span className="text-muted">{d.label}</span>
+                          </div>
+                          <div className="flex items-center gap-3 font-mono">
+                            <span className="text-muted">{pct.toFixed(1)}%</span>
+                            <span>{mask(fmt(d.value))}</span>
+                          </div>
                         </div>
-                        <div className="flex items-center gap-3 font-mono">
-                          <span className="text-muted">{pct.toFixed(1)}%</span>
-                          <span>{mask(fmt(d.value))}</span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                  <div className="pt-2 mt-2 border-t border-border flex items-center justify-between text-sm font-medium">
-                    <span className="text-muted">Total</span>
-                    <span className="font-mono">{mask(fmt(breakdownTotal))}</span>
+                      );
+                    })}
+                    <div className="pt-2 mt-2 border-t border-border flex items-center justify-between text-sm font-medium">
+                      <span className="text-muted">Total</span>
+                      <span className="font-mono">{mask(fmt(breakdownTotal))}</span>
+                    </div>
                   </div>
                 </div>
-              </div>
+              ) : (
+                <div className="flex items-center justify-center h-40 text-muted text-sm">
+                  Aucune répartition disponible
+                </div>
+              )}
             </div>
-          )}
 
-          {/* Swiss Tax Breakdown */}
-          {currentData?.fiscal_residency?.startsWith('CH') && (
+            {/* Right — Synthèse fiscale */}
             <div className="bg-surface border border-border rounded-xl p-4">
-              <h3 className="font-medium mb-4">🇨🇭 Impôts Switzerland</h3>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="bg-surface-2 rounded-lg p-3">
-                  <div className="text-xs text-muted mb-1">Revenu brut</div>
-                  <div className="text-lg font-mono font-bold">{mask(fmt(currentData.revenu_brut_global))}</div>
-                </div>
-                <div className="bg-surface-2 rounded-lg p-3">
-                  <div className="text-xs text-muted mb-1">Déductions</div>
-                  <div className="text-lg font-mono font-bold">{mask(fmt(currentData.deductions))}</div>
-                </div>
-                <div className="bg-surface-2 rounded-lg p-3">
-                  <div className="text-xs text-muted mb-1">Staatssteuer</div>
-                  <div className="text-lg font-mono font-bold text-orange-400">{mask(fmt(currentData.cantonal_tax))}</div>
-                </div>
-                <div className="bg-surface-2 rounded-lg p-3">
-                  <div className="text-xs text-muted mb-1">Bundessteuer</div>
-                  <div className="text-lg font-mono font-bold text-blue-400">{mask(fmt(currentData.federal_tax))}</div>
-                </div>
-              </div>
-              <div className="mt-4 pt-4 border-t border-border">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted">Total impôts</span>
-                  <span className="text-xl font-bold font-mono">{mask(fmt((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)))}</span>
-                </div>
-                {currentData.revenu_imposable && ((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)) > 0 && (
-                  <div className="flex justify-between items-center mt-2">
-                    <span className="text-muted text-sm">Taux effectif</span>
-                    <span className="text-sm font-mono text-blue-400">{(((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)) / currentData.revenu_imposable * 100).toFixed(1)}%</span>
+              <h3 className="font-medium mb-4">{isCH ? '🇨🇭 Synthèse fiscale' : '🇫🇷 Synthèse fiscale'}</h3>
+              <div className="divide-y divide-border text-sm">
+                {[
+                  currentData.revenu_brut_global != null ? { label: 'Revenu brut global', value: fmt(currentData.revenu_brut_global) } : null,
+                  isCH && currentData.deductions != null ? { label: 'Déductions', value: fmt(currentData.deductions), dim: true } : null,
+                  currentData.revenu_imposable != null ? { label: 'Revenu imposable', value: fmt(currentData.revenu_imposable) } : null,
+                  !isCH ? { label: 'Parts fiscales', value: String(currentData.parts_fiscales) } : null,
+                  isCH && currentData.cantonal_tax != null ? { label: 'Impôt cantonal', value: fmt(currentData.cantonal_tax), accent: 'orange' } : null,
+                  isCH && currentData.federal_tax != null ? { label: 'Impôt fédéral', value: fmt(currentData.federal_tax), accent: 'blue' } : null,
+                  !isCH && currentData.taux_marginal != null ? { label: 'Taux marginal (TMI)', value: fmtPct(currentData.taux_marginal), accent: 'orange' } : null,
+                  !isCH && currentData.taux_moyen != null ? { label: 'Taux moyen', value: fmtPct(currentData.taux_moyen), accent: 'blue' } : null,
+                  (isCH ? ((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)) > 0 : (currentData.taux_moyen && currentData.revenu_imposable)) ? {
+                    label: 'Total impôts',
+                    value: isCH
+                      ? fmt((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0))
+                      : fmt(Math.round(currentData.taux_moyen! / 100 * currentData.revenu_imposable!)),
+                    bold: true,
+                  } : null,
+                  (isCH
+                    ? (currentData.revenu_imposable && ((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)) > 0)
+                    : currentData.taux_moyen != null
+                  ) ? {
+                    label: 'Taux effectif',
+                    value: isCH
+                      ? `${(((currentData.cantonal_tax || 0) + (currentData.federal_tax || 0)) / currentData.revenu_imposable! * 100).toFixed(1)}%`
+                      : fmtPct(currentData.taux_moyen),
+                    accent: 'blue',
+                  } : null,
+                ].filter(Boolean).map((row: any, i) => (
+                  <div key={i} className="flex justify-between items-center py-2.5">
+                    <span className={row.dim ? 'text-muted' : 'text-foreground'}>{row.label}</span>
+                    <span className={`font-mono ${row.bold ? 'font-bold text-base' : ''} ${row.accent === 'orange' ? 'text-orange-400' : row.accent === 'blue' ? 'text-blue-400' : ''}`}>
+                      {row.label.includes('Revenu') || row.label.includes('Total') || row.label.includes('Déductions') || row.label.includes('Impôt') ? mask(row.value) : row.value}
+                    </span>
                   </div>
-                )}
+                ))}
               </div>
             </div>
-          )}
+          </div>
 
           <div className="bg-surface border border-border rounded-xl p-4">
             <h3 className="font-medium mb-4">{t('eligibility_check') || 'Éligibilité aux aides'}</h3>
