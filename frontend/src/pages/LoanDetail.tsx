@@ -30,6 +30,8 @@ type LoanDetailResponse = {
     loan_cost: number;
     capital_total: number;
     interest_insurance_total: number;
+    interest_total: number;
+    insurance_total: number;
     fees_total: number;
     repaid_total: number;
     repaid_capital: number;

@@ -603,7 +603,10 @@ router.get('/api/loans/:loanId', async (c) => {
   const remainingToRepay = Math.round(monthly * installmentsLeft * 100) / 100;
   const feesTotal = n((result.rows[0] as any).fees_total) || 0;
 
-  const totalInterestInsurance = Math.round((interestMonthly + insuranceMonthly) * (installmentsPaid + installmentsLeft) * 100) / 100;
+  const totalMonths = installmentsPaid + installmentsLeft;
+  const totalInterest = Math.round(interestMonthly * totalMonths * 100) / 100;
+  const totalInsurance = Math.round(insuranceMonthly * totalMonths * 100) / 100;
+  const totalInterestInsurance = Math.round((totalInterest + totalInsurance) * 100) / 100;
   const loanCost = Math.round((principal + totalInterestInsurance + feesTotal) * 100) / 100;
 
   const startYear = new Date().getFullYear();
@@ -628,6 +631,8 @@ router.get('/api/loans/:loanId', async (c) => {
       loan_cost: loanCost,
       capital_total: Math.round(principal * 100) / 100,
       interest_insurance_total: totalInterestInsurance,
+      interest_total: totalInterest,
+      insurance_total: totalInsurance,
       fees_total: feesTotal,
       repaid_total: Math.round((repaidCapital + repaidInterest + repaidInsurance) * 100) / 100,
       repaid_capital: Math.round(repaidCapital * 100) / 100,
