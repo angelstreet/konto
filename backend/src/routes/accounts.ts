@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { randomBytes } from 'crypto';
 import db from '../db.js';
 import { encrypt, decrypt } from '../crypto.js';
 import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, decryptDriveConn,
@@ -11,9 +12,14 @@ import { categorizeTransaction } from '../categorizer.js';
 const router = new Hono();
 
 
-router.get('/api/bank/connect-url', (c) => {
+router.get('/api/bank/connect-url', async (c) => {
   const lang = c.req.query('lang') || 'fr';
-  const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+  const userId = await getUserId(c);
+  const state = randomBytes(16).toString('hex');
+  await db.execute({ sql: 'INSERT INTO oauth_states (state, user_id) VALUES (?, ?)', args: [state, userId] });
+  // Expire states older than 10 minutes
+  await db.execute({ sql: "DELETE FROM oauth_states WHERE created_at < datetime('now', '-10 minutes')", args: [] });
+  const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`;
   return c.json({ url });
 });
 
@@ -31,6 +37,9 @@ router.get('/api/bank/reconnect-url/:accountId', async (c) => {
   const accountId = c.req.param('accountId');
   const lang = c.req.query('lang') || 'fr';
   const userId = await getUserId(c);
+  const state = randomBytes(16).toString('hex');
+  await db.execute({ sql: 'INSERT INTO oauth_states (state, user_id) VALUES (?, ?)', args: [state, userId] });
+  await db.execute({ sql: "DELETE FROM oauth_states WHERE created_at < datetime('now', '-10 minutes')", args: [] });
 
   const accRes = await db.execute({
     sql: 'SELECT provider_account_id FROM bank_accounts WHERE id = ? AND user_id = ?',
@@ -59,18 +68,18 @@ router.get('/api/bank/reconnect-url/:accountId', async (c) => {
         });
         if (!codeRes.ok) {
           // Fallback: use token directly
-          const url = `https://webview.powens.com/${lang}/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&token=${conn.powens_token}`;
+          const url = `https://webview.powens.com/${lang}/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&token=${conn.powens_token}&state=${state}`;
           return c.json({ url, connection_id: conn.powens_connection_id });
         }
         const codeData = await codeRes.json() as any;
-        const url = `https://webview.powens.com/${lang}/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&code=${codeData.code}`;
+        const url = `https://webview.powens.com/${lang}/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&code=${codeData.code}&state=${state}`;
         return c.json({ url, connection_id: conn.powens_connection_id });
       }
     } catch {}
   }
 
   // Fallback to generic connect
-  const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+  const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`;
   return c.json({ url });
 });
 
@@ -79,16 +88,29 @@ router.get('/api/bank-callback', async (c) => {
   const code = c.req.query('code');
   const connectionId = c.req.query('connection_id');
   const error = c.req.query('error');
+  const state = c.req.query('state');
 
   if (error) {
     return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
-      <h1 style="color:#ef4444;">Connection failed</h1><p>${error}</p>
+      <h1 style="color:#ef4444;">Connection failed</h1><p>${escapeHtml(error)}</p>
       <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
   }
   if (!code) {
     return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">No code received</h1>
       <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
+  }
+
+  // Validate OAuth state to prevent CSRF
+  if (state) {
+    const stateRes = await db.execute({ sql: 'SELECT user_id FROM oauth_states WHERE state = ?', args: [state] });
+    if (stateRes.rows.length === 0) {
+      return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+        <h1 style="color:#ef4444;">Invalid or expired session</h1><p>Please try connecting your bank again.</p>
+        <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`, 403);
+    }
+    // Consume the state (one-time use)
+    await db.execute({ sql: 'DELETE FROM oauth_states WHERE state = ?', args: [state] });
   }
 
   try {
@@ -254,7 +276,10 @@ router.get('/api/bank-callback', async (c) => {
 // --- Bank connections ---
 router.get('/api/bank/connections', async (c) => {
   const userId = await getUserId(c);
-  const result = await db.execute({ sql: 'SELECT * FROM bank_connections WHERE user_id = ?', args: [userId] });
+  const result = await db.execute({
+    sql: 'SELECT id, powens_connection_id, provider_name, status, created_at FROM bank_connections WHERE user_id = ?',
+    args: [userId]
+  });
   return c.json(result.rows);
 });
 
