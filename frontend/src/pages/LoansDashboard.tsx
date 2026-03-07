@@ -398,7 +398,15 @@ export default function LoansDashboard() {
                           <div>{loan.name}</div>
                           {providerLabel(loan) ? <div className="text-xs text-muted">{providerLabel(loan)}</div> : null}
                           <div className="text-xs text-muted">
-                            {t('start_date') || 'Début'}: {formatLoanDate(loan.start_date)} · {t('loan_end_date') || 'Date de fin'}: {formatLoanDate(loan.end_date)}
+                            {formatLoanDate(loan.start_date) !== '-' || formatLoanDate(loan.end_date) !== '-' ? (
+                              <>
+                                Début {formatLoanDate(loan.start_date)} · Fin {formatLoanDate(loan.end_date)}
+                                {loan.start_date && loan.end_date ? (() => {
+                                  const years = (new Date(loan.end_date).getTime() - new Date(loan.start_date).getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+                                  return years > 0 ? ` · ${Math.round(years)} ans` : null;
+                                })() : null}
+                              </>
+                            ) : null}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right">{loan.repaid_pct != null ? `${Math.round(loan.repaid_pct)} %` : '-'}</td>
