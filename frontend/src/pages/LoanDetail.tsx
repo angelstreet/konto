@@ -1,5 +1,5 @@
 import { API } from '../config';
-import { useMemo, useState, useRef } from 'react';
+import { useState, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
@@ -94,10 +94,6 @@ export default function LoanDetail() {
     return hideAmounts ? <span className="amount-masked">{formatCurrency(value)}</span> : formatCurrency(value);
   };
 
-  const progress = useMemo(() => {
-    const pct = data?.loan?.repaid_pct || 0;
-    return Math.max(0, Math.min(100, pct));
-  }, [data]);
 
   if (loading && !data) return <div className="text-center text-muted py-10">Loading...</div>;
   if (!data) return <div className="text-center text-muted py-10">{t('loan_not_found') || 'Prêt introuvable'}</div>;
@@ -122,14 +118,19 @@ export default function LoanDetail() {
         </div>
       </div>
 
-      <div className="bg-surface rounded-xl border border-border p-3 mb-3 flex items-center gap-3">
-        <div>
-          <div className="text-xs text-muted">Capital restant dû</div>
-          <div className="text-3xl font-semibold text-accent-400">{fc(data.loan.remaining)}</div>
+      <div className="text-sm font-semibold mb-2">{t('loan_tabs_summary') || 'Synthèse'}</div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+        <div className="bg-surface rounded-xl border border-border p-4">
+          <div className="text-xs text-muted uppercase">{t('loan_remaining_principal') || 'Capital restant dû'}</div>
+          <div className="text-3xl mt-2 text-accent-400 font-semibold">{fc(data.loan.remaining)}</div>
         </div>
-        <div className="ml-auto text-right">
-          <div className="text-sm">{Math.round(progress)} % remboursé</div>
-          <div className="text-xs text-muted">Taux: {data.loan.interest_rate}%</div>
+        <div className="bg-surface rounded-xl border border-border p-4">
+          <div className="text-xs text-muted uppercase">{t('loan_monthly') || 'Mensualité'}</div>
+          <div className="text-3xl mt-2">{data.loan.monthly_payment != null ? fc(data.loan.monthly_payment) : '-'}</div>
+        </div>
+        <div className="bg-surface rounded-xl border border-border p-4">
+          <div className="text-xs text-muted uppercase">Taux</div>
+          <div className="text-3xl mt-2">{data.loan.interest_rate}%</div>
         </div>
       </div>
 
