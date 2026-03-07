@@ -1,6 +1,13 @@
 import { Hono } from 'hono';
 import db from '../db.js';
 import { getUserId } from '../shared.js';
+import { writeFileSync, unlinkSync } from 'fs';
+import { spawn } from 'child_process';
+import nodePath from 'path';
+import nodeOs from 'os';
+import { fileURLToPath } from 'url';
+
+const __dirnameFile = nodePath.dirname(fileURLToPath(import.meta.url));
 
 const router = new Hono();
 
@@ -729,6 +736,70 @@ router.delete('/api/loans/:loanId', async (c) => {
   });
 
   return c.json({ ok: true });
+});
+
+// Enrich loan from PDF - upload and parse amortization schedule
+router.post('/api/loans/:loanId/enrich', async (c) => {
+  const userId = await getUserId(c);
+  const loanId = Number(c.req.param('loanId'));
+  if (!Number.isFinite(loanId)) return c.json({ error: 'Invalid loan id' }, 400);
+
+  const formData = await c.req.formData();
+  const file = formData.get('file') as File;
+  if (!file) return c.json({ error: 'file is required' }, 400);
+
+  // Save uploaded file
+  const tmpDir = nodeOs.tmpdir();
+  const tmpPath = nodePath.join(tmpDir, `loan-${Date.now()}.pdf`);
+  const buffer = await file.arrayBuffer();
+  writeFileSync(tmpPath, Buffer.from(buffer));
+
+  // Run parser
+  // In dev __dirname = src/routes, in prod = dist/routes; scripts/ always at backend root
+  const parserPath = nodePath.join(__dirnameFile, '..', '..', 'scripts', 'parse-loan-pdf.cjs');
+  const result = await new Promise<any>((resolve) => {
+    const child = spawn('node', [parserPath, tmpPath], { cwd: nodePath.dirname(parserPath) });
+    let stdout = '', stderr = '';
+    child.stdout.on('data', (d: any) => stdout += d);
+    child.stderr.on('data', (d: any) => stderr += d);
+    child.on('close', async (code: any) => {
+      try { unlinkSync(tmpPath); } catch {}
+      
+      if (code !== 0 || !stdout.trim()) {
+        resolve({ error: 'Failed to parse PDF', detail: stderr });
+        return;
+      }
+      
+      try {
+        const data = JSON.parse(stdout.trim());
+        
+        // Update loan details
+        const updates: string[] = [];
+        const args: any[] = [];
+        if (data.originalAmount) { updates.push('principal_amount = ?'); args.push(data.originalAmount); }
+        if (data.interestRate) { updates.push('interest_rate = ?'); args.push(data.interestRate); }
+        if (data.startDate) { updates.push('start_date = ?'); args.push(data.startDate); }
+        if (data.endDate) { updates.push('end_date = ?'); args.push(data.endDate); }
+        if (data.monthlyPayment) { updates.push('monthly_payment = ?'); args.push(data.monthlyPayment); }
+        if (data.insuranceMonthly) { updates.push('insurance_monthly = ?'); args.push(data.insuranceMonthly); }
+        
+        if (updates.length > 0) {
+          args.push(loanId, userId);
+          await db.execute({
+            sql: `UPDATE loan_details SET ${updates.join(', ')}, updated_at = datetime('now') WHERE bank_account_id = ? AND user_id = ?`,
+            args,
+          });
+        }
+        
+        resolve({ ok: true, data });
+      } catch (e) {
+        resolve({ error: 'Failed to parse JSON', detail: stdout });
+      }
+    });
+  });
+
+  if (result.error) return c.json({ error: result.error, detail: result.detail }, 500);
+  return c.json(result);
 });
 
 export default router;
