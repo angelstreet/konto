@@ -626,6 +626,10 @@ router.get('/api/loans/:loanId', async (c) => {
       installments_left: loan.installments_left,
       start_date: loan.start_date,
       end_date: loan.end_date,
+      duration_months: (() => {
+        if (loan.start_date && loan.end_date) return Math.round((new Date(loan.end_date).getTime() - new Date(loan.start_date).getTime()) / (1000 * 60 * 60 * 24 * 30.4375));
+        return installmentsPaid + installmentsLeft || loan.duration_months || null;
+      })(),
     },
     monthly_breakdown: loan.monthly_breakdown,
     totals: {
@@ -835,6 +839,10 @@ router.post('/api/loans/:loanId/enrich', async (c) => {
         if (data.interestRate) { updates.push('interest_rate = ?'); args.push(data.interestRate); }
         if (data.startDate) { updates.push('start_date = ?'); args.push(data.startDate); }
         if (data.endDate) { updates.push('end_date = ?'); args.push(data.endDate); }
+        if (data.startDate && data.endDate) {
+          const months = Math.round((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30.4375));
+          updates.push('duration_months = ?'); args.push(months);
+        }
         if (data.monthlyPayment) { updates.push('monthly_payment = ?'); args.push(data.monthlyPayment); }
         if (data.insuranceMonthly) { updates.push('insurance_monthly = ?'); args.push(data.insuranceMonthly); }
         if (data.installmentsPaid != null) { updates.push('installments_paid = ?'); args.push(data.installmentsPaid); }
