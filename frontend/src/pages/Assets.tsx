@@ -658,7 +658,7 @@ export default function Assets() {
                         a.property_usage === 'rented_short' ? 'bg-amber-500/20 text-amber-400' :
                         'bg-white/5 text-muted'
                       }`}>
-                        {a.property_usage === 'principal' ? '🏠' : a.property_usage === 'rented_long' ? '🔑' : a.property_usage === 'rented_short' ? '🏖️' : '📦'}
+                        {a.property_usage === 'principal' ? '🏠 Résidence' : a.property_usage === 'rented_long' ? '🔑' : a.property_usage === 'rented_short' ? '🏖️ Saisonnier' : '📦 Vacant'}
                         {a.property_usage === 'rented_long' && a.monthly_rent ? ` ${fmtCompact(a.monthly_rent)}/m` : ''}
                       </span>
                     )}

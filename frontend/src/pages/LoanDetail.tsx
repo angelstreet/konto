@@ -119,7 +119,7 @@ export default function LoanDetail() {
       </div>
 
       <div className="text-sm font-semibold mb-2">{t('loan_tabs_summary') || 'Synthèse'}</div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
         <div className="bg-surface rounded-xl border border-border p-4">
           <div className="text-xs text-muted uppercase">{t('loan_remaining_principal') || 'Capital restant dû'}</div>
           <div className="text-3xl mt-2 text-accent-400 font-semibold">{fc(data.loan.remaining)}</div>
@@ -132,6 +132,11 @@ export default function LoanDetail() {
           <div className="text-xs text-muted uppercase">Taux</div>
           <div className="text-3xl mt-2">{data.loan.interest_rate}%</div>
         </div>
+        <div className="bg-surface rounded-xl border border-border p-4">
+          <div className="text-xs text-muted uppercase">Total</div>
+          <div className="text-3xl mt-2">{fc(data.totals.loan_cost)}</div>
+          <div className="text-xs text-muted mt-1">{t('loan_interest') || 'Intérêts'} + assurance : {fc(data.totals.interest_insurance_total)}</div>
+        </div>
       </div>
 
       <div className="md:hidden mb-3 flex rounded-lg border border-border overflow-hidden text-sm">
@@ -142,7 +147,7 @@ export default function LoanDetail() {
       </div>
 
       {(tab === 'summary' || tab === 'monthly' || window.innerWidth >= 768) && (
-        <div className="grid grid-cols-1 xl:grid-cols-5 gap-3 mb-3">
+        <div className="grid grid-cols-1 xl:grid-cols-7 gap-3 mb-3">
           <div className="xl:col-span-3 bg-surface rounded-xl border border-border p-3">
             <div className="text-sm text-muted mb-2">{t('loan_remaining_timeline') || 'Évolution du capital restant dû'}</div>
             <div className="h-40">
@@ -176,34 +181,23 @@ export default function LoanDetail() {
               <div className="flex justify-between"><span className="text-muted">{t('loan_end_date') || 'Date de fin'}</span><span>{data.loan.end_date || '-'}</span></div>
             </div>
           </div>
+
+          <div className="xl:col-span-2 bg-surface rounded-xl border border-border p-4">
+            <div className="text-xs text-muted uppercase">{t('loan_total_cost') || 'Total du prêt'}</div>
+            <div className="text-3xl mt-1">{fc(data.totals.loan_cost)}</div>
+            <div className="mt-2 text-sm text-muted">{t('loan_capital') || 'Capital'}: {fc(data.totals.capital_total)}</div>
+            <div className="text-sm text-muted">{t('loan_interest') || 'Intérêts'}: {fc(data.totals.interest_total ?? data.totals.interest_insurance_total)}</div>
+            <div className="text-sm text-muted">{t('loan_insurance') || 'Assurance'}: {fc(data.totals.insurance_total ?? 0)}</div>
+
+            <div className="mt-4 text-sm">
+              <div className="flex justify-between"><span className="text-muted">{t('loan_total_repaid') || 'Total remboursé'}</span><span>{fc(data.totals.repaid_total)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">{t('loan_remaining_total') || 'Reste à rembourser'}</span><span>{fc(data.totals.remaining_to_repay)}</span></div>
+              <div className="flex justify-between"><span className="text-muted">Reste %</span><span>{Math.round(data.totals.remaining_pct)} %</span></div>
+            </div>
+          </div>
         </div>
       )}
 
-      {(tab === 'summary' || window.innerWidth >= 768) && (
-        <>
-          <div className="text-sm font-semibold mb-2">{t('loan_tabs_summary') || 'Synthèse'}</div>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
-            <div className="bg-surface rounded-xl border border-border p-4">
-              <div className="text-xs text-muted uppercase">{t('loan_total_cost') || "Coût total de l'emprunt"}</div>
-              <div className="text-3xl mt-2">{fc(data.totals.loan_cost)}</div>
-              <div className="text-sm text-muted mt-2">{t('loan_capital') || 'Capital'}: {fc(data.totals.capital_total)}</div>
-              <div className="text-sm text-muted">{t('loan_interest') || 'Intérêts'} + {t('loan_insurance') || 'Assurance'}: {fc(data.totals.interest_insurance_total)}</div>
-            </div>
-            <div className="bg-surface rounded-xl border border-border p-4">
-              <div className="text-xs text-muted uppercase">{t('loan_total_repaid') || 'Total remboursé'}</div>
-              <div className="text-3xl mt-2">{fc(data.totals.repaid_total)}</div>
-              <div className="text-sm text-muted mt-2">{t('loan_capital') || 'Capital'}: {fc(data.totals.repaid_capital)}</div>
-              <div className="text-sm text-muted">{t('loan_interest') || 'Intérêts'}: {fc(data.totals.repaid_interest)}</div>
-            </div>
-            <div className="bg-surface rounded-xl border border-border p-4">
-              <div className="text-xs text-muted uppercase">{t('loan_remaining_principal') || 'Capital restant dû'}</div>
-              <div className="text-3xl mt-2">{fc(data.totals.remaining_total)}</div>
-              <div className="text-sm text-muted mt-2">{t('loan_remaining_total') || 'Reste à rembourser'}: {fc(data.totals.remaining_to_repay)}</div>
-              <div className="text-sm text-muted">{t('loan_remaining_pct') || 'Reste à rembourser (%)'}: {Math.round(data.totals.remaining_pct)} %</div>
-            </div>
-          </div>
-        </>
-      )}
 
       {(tab === 'monthly' || window.innerWidth >= 768) && (
         <div className="md:hidden bg-surface rounded-xl border border-border p-4 mb-3">
@@ -244,7 +238,7 @@ export default function LoanDetail() {
                 <div className="flex items-center justify-between gap-2">
                   <div>
                     <div className="font-medium">{asset.name}</div>
-                    <div className="text-sm text-muted">{asset.usage || '-'}</div>
+                    <div className="text-sm text-muted">{asset.usage === 'principal' ? '🏠 Résidence principale' : asset.usage === 'rented_long' ? '🔑 Location longue durée' : asset.usage === 'rented_short' ? '🏖️ Location saisonnière' : asset.usage === 'vacant' ? '📦 Vacant' : asset.usage || '-'}</div>
                   </div>
                   <div className="text-right">
                     <div className="text-sm text-muted">{asset.allocation_pct}%</div>
