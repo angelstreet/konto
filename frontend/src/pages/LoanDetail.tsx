@@ -121,7 +121,6 @@ export default function LoanDetail() {
           </button>
         </div>
       </div>
-      <div className="text-4xl font-semibold text-accent-400 mb-3">{fc(data.loan.remaining)}</div>
 
       <div className="bg-surface rounded-xl border border-border p-3 mb-3 flex items-center gap-3">
         <div>
