@@ -124,14 +124,12 @@ export default function LoanDetail() {
 
       <div className="bg-surface rounded-xl border border-border p-3 mb-3 flex items-center gap-3">
         <div>
-          <div className="text-sm">{t('loan_repaid_sentence') || 'Vous avez déjà remboursé'} {Math.round(progress)} %</div>
-          <div className="h-1.5 w-56 bg-background rounded-full overflow-hidden mt-2">
-            <div className="h-full bg-accent-500" style={{ width: `${progress}%` }} />
-          </div>
+          <div className="text-xs text-muted">Capital restant dû</div>
+          <div className="text-3xl font-semibold text-accent-400">{fc(data.loan.remaining)}</div>
         </div>
-        <div className="text-right ml-auto">
-          <div className="text-xs text-muted">Taux</div>
-          <div className="text-lg font-semibold text-accent-400">{data.loan.interest_rate}%</div>
+        <div className="ml-auto text-right">
+          <div className="text-sm">{Math.round(progress)} % remboursé</div>
+          <div className="text-xs text-muted">Taux: {data.loan.interest_rate}%</div>
         </div>
       </div>
 
