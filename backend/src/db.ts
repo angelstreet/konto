@@ -715,6 +715,14 @@ export async function migrateDatabase() {
     await db.execute(`DROP TABLE fiscal_data`);
     await db.execute(`ALTER TABLE fiscal_data_new RENAME TO fiscal_data`);
   }
+
+  // Add CH/extended columns to fiscal_data if missing
+  for (const col of ['deductions REAL', 'cantonal_tax REAL', 'federal_tax REAL', 'total_imposition REAL']) {
+    const name = col.split(' ')[0];
+    try { await db.execute(`SELECT ${name} FROM fiscal_data LIMIT 1`); } catch {
+      await db.execute(`ALTER TABLE fiscal_data ADD COLUMN ${col}`);
+    }
+  }
 }
 
 // Find or create user by Clerk ID. On first login, migrates existing user_id=1 data.

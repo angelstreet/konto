@@ -1,4 +1,5 @@
 import { Hono } from 'hono';
+import { createClerkClient } from '@clerk/backend';
 import db from '../db.js';
 import { encrypt, decrypt } from '../crypto.js';
 import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, decryptDriveConn,
@@ -166,12 +167,11 @@ router.put('/api/profile', async (c) => {
 });
 
 // --- RGPD: Account deletion (right to erasure) ---
-router.delete('/api/account', async (c) => {
-  const userId = await getUserId(c);
-
+async function deleteAccountData(userId: number, clerkUserId?: string): Promise<void> {
   // Delete all user data in dependency order
   await db.execute({ sql: 'DELETE FROM invoice_cache WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM patrimoine_snapshots WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM patrimoine_reports WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM analytics_cache WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM income_entries WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM drive_connections WHERE user_id = ?', args: [userId] });
@@ -179,6 +179,16 @@ router.delete('/api/account', async (c) => {
   await db.execute({ sql: 'DELETE FROM binance_connections WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM payslips WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM drive_folder_mappings WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM fiscal_data WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM api_keys WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'DELETE FROM audit_log WHERE user_id = ?', args: [userId] });
+
+  // Delete loan details and milestones
+  const loanIds = await db.execute({ sql: 'SELECT id FROM loan_details WHERE user_id = ?', args: [userId] });
+  for (const l of loanIds.rows as any[]) {
+    await db.execute({ sql: 'DELETE FROM loan_milestone_events WHERE loan_id = ?', args: [l.id] });
+  }
+  await db.execute({ sql: 'DELETE FROM loan_details WHERE user_id = ?', args: [userId] });
 
   // Delete asset sub-tables
   const assetIds = await db.execute({ sql: 'SELECT id FROM assets WHERE user_id = ?', args: [userId] });
@@ -198,12 +208,37 @@ router.delete('/api/account', async (c) => {
   await db.execute({ sql: 'DELETE FROM user_profiles WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [userId] });
 
+  // Delete from Clerk if available
+  const clerkSecretKey = process.env.CLERK_SECRET_KEY;
+  const effectiveClerkId = clerkUserId;
+  if (clerkSecretKey && effectiveClerkId) {
+    try {
+      const clerk = createClerkClient({ secretKey: clerkSecretKey });
+      await clerk.users.deleteUser(effectiveClerkId);
+    } catch (err) {
+      // Log but don't fail — DB data is already deleted
+      console.error('[RGPD] Failed to delete Clerk user:', err);
+    }
+  }
+}
+
+router.delete('/api/account', async (c) => {
+  const userId = await getUserId(c);
+  const clerkUserId = (c as any).clerkUserId as string | undefined;
+  await deleteAccountData(userId, clerkUserId);
+  return c.json({ ok: true, message: 'All your data has been permanently deleted.' });
+});
+
+// Alias: DELETE /api/user/account
+router.delete('/api/user/account', async (c) => {
+  const userId = await getUserId(c);
+  const clerkUserId = (c as any).clerkUserId as string | undefined;
+  await deleteAccountData(userId, clerkUserId);
   return c.json({ ok: true, message: 'All your data has been permanently deleted.' });
 });
 
 // --- RGPD: Data export (right to portability) ---
-router.get('/api/account/data', async (c) => {
-  const userId = await getUserId(c);
+async function exportUserData(userId: number) {
   // PII cleanup task #950: remove name, phone, address from export
   const user = await db.execute({
     sql: `SELECT u.id, COALESCE(up.email, '') AS email, up.city, up.country, u.created_at
@@ -214,19 +249,41 @@ router.get('/api/account/data', async (c) => {
   const companies = await db.execute({ sql: 'SELECT * FROM companies WHERE user_id = ?', args: [userId] });
   const accounts = await db.execute({ sql: 'SELECT id, name, custom_name, bank_name, account_number, iban, balance, type, usage, currency, created_at FROM bank_accounts WHERE user_id = ?', args: [userId] });
   const transactions = await db.execute({ sql: 'SELECT t.date, t.amount, t.label, t.category FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE ba.user_id = ?', args: [userId] });
+  const investments = await db.execute({ sql: 'SELECT i.name, i.type, i.quantity, i.purchase_price, i.current_price, i.currency FROM investments i JOIN bank_accounts ba ON i.bank_account_id = ba.id WHERE ba.user_id = ?', args: [userId] });
   const assets = await db.execute({ sql: 'SELECT type, name, purchase_price, current_value, address, created_at FROM assets WHERE user_id = ?', args: [userId] });
   const income = await db.execute({ sql: 'SELECT * FROM income_entries WHERE user_id = ?', args: [userId] });
+  const fiscal = await db.execute({ sql: 'SELECT year, revenue, tax, category FROM fiscal_data WHERE user_id = ? ORDER BY year DESC', args: [userId] });
+  const preferences = await db.execute({ sql: 'SELECT display_currency, crypto_display, kozy_enabled FROM user_preferences WHERE user_id = ?', args: [userId] });
+  const loans = await db.execute({ sql: 'SELECT name, amount, rate, duration_months, start_date, status FROM loan_details WHERE user_id = ?', args: [userId] });
 
-  return c.json({
+  return {
     exported_at: new Date().toISOString(),
     format: 'RGPD Data Export',
+    version: '2.0',
     user: user.rows[0] || null,
+    preferences: preferences.rows[0] || null,
     companies: companies.rows,
     bank_accounts: accounts.rows,
     transactions: transactions.rows,
+    investments: investments.rows,
     assets: assets.rows,
     income: income.rows,
-  });
+    fiscal_data: fiscal.rows,
+    loans: loans.rows,
+  };
+}
+
+router.get('/api/account/data', async (c) => {
+  const userId = await getUserId(c);
+  const data = await exportUserData(userId);
+  return c.json(data);
+});
+
+// Alias: GET /api/user/export
+router.get('/api/user/export', async (c) => {
+  const userId = await getUserId(c);
+  const data = await exportUserData(userId);
+  return c.json(data);
 });
 
 // --- Companies ---
