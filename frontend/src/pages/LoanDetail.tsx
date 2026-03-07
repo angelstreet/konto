@@ -124,14 +124,17 @@ export default function LoanDetail() {
       <div className="text-muted text-sm mb-1">{data.loan.type_label}</div>
       <div className="text-4xl font-semibold text-accent-400 mb-3">{fc(data.loan.remaining)}</div>
 
-      <div className="bg-surface rounded-xl border border-border p-3 mb-3 flex items-center justify-between gap-3">
+      <div className="bg-surface rounded-xl border border-border p-3 mb-3 flex items-center gap-3">
         <div>
           <div className="text-sm">{t('loan_repaid_sentence') || 'Vous avez déjà remboursé'} {Math.round(progress)} %</div>
           <div className="h-1.5 w-56 bg-background rounded-full overflow-hidden mt-2">
             <div className="h-full bg-accent-500" style={{ width: `${progress}%` }} />
           </div>
         </div>
-        <div className="w-12 h-12 rounded-full border-4 border-accent-500 border-r-background" />
+        <div className="text-right ml-auto">
+          <div className="text-xs text-muted">Taux</div>
+          <div className="text-lg font-semibold text-accent-400">{data.loan.interest_rate}%</div>
+        </div>
       </div>
 
       <div className="md:hidden mb-3 flex rounded-lg border border-border overflow-hidden text-sm">
@@ -145,7 +148,7 @@ export default function LoanDetail() {
         <div className="grid grid-cols-1 xl:grid-cols-5 gap-3 mb-3">
           <div className="xl:col-span-3 bg-surface rounded-xl border border-border p-3">
             <div className="text-sm text-muted mb-2">{t('loan_remaining_timeline') || 'Évolution du capital restant dû'}</div>
-            <div className="h-72">
+            <div className="h-40">
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={data.timeline}>
                   <XAxis dataKey="year" tick={{ fill: '#8d9099', fontSize: 11 }} />
