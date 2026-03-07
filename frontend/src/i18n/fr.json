@@ -26,6 +26,8 @@
   "dark": "Sombre",
   "light": "Clair",
   "connect_bank": "Connecter une banque",
+  "confirm_delete": "Confirmer la suppression",
+  "confirm_delete_fiscal": "Supprimer cette déclaration fiscale ?",
   "confirm_delete_account": "Supprimer ce compte et toutes ses transactions ?",
   "edit": "Modifier",
   "hide": "Masquer",

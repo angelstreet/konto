@@ -26,6 +26,8 @@
   "dark": "Dark",
   "light": "Light",
   "connect_bank": "Connect a bank",
+  "confirm_delete": "Confirm deletion",
+  "confirm_delete_fiscal": "Delete this tax return?",
   "confirm_delete_account": "Delete this account and all its transactions?",
   "edit": "Edit",
   "hide": "Hide",

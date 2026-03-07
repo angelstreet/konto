@@ -646,8 +646,8 @@ export default function Fiscal() {
 
       <ConfirmDialog
         open={confirmDialog.open}
-        title={t('confirm_delete') || 'Confirmer la suppression'}
-        message={confirmDialog.id ? `Supprimer cette déclaration fiscale ?` : ''}
+        title={t('confirm_delete')}
+        message={confirmDialog.id ? t('confirm_delete_fiscal') : ''}
         confirmLabel={t('delete') || 'Supprimer'}
         variant="danger"
         onConfirm={confirmDelete}
