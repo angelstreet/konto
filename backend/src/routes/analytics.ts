@@ -749,6 +749,10 @@ router.get('/api/analysis/cashflow', async (c) => {
 router.get('/api/analysis/passive-income', async (c) => {
   const userId = await getUserId(c);
   const usage = c.req.query('usage');
+  const yearParam = c.req.query('year');
+  const now = new Date();
+  const selectedYear = yearParam ? parseInt(yearParam) : now.getFullYear();
+  const isPastYear = selectedYear < now.getFullYear();
 
   // 1. Rental income from assets
   let assetWhere = 'user_id = ?';
@@ -798,48 +802,44 @@ router.get('/api/analysis/passive-income', async (c) => {
   const totalBase = totalAssetValue + totalInvValue;
   const yieldPct = totalBase > 0 ? Math.round((totalYearly / totalBase) * 1000) / 10 : 0;
 
-  // Build upcoming (next 3 months)
-  const now = new Date();
+  // Build received (all past months of selectedYear) and upcoming (future months of selectedYear)
   const upcoming: any[] = [];
-  for (let mo = 0; mo < 3; mo++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + mo, 1);
-    for (const r of rentalItems) {
-      const day = 5;
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      if (new Date(dateStr) > now) {
-        upcoming.push({ source: r.source, type: r.type, amount: r.amount, date: dateStr });
-      }
-    }
-  }
-  // Dividends — quarterly, show next quarter
-  for (const d2 of divItems) {
-    if (d2.amount > 0) {
-      const nextDiv = new Date(now.getFullYear(), now.getMonth() + 1, 15);
-      const dateStr = `${nextDiv.getFullYear()}-${String(nextDiv.getMonth() + 1).padStart(2, '0')}-15`;
-      upcoming.push({ source: d2.source, type: d2.type, amount: d2.amount * 3, date: dateStr });
-    }
-  }
-  upcoming.sort((a: any, b: any) => a.date.localeCompare(b.date));
-
-  // Build received (last 3 months + past dividends)
   const received: any[] = [];
-  for (let mo = 1; mo <= 3; mo++) {
-    const d = new Date(now.getFullYear(), now.getMonth() - mo, 1);
+
+  for (let mo = 1; mo <= 12; mo++) {
+    const rentDate = new Date(selectedYear, mo - 1, 5);
+    const divDate = new Date(selectedYear, mo - 1, 15);
+    const monthStr = `${selectedYear}-${String(mo).padStart(2, '0')}`;
+
+    const rentIsFuture = rentDate > now;
+    const divIsFuture = divDate > now;
+
+    // Rental: monthly
     for (const r of rentalItems) {
-      const day = 5;
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-      received.push({ source: r.source, type: r.type, amount: r.amount, date: dateStr });
+      const dateStr = `${monthStr}-05`;
+      if (rentIsFuture) {
+        upcoming.push({ source: r.source, type: r.type, amount: r.amount, date: dateStr });
+      } else {
+        received.push({ source: r.source, type: r.type, amount: r.amount, date: dateStr });
+      }
     }
-  }
-  if (divItems.length > 0) {
-    for (let quarter = 1; quarter <= 3; quarter++) {
-      const quarterDate = new Date(now.getFullYear(), now.getMonth() - quarter * 3, 15);
-      const dateStr = `${quarterDate.getFullYear()}-${String(quarterDate.getMonth() + 1).padStart(2, '0')}-${String(quarterDate.getDate()).padStart(2, '0')}`;
-      for (const dItem of divItems) {
-        received.push({ source: dItem.source, type: dItem.type, amount: dItem.amount * 3, date: dateStr });
+
+    // Dividends: quarterly (months 3, 6, 9, 12)
+    if (mo % 3 === 0) {
+      for (const d2 of divItems) {
+        if (d2.amount > 0) {
+          const dateStr = `${monthStr}-15`;
+          if (divIsFuture) {
+            upcoming.push({ source: d2.source, type: d2.type, amount: d2.amount * 3, date: dateStr });
+          } else {
+            received.push({ source: d2.source, type: d2.type, amount: d2.amount * 3, date: dateStr });
+          }
+        }
       }
     }
   }
+
+  upcoming.sort((a: any, b: any) => a.date.localeCompare(b.date));
   received.sort((a: any, b: any) => b.date.localeCompare(a.date));
 
   // By source breakdown
@@ -851,6 +851,8 @@ router.get('/api/analysis/passive-income', async (c) => {
     monthly: Math.round(totalMonthly),
     yearly: Math.round(totalYearly),
     yield_pct: yieldPct,
+    year: selectedYear,
+    is_past_year: isPastYear,
     upcoming,
     received,
     by_source: bySource,
