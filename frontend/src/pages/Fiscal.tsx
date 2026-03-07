@@ -553,13 +553,13 @@ export default function Fiscal() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             {/* Left — Répartition des revenus */}
-            <div className="bg-surface border border-border rounded-xl p-4">
-              <h3 className="font-medium mb-4">{t('income_breakdown') || 'Répartition des revenus'}</h3>
+            <div className="bg-surface border border-border rounded-xl p-4 h-[420px] flex flex-col">
+              <h3 className="font-medium mb-4 flex-shrink-0">{t('income_breakdown') || 'Répartition des revenus'}</h3>
               {breakdownTotal > 0 ? (
-                <div className="flex flex-col items-center gap-4">
-                  <div className="w-full h-52">
+                <div className="flex flex-col items-center gap-4 flex-1 min-h-0">
+                  <div className="w-full h-48 flex-shrink-0">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
@@ -572,6 +572,7 @@ export default function Fiscal() {
                           outerRadius={75}
                           paddingAngle={2}
                           stroke="none"
+                          isAnimationActive={false}
                         >
                           {breakdownData.map((entry) => (
                             <Cell key={entry.key} fill={entry.color} />
@@ -608,16 +609,16 @@ export default function Fiscal() {
                   </div>
                 </div>
               ) : (
-                <div className="flex items-center justify-center h-40 text-muted text-sm">
+                <div className="flex items-center justify-center flex-1 text-muted text-sm">
                   Aucune répartition disponible
                 </div>
               )}
             </div>
 
             {/* Right — Synthèse fiscale */}
-            <div className="bg-surface border border-border rounded-xl p-4">
-              <h3 className="font-medium mb-4">{isCH ? '🇨🇭 Synthèse fiscale' : '🇫🇷 Synthèse fiscale'}</h3>
-              <div className="divide-y divide-border text-sm">
+            <div className="bg-surface border border-border rounded-xl p-4 h-[420px] flex flex-col">
+              <h3 className="font-medium mb-4 flex-shrink-0">{isCH ? '🇨🇭 Synthèse fiscale' : '🇫🇷 Synthèse fiscale'}</h3>
+              <div className="divide-y divide-border text-sm overflow-auto flex-1">
                 {([
                   currentData.revenu_brut_global != null ? { label: 'Revenu brut global', value: fmt(currentData.revenu_brut_global) } : null,
                   isCH && currentData.deductions != null ? { label: 'Déductions', value: fmt(currentData.deductions), dim: true } : null,
