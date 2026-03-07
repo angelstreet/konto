@@ -27,6 +27,7 @@ import {
   ChevronDown,
   LucideIcon,
   Lock,
+  Shield,
   User,
   Briefcase,
   TrendingUp,
@@ -441,6 +442,20 @@ export default function Sidebar({ onLogout }: Props) {
             {!collapsed && <span>{t('logout')}</span>}
           </button>
         )}
+        <button
+          onClick={() => navigate('/privacy')}
+          title={collapsed ? 'Privacy Policy' : undefined}
+          className={`w-full flex items-center gap-2.5 rounded-lg text-sm font-medium transition-colors ${
+            collapsed ? 'justify-center px-0 py-2.5' : 'px-2.5 py-2'
+          } ${
+            pathname === '/privacy'
+              ? 'bg-accent-500/10 text-accent-400'
+              : 'text-muted/50 hover:text-muted hover:bg-surface-hover'
+          }`}
+        >
+          <Shield size={16} strokeWidth={1.5} />
+          {!collapsed && <span className="text-xs">Privacy</span>}
+        </button>
       </div>
     </aside>
   );

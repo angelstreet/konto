@@ -92,7 +92,7 @@ export default function Privacy() {
 
         <section>
           <h2 className="text-lg font-semibold text-white mb-2">9. Contact</h2>
-          <p>Pour toute question relative à vos données personnelles, contactez-nous à l'adresse indiquée dans les paramètres de l'application.</p>
+          <p>Pour toute question relative à vos données personnelles, contactez-nous à : <a href="mailto:support@angelstreet.io" className="text-accent-400 underline">support@angelstreet.io</a></p>
         </section>
       </div>
     </div>
