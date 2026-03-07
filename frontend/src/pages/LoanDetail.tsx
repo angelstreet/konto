@@ -143,7 +143,7 @@ export default function LoanDetail() {
       <div className="text-sm font-semibold mb-2">{t('loan_tabs_summary') || 'Synthèse'}</div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
         <div className="bg-surface rounded-xl border border-border p-4">
-          <div className="text-xs text-muted uppercase">{t('loan_remaining_principal') || 'Capital restant dû'}</div>
+          <div className="text-xs text-muted uppercase">{t('loan_remaining_principal') || 'Restant dû'}</div>
           <div className="text-3xl mt-2 text-accent-400 font-semibold">{fc(data.loan.remaining)}</div>
         </div>
         <div className="bg-surface rounded-xl border border-border p-4">
