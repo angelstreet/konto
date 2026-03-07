@@ -1162,14 +1162,16 @@ export default function Accounts() {
                       <button onClick={() => toggleHidden(acc)} className="text-muted hover:text-white transition-colors p-1.5" title={acc.hidden ? t('show') : t('hide')}>
                         {acc.hidden ? <EyeOff size={14} /> : <Eye size={14} />}
                       </button>
-                      <button
-                        onClick={() => syncAccount(acc.id)}
-                        disabled={syncingId === acc.id}
-                        className={`transition-colors p-1.5 ${isStale ? 'text-orange-400 hover:text-orange-300' : 'text-muted hover:text-white'} disabled:opacity-50`}
-                        title={t('sync')}
-                      >
-                        <RefreshCw size={14} className={syncingId === acc.id ? 'animate-spin' : ''} />
-                      </button>
+                      {acc.provider !== 'manual' && (
+                        <button
+                          onClick={() => syncAccount(acc.id)}
+                          disabled={syncingId === acc.id}
+                          className={`transition-colors p-1.5 ${isStale ? 'text-orange-400 hover:text-orange-300' : 'text-muted hover:text-white'} disabled:opacity-50`}
+                          title={t('sync')}
+                        >
+                          <RefreshCw size={14} className={syncingId === acc.id ? 'animate-spin' : ''} />
+                        </button>
+                      )}
                       {acc.type === 'checking' && (
                         <button onClick={() => openCsvImport(acc.id)} className="text-muted hover:text-accent-400 transition-colors p-1.5" title={t('nav_import')}>
                           <Upload size={14} />
@@ -1240,12 +1242,12 @@ export default function Accounts() {
                         <AlertTriangle size={10} />
                         {t('sca_required')}
                       </button>
-                    ) : (
+                    ) : acc.provider !== 'manual' ? (
                       <>
                         <span className={`inline-block w-1.5 h-1.5 rounded-full flex-shrink-0 ${isStale ? 'bg-red-500' : 'bg-green-500'}`} />
                         <span className="text-[10px] text-muted whitespace-nowrap">{syncText}</span>
                       </>
-                    )}
+                    ) : null}
                   </div>
 
                   {/* Mobile: ⋮ overflow menu */}
@@ -1267,13 +1269,15 @@ export default function Accounts() {
                             {acc.hidden ? <Eye size={14} className="text-muted" /> : <EyeOff size={14} className="text-muted" />}
                             {acc.hidden ? t('show') : t('hide')}
                           </button>
-                          <button
-                            onClick={() => { syncAccount(acc.id); setOverflowMenuId(null); }}
-                            disabled={syncingId === acc.id}
-                            className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-white/5 ${isStale ? 'text-orange-400' : 'text-white'}`}
-                          >
-                            <RefreshCw size={14} className={`${isStale ? 'text-orange-400' : 'text-muted'} ${syncingId === acc.id ? 'animate-spin' : ''}`} /> {t('sync')}
-                          </button>
+                          {acc.provider !== 'manual' && (
+                            <button
+                              onClick={() => { syncAccount(acc.id); setOverflowMenuId(null); }}
+                              disabled={syncingId === acc.id}
+                              className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm hover:bg-white/5 ${isStale ? 'text-orange-400' : 'text-white'}`}
+                            >
+                              <RefreshCw size={14} className={`${isStale ? 'text-orange-400' : 'text-muted'} ${syncingId === acc.id ? 'animate-spin' : ''}`} /> {t('sync')}
+                            </button>
+                          )}
                           {acc.type === 'checking' && (
                             <button onClick={() => openCsvImport(acc.id)} className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-white hover:bg-white/5">
                               <Upload size={14} className="text-muted" /> {t('nav_import')}
