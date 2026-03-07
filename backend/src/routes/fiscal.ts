@@ -6,57 +6,37 @@ const router = new Hono();
 
 // ========== FISCAL DATA ==========
 
-// Get fiscal data for user (latest year by default)
+// Get all fiscal data for user, ordered by year desc then country
 router.get('/api/fiscal', async (c) => {
   const userId = await getUserId(c);
-  const year = c.req.query('year');
-
-  let sql = 'SELECT * FROM fiscal_data WHERE user_id = ?';
-  const args: any[] = [userId];
-
-  if (year) {
-    sql += ' AND year = ?';
-    args.push(parseInt(year));
-  }
-
-  sql += ' ORDER BY year DESC';
-
-  const result = await db.execute({ sql, args });
+  const result = await db.execute({
+    sql: 'SELECT * FROM fiscal_data WHERE user_id = ? ORDER BY year DESC, fiscal_residency ASC',
+    args: [userId],
+  });
   return c.json({ fiscalData: result.rows });
 });
 
-// Add or update fiscal data (manual entry)
+// Add or update fiscal data (manual entry) — keyed by (year, fiscal_residency)
 router.post('/api/fiscal', async (c) => {
   const userId = await getUserId(c);
   const body = await c.req.json();
 
-  const {
-    year,
-    revenuBrutGlobal,
-    revenuImposable,
-    partsFiscales,
-    tauxMarginal,
-    tauxMoyen,
-    breakdown
-  } = body;
+  const { year, fiscalResidency = 'FR', revenuBrutGlobal, revenuImposable, partsFiscales, tauxMarginal, tauxMoyen, breakdown } = body;
 
-  // Provide defaults for missing values
-  const partsWithDefault = partsFiscales ?? 1;
-  
-  if (!year) {
-    return c.json({ error: 'year is required' }, 400);
-  }
+  if (!year) return c.json({ error: 'year is required' }, 400);
 
+  const country = fiscalResidency || 'FR';
+  const parts = partsFiscales ?? 1;
   const breakdownSalaries = breakdown?.salaries ?? null;
   const breakdownLmnp = breakdown?.lmnp ?? null;
   const breakdownDividendes = breakdown?.dividendes ?? null;
   const breakdownRevenusFonciers = breakdown?.revenusFonciers ?? null;
 
   await db.execute({
-    sql: `INSERT INTO fiscal_data (user_id, year, fiscal_residency, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, updated_at)
-          VALUES (?, ?, 'FR', ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-          ON CONFLICT(user_id, year) DO UPDATE SET
-            fiscal_residency = COALESCE(excluded.fiscal_residency, fiscal_residency),
+    sql: `INSERT INTO fiscal_data
+            (user_id, year, fiscal_residency, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(user_id, year, fiscal_residency) DO UPDATE SET
             revenu_brut_global = excluded.revenu_brut_global,
             revenu_imposable = excluded.revenu_imposable,
             parts_fiscales = excluded.parts_fiscales,
@@ -67,15 +47,13 @@ router.post('/api/fiscal', async (c) => {
             breakdown_dividendes = excluded.breakdown_dividendes,
             breakdown_revenus_fonciers = excluded.breakdown_revenus_fonciers,
             updated_at = datetime('now')`,
-    args: [userId, year, revenuBrutGlobal ?? null, revenuImposable ?? null, partsWithDefault, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers]
+    args: [userId, year, country, revenuBrutGlobal ?? null, revenuImposable ?? null, parts, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers],
   });
 
-  // Fetch the updated record
   const result = await db.execute({
-    sql: 'SELECT * FROM fiscal_data WHERE user_id = ? AND year = ?',
-    args: [userId, year]
+    sql: 'SELECT * FROM fiscal_data WHERE user_id = ? AND year = ? AND fiscal_residency = ?',
+    args: [userId, year, country],
   });
-
   return c.json({ fiscalData: result.rows[0] });
 });
 
@@ -85,37 +63,26 @@ router.post('/api/fiscal/upload', async (c) => {
   const formData = await c.req.formData();
   const file = formData.get('file') as File;
   const formYear = parseInt(formData.get('year') as string);
+  const formCountry = (formData.get('country') as string) || 'FR';
 
-  if (!file) {
-    return c.json({ error: 'file is required' }, 400);
-  }
+  if (!file) return c.json({ error: 'file is required' }, 400);
 
-  // Parse PDF and extract fiscal data
   const extracted = await extractFiscalFromPDF(file);
-
-  // Use year from PDF if available, otherwise fall back to form year
   const year = extracted.year || formYear || new Date().getFullYear() - 1;
+  // Use detected country if available, else form-supplied, else FR
+  const country = extracted.country || formCountry || 'FR';
 
-  // Store only the numbers - no PDF retention
-  const {
-    revenuBrutGlobal,
-    revenuImposable,
-    partsFiscales,
-    tauxMarginal,
-    tauxMoyen,
-    breakdown
-  } = extracted;
-
+  const { revenuBrutGlobal, revenuImposable, partsFiscales, tauxMarginal, tauxMoyen, breakdown } = extracted;
   const breakdownSalaries = breakdown?.salaries ?? null;
   const breakdownLmnp = breakdown?.lmnp ?? null;
   const breakdownDividendes = breakdown?.dividendes ?? null;
   const breakdownRevenusFonciers = breakdown?.revenusFonciers ?? null;
 
   await db.execute({
-    sql: `INSERT INTO fiscal_data (user_id, year, fiscal_residency, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, updated_at)
-          VALUES (?, ?, 'FR', ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-          ON CONFLICT(user_id, year) DO UPDATE SET
-            fiscal_residency = COALESCE(excluded.fiscal_residency, fiscal_residency),
+    sql: `INSERT INTO fiscal_data
+            (user_id, year, fiscal_residency, revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, updated_at)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+          ON CONFLICT(user_id, year, fiscal_residency) DO UPDATE SET
             revenu_brut_global = excluded.revenu_brut_global,
             revenu_imposable = excluded.revenu_imposable,
             parts_fiscales = excluded.parts_fiscales,
@@ -126,72 +93,70 @@ router.post('/api/fiscal/upload', async (c) => {
             breakdown_dividendes = excluded.breakdown_dividendes,
             breakdown_revenus_fonciers = excluded.breakdown_revenus_fonciers,
             updated_at = datetime('now')`,
-    args: [userId, year, revenuBrutGlobal ?? null, revenuImposable ?? null, partsFiscales ?? 1, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers]
+    args: [userId, year, country, revenuBrutGlobal ?? null, revenuImposable ?? null, partsFiscales ?? 1, tauxMarginal ?? null, tauxMoyen ?? null, breakdownSalaries, breakdownLmnp, breakdownDividendes, breakdownRevenusFonciers],
   });
 
-  // Fetch the stored record
   const result = await db.execute({
-    sql: 'SELECT * FROM fiscal_data WHERE user_id = ? AND year = ?',
-    args: [userId, year]
+    sql: 'SELECT * FROM fiscal_data WHERE user_id = ? AND year = ? AND fiscal_residency = ?',
+    args: [userId, year, country],
   });
-
-  // PDF is NOT stored - already discarded after parsing
   return c.json({ fiscalData: result.rows[0] });
 });
 
-// Update fiscal data (e.g., fiscal_residency)
-router.patch('/api/fiscal/:year', async (c) => {
+// Update fiscal data by id
+router.patch('/api/fiscal/:id', async (c) => {
   const userId = await getUserId(c);
-  const year = parseInt(c.req.param('year'));
+  const id = parseInt(c.req.param('id'));
   const body = await c.req.json();
 
-  if (!year) {
-    return c.json({ error: 'year is required' }, 400);
-  }
+  if (!id) return c.json({ error: 'id is required' }, 400);
 
-  // Build dynamic update
   const fields: string[] = [];
   const values: any[] = [];
-  
-  if (body.fiscal_residency !== undefined) {
-    fields.push('fiscal_residency = ?');
-    values.push(body.fiscal_residency);
+
+  const updatable: Record<string, string> = {
+    revenuBrutGlobal: 'revenu_brut_global',
+    revenuImposable: 'revenu_imposable',
+    partsFiscales: 'parts_fiscales',
+    tauxMarginal: 'taux_marginal',
+    tauxMoyen: 'taux_moyen',
+  };
+
+  for (const [key, col] of Object.entries(updatable)) {
+    if (body[key] !== undefined) {
+      fields.push(`${col} = ?`);
+      values.push(body[key]);
+    }
   }
-  
-  if (fields.length === 0) {
-    return c.json({ error: 'No fields to update' }, 400);
-  }
-  
+
+  if (fields.length === 0) return c.json({ error: 'No fields to update' }, 400);
+
   fields.push("updated_at = datetime('now')");
-  values.push(userId, year);
+  values.push(userId, id);
 
   await db.execute({
-    sql: `UPDATE fiscal_data SET ${fields.join(', ')} WHERE user_id = ? AND year = ?`,
-    args: values
+    sql: `UPDATE fiscal_data SET ${fields.join(', ')} WHERE user_id = ? AND id = ?`,
+    args: values,
   });
 
   const result = await db.execute({
-    sql: 'SELECT * FROM fiscal_data WHERE user_id = ? AND year = ?',
-    args: [userId, year]
+    sql: 'SELECT * FROM fiscal_data WHERE user_id = ? AND id = ?',
+    args: [userId, id],
   });
-
   return c.json({ fiscalData: result.rows[0] });
 });
 
-// Delete fiscal data
-router.delete('/api/fiscal/:year', async (c) => {
+// Delete fiscal data by id
+router.delete('/api/fiscal/:id', async (c) => {
   const userId = await getUserId(c);
-  const year = parseInt(c.req.param('year'));
+  const id = parseInt(c.req.param('id'));
 
-  if (!year) {
-    return c.json({ error: 'year is required' }, 400);
-  }
+  if (!id) return c.json({ error: 'id is required' }, 400);
 
   await db.execute({
-    sql: 'DELETE FROM fiscal_data WHERE user_id = ? AND year = ?',
-    args: [userId, year]
+    sql: 'DELETE FROM fiscal_data WHERE user_id = ? AND id = ?',
+    args: [userId, id],
   });
-
   return c.json({ success: true });
 });
 
@@ -199,70 +164,42 @@ router.delete('/api/fiscal/:year', async (c) => {
 
 router.get('/api/fiscal/eligibilities', async (c) => {
   const userId = await getUserId(c);
+  const idParam = c.req.query('id');
 
-  // Get latest fiscal data
-  const result = await db.execute({
-    sql: 'SELECT * FROM fiscal_data WHERE user_id = ? ORDER BY year DESC LIMIT 1',
-    args: [userId]
-  });
-
-  if (result.rows.length === 0) {
-    return c.json({ eligibilities: [], message: 'No fiscal data available' });
+  let fiscal: any;
+  if (idParam) {
+    const result = await db.execute({
+      sql: 'SELECT * FROM fiscal_data WHERE user_id = ? AND id = ?',
+      args: [userId, parseInt(idParam)],
+    });
+    fiscal = result.rows[0];
+  } else {
+    const result = await db.execute({
+      sql: 'SELECT * FROM fiscal_data WHERE user_id = ? ORDER BY year DESC LIMIT 1',
+      args: [userId],
+    });
+    fiscal = result.rows[0];
   }
 
-  const fiscal = result.rows[0] as any;
+  if (!fiscal) return c.json({ eligibilities: [], message: 'No fiscal data available' });
+
   const revenuImposable = fiscal.revenu_imposable || 0;
   const partsFiscales = fiscal.parts_fiscales || 1;
-
-  // Calculate revenue per part (for eligibility thresholds)
   const revenuParPart = partsFiscales > 0 ? revenuImposable / partsFiscales : revenuImposable;
-
   const eligibilities: any[] = [];
 
-  // Prime d'activité (activity bonus) - income threshold
-  // For 2024: ~€2,300/month per part for single person, varies by composition
-  // Simplified: check if revenu imposable per part is below threshold
-  const primeActiviteThreshold = 28000; // ~€2,333/month x 12
+  const primeActiviteThreshold = 28000;
   if (revenuParPart < primeActiviteThreshold) {
-    // Estimate: up to ~€1,000/month depending on composition
     const estimated = Math.max(0, Math.min(1000, (primeActiviteThreshold - revenuParPart) / 30));
-    eligibilities.push({
-      name: 'Prime d\'activité',
-      description: 'Bonus for low-to-medium income workers',
-      eligible: true,
-      estimatedAmount: Math.round(estimated),
-      frequency: 'monthly',
-      conditions: 'Working, income below threshold, French resident'
-    });
+    eligibilities.push({ name: "Prime d'activité", description: 'Bonus for low-to-medium income workers', eligible: true, estimatedAmount: Math.round(estimated), frequency: 'monthly', conditions: 'Working, income below threshold, French resident' });
   }
 
-  // MaPrimeRénov - home renovation grant
-  // Income-based, depends on household composition
-  // For 2024: income brackets vary by zone
-  const maprimerenovThreshold = 30000; // Simplified threshold
-  if (revenuParPart < maprimerenovThreshold) {
-    eligibilities.push({
-      name: 'MaPrimeRénov',
-      description: 'Government grant for home energy renovation',
-      eligible: true,
-      estimatedAmount: null, // Highly variable - depends on work type
-      frequency: 'one-time',
-      conditions: 'Owner-occupied residence, energy work by certified professional'
-    });
+  if (revenuParPart < 30000) {
+    eligibilities.push({ name: 'MaPrimeRénov', description: 'Government grant for home energy renovation', eligible: true, estimatedAmount: null, frequency: 'one-time', conditions: 'Owner-occupied residence, energy work by certified professional' });
   }
 
-  // APL (Aide Personnalisée au Logement) - housing allowance
-  // Income-based, depends on rent and location
-  const aplThreshold = 35000;
-  if (revenuParPart < aplThreshold && revenuImposable > 0) {
-    eligibilities.push({
-      name: 'APL',
-      description: 'Personalized housing allowance',
-      eligible: true,
-      estimatedAmount: null, // Depends on rent, zone, family composition
-      frequency: 'monthly',
-      conditions: 'Tenant in France, rent below ceiling, income below threshold'
-    });
+  if (revenuParPart < 35000 && revenuImposable > 0) {
+    eligibilities.push({ name: 'APL', description: 'Personalized housing allowance', eligible: true, estimatedAmount: null, frequency: 'monthly', conditions: 'Tenant in France, rent below ceiling, income below threshold' });
   }
 
   return c.json({ eligibilities, fiscalYear: fiscal.year });
@@ -272,69 +209,49 @@ router.get('/api/fiscal/eligibilities', async (c) => {
 
 async function extractFiscalFromPDF(file: File): Promise<{
   year: number | null;
+  country: string | null;
   revenuBrutGlobal: number | null;
   revenuImposable: number | null;
   partsFiscales: number | null;
   tauxMarginal: number | null;
   tauxMoyen: number | null;
-  breakdown: {
-    salaries: number | null;
-    lmnp: number | null;
-    dividendes: number | null;
-    revenusFonciers: number | null;
-  } | null;
+  breakdown: { salaries: number | null; lmnp: number | null; dividendes: number | null; revenusFonciers: number | null } | null;
 }> {
-  console.log('extractFiscalFromPDF called');
-  // Save uploaded file to temp location
   const tmpDir = '/tmp';
   const extId = Math.random().toString(36).substring(7);
   const tmpPath = `${tmpDir}/fiscal_${extId}.pdf`;
-  
+
   const fileBuffer = await file.arrayBuffer();
   const fs = await import('fs');
   fs.writeFileSync(tmpPath, Buffer.from(fileBuffer));
-  
-  // Parse using external script (runs in regular Node, not Cloudflare context)
+
   const { spawn } = await import('child_process');
-  
+
   return new Promise((resolve) => {
-    console.log('About to spawn child process for PDF parsing');
-    const child = spawn('node', [
-      '/home/jndoye/shared/projects/konto/backend/scripts/parse-fiscal-pdf.cjs',
-      tmpPath
-    ]);
-    
+    const child = spawn('node', ['/home/jndoye/shared/projects/konto/backend/scripts/parse-fiscal-pdf.cjs', tmpPath]);
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d) => { stdout += d.toString(); });
     child.stderr.on('data', (d) => { stderr += d.toString(); });
     child.on('close', (code) => {
-      // Clean up temp file
       try { fs.unlinkSync(tmpPath); } catch {}
-      
       console.log('PDF parse result:', code, stdout, stderr);
-      
+
       if (code !== 0 || !stdout.trim()) {
-        resolve({
-          year: null,
-          revenuBrutGlobal: null,
-          revenuImposable: null,
-          partsFiscales: null,
-          tauxMarginal: null,
-          tauxMoyen: null,
-          breakdown: null
-        });
+        resolve({ year: null, country: null, revenuBrutGlobal: null, revenuImposable: null, partsFiscales: null, tauxMarginal: null, tauxMoyen: null, breakdown: null });
         return;
       }
-      
+
       try {
-        // Warnings go to stdout too — extract only the JSON line
         const jsonLine = stdout.trim().split('\n').find(l => l.trim().startsWith('{'));
         if (!jsonLine) throw new Error('No JSON in output');
         const parsed = JSON.parse(jsonLine);
-        console.log('Parsed fiscal data:', JSON.stringify(parsed));
-        const result = {
+        // Detect country from PDF content (CH keywords = Switzerland, else FR)
+        const rawText = (stdout + stderr).toLowerCase();
+        const detectedCountry = rawText.includes('lohnausweis') || rawText.includes('impôt à la source') || rawText.includes('salaire brut chf') ? 'CH' : 'FR';
+        resolve({
           year: parsed.year || null,
+          country: detectedCountry,
           revenuBrutGlobal: parsed.revenuBrutGlobal,
           revenuImposable: parsed.revenuImposable,
           partsFiscales: parsed.partsFiscales,
@@ -344,21 +261,11 @@ async function extractFiscalFromPDF(file: File): Promise<{
             salaries: parsed.salaries,
             lmnp: parsed.lmnp,
             dividendes: null,
-            revenusFonciers: parsed.revenusFonciers
-          } : null
-        };
-        console.log('Returning result:', JSON.stringify(result));
-        resolve(result);
-      } catch {
-        resolve({
-          year: null,
-          revenuBrutGlobal: null,
-          revenuImposable: null,
-          partsFiscales: null,
-          tauxMarginal: null,
-          tauxMoyen: null,
-          breakdown: null
+            revenusFonciers: parsed.revenusFonciers,
+          } : null,
         });
+      } catch {
+        resolve({ year: null, country: null, revenuBrutGlobal: null, revenuImposable: null, partsFiscales: null, tauxMarginal: null, tauxMoyen: null, breakdown: null });
       }
     });
   });
