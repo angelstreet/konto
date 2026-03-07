@@ -283,18 +283,45 @@ router.post('/api/bank/sync', async (c) => {
         const storedBankName = meta.bankName || null;
         const accType = classifyAccountType(acc.type, acc.name || acc.original_name || '');
         const existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE provider_account_id = ?', args: [String(acc.id)] });
+        let bankAccountId: number;
         if (existing.rows.length > 0) {
           const full = await db.execute({ sql: 'SELECT company_id FROM bank_accounts WHERE id = ?', args: [existing.rows[0].id as number] });
           const row = full.rows[0] as any;
+          bankAccountId = existing.rows[0].id as number;
           await db.execute({
             sql: 'UPDATE bank_accounts SET provider_bank_id = ?, provider_bank_name = COALESCE(?, provider_bank_name), name = ?, bank_name = COALESCE(?, bank_name), account_number = COALESCE(?, account_number), iban = COALESCE(?, iban), balance = ?, last_sync = ?, type = ?, usage = ?, subtype = ? WHERE id = ?',
-            args: [meta.bankId, meta.bankName, acc.name || acc.original_name || 'Account', storedBankName, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, new Date().toISOString(), accType, classifyAccountUsage(acc.usage, row?.company_id || null), classifyAccountSubtype(accType, 'powens', acc.name || acc.original_name || ''), existing.rows[0].id as number]
+            args: [meta.bankId, meta.bankName, acc.name || acc.original_name || 'Account', storedBankName, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, new Date().toISOString(), accType, classifyAccountUsage(acc.usage, row?.company_id || null), classifyAccountSubtype(accType, 'powens', acc.name || acc.original_name || ''), bankAccountId]
           });
         } else {
-          await db.execute({
+          const ins = await db.execute({
             sql: 'INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, provider_bank_id, provider_bank_name, name, bank_name, account_number, iban, balance, last_sync, type, usage, subtype) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             args: [userId, null, 'powens', String(acc.id), meta.bankId, meta.bankName, acc.name || acc.original_name || 'Account', storedBankName, acc.number || acc.webid || null, acc.iban || null, acc.balance || 0, new Date().toISOString(), accType, classifyAccountUsage(acc.usage, null), classifyAccountSubtype(accType, 'powens', acc.name || acc.original_name || '')]
           });
+          bankAccountId = Number(ins.lastInsertRowid);
+        }
+        // Extract loan fields from Powens for loan accounts
+        if (accType === 'loan') {
+          const startDate = acc.opening_date ? acc.opening_date.slice(0, 10) : null;
+          const endDate = acc.maturity_date ? acc.maturity_date.slice(0, 10) : null;
+          const rate = acc.rate != null ? Number(acc.rate) : null;
+          const principal = acc.total_amount != null ? Math.abs(Number(acc.total_amount)) : null;
+          const monthlyPayment = acc.next_payment_amount != null ? Math.abs(Number(acc.next_payment_amount)) : null;
+          if (startDate || endDate || rate || principal || monthlyPayment) {
+            await db.execute({
+              sql: `INSERT INTO loan_details (user_id, bank_account_id, loan_type, principal_amount, start_date, end_date, interest_rate, monthly_payment, source, updated_at)
+                    VALUES (?, ?, 'amortizing', ?, ?, ?, ?, ?, 'powens', datetime('now'))
+                    ON CONFLICT(bank_account_id) DO UPDATE SET
+                      principal_amount = COALESCE(?, loan_details.principal_amount),
+                      start_date = COALESCE(?, loan_details.start_date),
+                      end_date = COALESCE(?, loan_details.end_date),
+                      interest_rate = COALESCE(?, loan_details.interest_rate),
+                      monthly_payment = COALESCE(?, loan_details.monthly_payment),
+                      source = CASE WHEN loan_details.source = 'manual' THEN 'manual' ELSE 'powens' END,
+                      updated_at = datetime('now')`,
+              args: [userId, bankAccountId, principal, startDate, endDate, rate, monthlyPayment,
+                     principal, startDate, endDate, rate, monthlyPayment]
+            });
+          }
         }
         totalSynced++;
       }
@@ -493,7 +520,7 @@ router.post('/api/bank/accounts/:id/sync', async (c) => {
   }
 
   try {
-    // Also update balance from Powens account data
+    // Also update balance + loan details from Powens account data
     try {
       const accDataRes = await fetch(`${POWENS_API}/users/me/accounts/${account.provider_account_id}`, {
         headers: { 'Authorization': `Bearer ${connectionToken}` },
@@ -505,6 +532,34 @@ router.post('/api/bank/accounts/:id/sync', async (c) => {
             sql: 'UPDATE bank_accounts SET balance = ? WHERE id = ?',
             args: [accData.balance, account.id]
           });
+        }
+        // Extract loan-specific fields Powens provides for loan accounts
+        if (account.type === 'loan') {
+          const startDate = accData.opening_date ? accData.opening_date.slice(0, 10) : null;
+          const endDate = accData.maturity_date ? accData.maturity_date.slice(0, 10) : null;
+          const rate = accData.rate != null ? Number(accData.rate) : null;
+          const principal = accData.total_amount != null ? Math.abs(Number(accData.total_amount)) : null;
+          const monthlyPayment = accData.next_payment_amount != null ? Math.abs(Number(accData.next_payment_amount)) : null;
+          const hasAnyField = startDate || endDate || rate || principal || monthlyPayment;
+          if (hasAnyField) {
+            console.log(`Loan ${account.id} Powens fields: start=${startDate} end=${endDate} rate=${rate} principal=${principal} payment=${monthlyPayment}`);
+            await db.execute({
+              sql: `INSERT INTO loan_details (user_id, bank_account_id, loan_type, principal_amount, start_date, end_date, interest_rate, monthly_payment, source, updated_at)
+                    VALUES (?, ?, 'amortizing', ?, ?, ?, ?, ?, 'powens', datetime('now'))
+                    ON CONFLICT(bank_account_id) DO UPDATE SET
+                      principal_amount = COALESCE(?, loan_details.principal_amount),
+                      start_date = COALESCE(?, loan_details.start_date),
+                      end_date = COALESCE(?, loan_details.end_date),
+                      interest_rate = COALESCE(?, loan_details.interest_rate),
+                      monthly_payment = COALESCE(?, loan_details.monthly_payment),
+                      source = CASE WHEN loan_details.source = 'manual' THEN 'manual' ELSE 'powens' END,
+                      updated_at = datetime('now')`,
+              args: [
+                account.user_id, account.id, principal, startDate, endDate, rate, monthlyPayment,
+                principal, startDate, endDate, rate, monthlyPayment
+              ]
+            });
+          }
         }
       }
     } catch {}
