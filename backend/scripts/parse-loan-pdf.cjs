@@ -76,36 +76,49 @@ async function parseLoanPDF(filePath) {
     startDate = `${firstDateMatch[3]}-${firstDateMatch[2]}-${firstDateMatch[1]}`;
   }
 
-  // Extract monthly payment - find "2121,49" pattern (the total payment)
-  const payments = allText.match(/[12]\d{3},\d{2}/g);
+  // Extract monthly payment — find the most repeated decimal value in 200-5000 range in the schedule
+  // Use scheduleText and require word boundary to avoid matching substrings of larger numbers (e.g. 172720)
   let monthlyPayment = null;
-  if (payments) {
-    // Filter for values around 2000-3000
-    const valid = payments.map(p => parseFloat(p.replace(',', '.'))).filter(v => v > 1500 && v < 3000);
-    monthlyPayment = valid[0]; // First occurrence
+  let monthlyPaymentStr = null;
+  const allPaymentCandidates = scheduleText.match(/\b\d{3,4},\d{2}\b/g) || [];
+  if (allPaymentCandidates.length) {
+    const freq = {};
+    for (const v of allPaymentCandidates) {
+      const n = parseFloat(v.replace(',', '.'));
+      if (n > 200 && n < 5000) freq[v] = (freq[v] || 0) + 1;
+    }
+    // Pick the most frequent — it's the monthly total (repeats once per row)
+    const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+    // Prefer values > 300 to avoid insurance being picked as payment
+    const best = sorted.find(([v]) => parseFloat(v.replace(',', '.')) > 300);
+    if (best) {
+      monthlyPayment = parseFloat(best[0].replace(',', '.'));
+      monthlyPaymentStr = best[0]; // raw string from PDF (e.g. "785,79")
+    }
   }
 
   // Extract insurance — in each row: "... Capital  Intérêts  Assurance  TotalÉchéance"
   // Pattern: small value (30-150) immediately before the monthly total payment
   let insuranceMonthly = null;
-  if (monthlyPayment) {
-    const totalStr = monthlyPayment.toFixed(2).replace('.', ',');
-    // Find all occurrences of "XX,XX <totalPayment>" where XX,XX is insurance
-    const insRe = new RegExp(`(\\d{2,3},\\d{2})\\s+${totalStr.replace('.', '\\.')}`, 'g');
-    const insMatches = [...allText.matchAll(insRe)];
+  if (monthlyPayment && monthlyPaymentStr) {
+    // Use raw PDF string to avoid floating-point mismatch (e.g. 785,79 vs 785,80)
+    const escapedTotal = monthlyPaymentStr.replace(',', '\\,');
+    // Find all occurrences of "X,XX <totalPayment>" where X,XX is insurance (1-3 digits before comma)
+    const insRe = new RegExp(`(\\d{1,3},\\d{2})\\s+${escapedTotal}`, 'g');
+    const insMatches = [...scheduleText.matchAll(insRe)];
     if (insMatches.length > 0) {
       const val = parseFloat(insMatches[0][1].replace(',', '.'));
-      if (val > 10 && val < 200) insuranceMonthly = val;
+      if (val > 5 && val < 200) insuranceMonthly = val;
     }
   }
   // Fallback: look for a consistent small decimal appearing multiple times before a ~2000€ payment
   if (!insuranceMonthly) {
-    const smallDecimals = allText.match(/\b(\d{2},\d{2})\b/g);
+    const smallDecimals = scheduleText.match(/\b(\d{1,3},\d{2})\b/g);
     if (smallDecimals) {
       const freq = {};
       for (const v of smallDecimals) { freq[v] = (freq[v] || 0) + 1; }
       const candidates = Object.entries(freq)
-        .filter(([v, c]) => c >= 3 && parseFloat(v.replace(',', '.')) > 10 && parseFloat(v.replace(',', '.')) < 200)
+        .filter(([v, c]) => c >= 3 && parseFloat(v.replace(',', '.')) > 5 && parseFloat(v.replace(',', '.')) < 200)
         .sort((a, b) => b[1] - a[1]);
       if (candidates.length) insuranceMonthly = parseFloat(candidates[0][0].replace(',', '.'));
     }
@@ -114,16 +127,20 @@ async function parseLoanPDF(filePath) {
   // Count installments paid — count "Échéance" rows in "Récapitulatif des évènements passés"
   // The past section ends at "Échéances à venir" marker
   let installmentsPaid = null;
-  const pastSection = scheduleText.split(/[EÉ]ch[eé]ances?\s+[àa]\s+venir/i)[0];
+  const schedParts = scheduleText.split(/[EÉ]ch[eé]ances?\s+[àa]\s+venir/i);
+  const pastSection = schedParts.length > 1 ? schedParts[0] : null;
   if (pastSection) {
     // Count rows with a date + "Échéance" (not "Impayé", "Remboursement", "accessoire", "singulier")
     const paidRows = pastSection.match(/\d{2}\/\d{2}\/\d{4}\s+[EÉ]ch[eé]ance\b(?!\s+accessoire)(?!\s+singulier)/gi);
-    if (paidRows) installmentsPaid = paidRows.length;
+    installmentsPaid = paidRows ? paidRows.length : 0;
+  } else {
+    // No past section — future-only schedule, 0 payments made
+    installmentsPaid = 0;
   }
 
   // Extract end date - look for last payment date in schedule (format: DD/MM/YYYY)
   // End date — last Échéance date in the "Échéances à venir" section
-  const futureSection = scheduleText.split(/[EÉ]ch[eé]ances?\s+[àa]\s+venir/i)[1] || scheduleText;
+  const futureSection = schedParts[1] || scheduleText;
   const futureDates = futureSection.match(/\d{2}\/\d{2}\/\d{4}/g);
   let endDate = null;
   if (futureDates && futureDates.length > 0) {
