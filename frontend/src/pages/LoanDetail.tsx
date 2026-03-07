@@ -189,10 +189,7 @@ export default function LoanDetail() {
             <div className="text-xs text-muted uppercase">{t('loan_monthly') || 'Mensualité'}</div>
             <div className="text-3xl mt-1">{data.loan.monthly_payment != null ? fc(data.loan.monthly_payment) : (t('loan_no_data') || 'Pas de données')}</div>
             <div className="mt-3 space-y-1 text-sm">
-              <div className="flex justify-between"><span className="text-muted">{t('loan_capital') || 'Capital'}</span><span>{fc(data.monthly_breakdown.capital)}</span></div>
-              <div className="flex justify-between"><span className="text-muted">{t('loan_interest') || 'Intérêts'}</span><span>{fc(data.monthly_breakdown.interest)}</span></div>
-              <div className="flex justify-between"><span className="text-muted">{t('loan_insurance') || 'Assurance'}</span><span>{fc(data.monthly_breakdown.insurance)}</span></div>
-              <div className="flex justify-between pt-2 border-t border-border"><span className="text-muted">{t('loan_installments_paid') || 'Échéances payées'}</span><span>{data.loan.installments_paid ?? '-'}</span></div>
+              <div className="flex justify-between"><span className="text-muted">{t('loan_installments_paid') || 'Échéances payées'}</span><span>{data.loan.installments_paid ?? '-'}</span></div>
               <div className="flex justify-between"><span className="text-muted">{t('loan_installments_left') || 'Échéances restantes'}</span><span>{data.loan.installments_left ?? '-'}</span></div>
               <div className="flex justify-between"><span className="text-muted">{t('loan_end_date') || 'Date de fin'}</span><span>{data.loan.end_date || '-'}</span></div>
             </div>
@@ -220,9 +217,6 @@ export default function LoanDetail() {
       {(tab === 'monthly' || window.innerWidth >= 768) && (
         <div className="md:hidden bg-surface rounded-xl border border-border p-4 mb-3">
           <div className="text-xs text-muted uppercase mb-2">{t('loan_monthly') || 'Mensualité'}</div>
-          <div className="text-sm text-muted">{t('loan_capital') || 'Capital'}: {fc(data.monthly_breakdown.capital)}</div>
-          <div className="text-sm text-muted">{t('loan_interest') || 'Intérêts'}: {fc(data.monthly_breakdown.interest)}</div>
-          <div className="text-sm text-muted mb-2">{t('loan_insurance') || 'Assurance'}: {fc(data.monthly_breakdown.insurance)}</div>
           <div className="text-sm text-muted">{t('loan_installments_paid') || 'Échéances payées'}: {data.loan.installments_paid ?? '-'}</div>
           <div className="text-sm text-muted">{t('loan_installments_left') || 'Échéances restantes'}: {data.loan.installments_left ?? '-'}</div>
           <div className="text-sm text-muted">{t('loan_end_date') || 'Date de fin'}: {data.loan.end_date || '-'}</div>
