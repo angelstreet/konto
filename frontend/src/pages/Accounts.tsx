@@ -1,6 +1,6 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
-import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign, MoreVertical, Search, AlertTriangle, Upload, FileText, ChevronDown } from 'lucide-react';
+import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign, MoreVertical, Search, AlertTriangle, Upload, FileText } from 'lucide-react';
 import { useState, useRef, useMemo } from 'react';
 import { useApi } from '../useApi';
 import { useFilter } from '../FilterContext';
@@ -111,7 +111,6 @@ export default function Accounts() {
   const [filterCrypto, setFilterCrypto] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [overflowMenuId, setOverflowMenuId] = useState<number | null>(null);
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
 
   // Add account state
   const [addMode, setAddMode] = useState<AddMode>(null);
@@ -1102,59 +1101,7 @@ export default function Accounts() {
         </div>
       ) : (
         <div className="space-y-2 sm:space-y-3">
-          {(() => {
-            // Group accounts by bank_name; accounts without a bank_name are their own group
-            const groups: { key: string; bankName: string | null; accs: typeof filteredAccounts }[] = [];
-            const bankMap = new Map<string, typeof filteredAccounts>();
-            for (const acc of filteredAccounts) {
-              if (acc.bank_name) {
-                if (!bankMap.has(acc.bank_name)) bankMap.set(acc.bank_name, []);
-                bankMap.get(acc.bank_name)!.push(acc);
-              } else {
-                groups.push({ key: `solo-${acc.id}`, bankName: null, accs: [acc] });
-              }
-            }
-            // Insert bank groups in the position of their first account
-            const seen = new Set<string>();
-            const ordered: typeof groups = [];
-            for (const acc of filteredAccounts) {
-              if (acc.bank_name && !seen.has(acc.bank_name)) {
-                seen.add(acc.bank_name);
-                ordered.push({ key: acc.bank_name, bankName: acc.bank_name, accs: bankMap.get(acc.bank_name)! });
-              } else if (!acc.bank_name) {
-                const g = groups.find(g => g.accs[0].id === acc.id);
-                if (g) ordered.push(g);
-              }
-            }
-            return ordered.map(group => {
-              const isGrouped = group.accs.length > 1;
-              const isCollapsed = collapsedGroups.has(group.key);
-              const groupTotal = group.accs.filter(a => !a.hidden).reduce((s, a) => s + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0);
-              return (
-                <div key={group.key}>
-                  {/* Group header (only for 2+ accounts with same bank) */}
-                  {isGrouped && (
-                    <button
-                      onClick={() => setCollapsedGroups(prev => { const s = new Set(prev); s.has(group.key) ? s.delete(group.key) : s.add(group.key); return s; })}
-                      className="w-full flex items-center justify-between px-3 py-2 mb-1 rounded-xl bg-white/5 hover:bg-white/8 transition-colors"
-                    >
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm">🏦</span>
-                        <span className="font-medium text-sm">{group.bankName}</span>
-                        <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-white/10 text-muted">{group.accs.length}</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-semibold text-accent-400">
-                          {allBalancesHidden ? <span className="amount-masked">{formatBalance(groupTotal)}</span> : formatBalance(groupTotal)}
-                        </span>
-                        <ChevronDown size={14} className={`text-muted transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
-                      </div>
-                    </button>
-                  )}
-                  {/* Individual account rows */}
-                  {(!isGrouped || !isCollapsed) && (
-                    <div className={`space-y-2 sm:space-y-3 ${isGrouped ? 'pl-3' : ''}`}>
-                      {group.accs.map(acc => {
+          {filteredAccounts.map(acc => {
             const prov = providerBadge(acc.provider);
             const { text: syncText, isStale } = getRelativeTime(acc.last_sync, t);
             return (
@@ -1348,12 +1295,6 @@ export default function Accounts() {
               </div>
             );
           })}
-                    </div>
-                  )}
-                </div>
-              );
-            });
-          })()}
         </div>
       )}
       <ConfirmDialog
