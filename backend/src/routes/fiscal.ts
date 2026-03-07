@@ -255,9 +255,12 @@ async function extractFiscalFromPDF(file: File): Promise<{
         const jsonLine = stdout.trim().split('\n').find(l => l.trim().startsWith('{'));
         if (!jsonLine) throw new Error('No JSON in output');
         const parsed = JSON.parse(jsonLine);
-        // Detect country from PDF content (CH keywords = Switzerland, else FR)
+        // Use country from parser (pays field) or detect from keywords
         const rawText = (stdout + stderr).toLowerCase();
-        const detectedCountry = rawText.includes('lohnausweis') || rawText.includes('impôt à la source') || rawText.includes('salaire brut chf') ? 'CH' : 'FR';
+        const detectedCountry = parsed.pays === 'CH' ? 'CH-ZH'
+          : rawText.includes('kanton') || rawText.includes('steuererklärung') || rawText.includes('ahvn') ? 'CH-ZH'
+          : rawText.includes('lohnausweis') || rawText.includes('impôt à la source') ? 'CH'
+          : 'FR';
         resolve({
           year: parsed.year || null,
           country: detectedCountry,
