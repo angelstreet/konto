@@ -81,12 +81,12 @@ router.get('/api/bank-callback', async (c) => {
   const error = c.req.query('error');
 
   if (error) {
-    return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">Connection failed</h1><p>${error}</p>
       <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
   }
   if (!code) {
-    return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">No code received</h1>
       <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
   }
@@ -237,7 +237,7 @@ router.get('/api/bank-callback', async (c) => {
       console.error('Failed to fetch accounts:', e);
     }
 
-    return c.html(`<html><head><meta http-equiv="refresh" content="15;url=/konto/accounts"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"><meta http-equiv="refresh" content="15;url=/konto/accounts"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#d4a812;">✅ Bank connected!</h1><p>${accounts.length} account(s) synced.</p>
       <p style="color:#888;font-size:14px;">Redirecting in <span id="t">15</span>s...</p>
       <a href="/konto/accounts" style="color:#d4a812;font-size:18px;">← Back to Konto</a>
@@ -245,7 +245,7 @@ router.get('/api/bank-callback', async (c) => {
     </body></html>`);
   } catch (err: any) {
     console.error('Powens callback error:', err);
-    return c.html(`<html><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">Error</h1><p>${err.message}</p>
       <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
   }
