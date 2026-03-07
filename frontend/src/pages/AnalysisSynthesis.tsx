@@ -1,7 +1,17 @@
+import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import AnalysisCard from '../components/AnalysisCard';
+import { useAuthFetch } from '../useApi';
+import { API } from '../config';
 
-// Mock data — wire up to GET /api/analysis/summary?usage=personal|professional when backend is ready
+function getTier(pct: number): string {
+  if (pct >= 90) return 'Tier S';
+  if (pct >= 75) return 'Tier A';
+  if (pct >= 50) return 'Tier B';
+  if (pct >= 25) return 'Tier C';
+  return 'Tier D';
+}
+
 const mockData = {
   personal: {
     budget: { metric: '2 340 €/mois', subtitle: 'Dépenses ce mois' },
@@ -9,7 +19,6 @@ const mockData = {
     cashflow: { metric: '+620 €', subtitle: 'Net du mois en cours' },
     bilan: { metric: '148 200 €', subtitle: 'Patrimoine net' },
     trends: { metric: '+4,2 %', subtitle: 'vs mois précédent' },
-    ranking: { metric: '#847 · Tier B', subtitle: 'Top 23% des utilisateurs' },
     income: { metric: '340 €/mois', subtitle: 'Revenus passifs estimés' },
     simulators: { metric: '+89 400 €', subtitle: 'Projection à 10 ans' },
   },
@@ -19,7 +28,6 @@ const mockData = {
     cashflow: { metric: '+3 200 €', subtitle: 'Trésorerie nette du mois' },
     bilan: { metric: '62 500 €', subtitle: 'Capitaux propres' },
     trends: { metric: '+11,8 %', subtitle: 'CA vs mois précédent' },
-    ranking: { metric: '#124 · Tier A', subtitle: 'Top 8% des entreprises' },
     income: { metric: '1 200 €/mois', subtitle: 'Revenus récurrents' },
     simulators: { metric: '+215 000 €', subtitle: 'Projection à 10 ans' },
   },
@@ -144,10 +152,30 @@ function GrowthCurve() {
 
 export default function AnalysisSynthesis() {
   const location = useLocation();
+  const authFetch = useAuthFetch();
   const isProScope = location.pathname.includes('/pro');
   const scope = isProScope ? 'professional' : 'personal';
   const data = mockData[scope];
   const scopeLabel = isProScope ? 'Pro' : 'Perso';
+
+  const [rankingMetric, setRankingMetric] = useState<string>('—');
+  const [rankingSubtitle, setRankingSubtitle] = useState<string>('Classement mondial');
+  const [rankingPct, setRankingPct] = useState<number>(50);
+
+  useEffect(() => {
+    authFetch(`${API}/ranking?scope=world`)
+      .then(r => r.json())
+      .then((d: any) => {
+        if (!d.available) return;
+        const { net_worth = 0, income = 0, savings_rate = 0 } = d.percentiles;
+        const avg = Math.round((net_worth + income + savings_rate) / 3);
+        const top = 100 - avg;
+        setRankingPct(avg);
+        setRankingMetric(`${getTier(avg)} · Top ${top}%`);
+        setRankingSubtitle(`Patrimoine · Revenus · Épargne`);
+      })
+      .catch(() => {});
+  }, [authFetch]);
 
   return (
     <div className="space-y-4">
@@ -182,8 +210,8 @@ export default function AnalysisSynthesis() {
           <Sparkline />
         </AnalysisCard>
 
-        <AnalysisCard icon="🏆" title="Classement" metric={data.ranking.metric} subtitle={data.ranking.subtitle} to="/ranking">
-          <PercentileBar value={77} />
+        <AnalysisCard icon="🏆" title="Classement" metric={rankingMetric} subtitle={rankingSubtitle} to="/ranking">
+          <PercentileBar value={rankingPct} />
         </AnalysisCard>
 
         {/* Row 3 */}
