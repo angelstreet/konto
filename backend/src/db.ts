@@ -651,6 +651,13 @@ export async function migrateDatabase() {
       UNIQUE(user_id, bank_account_id, milestone)
     )
   `);
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS oauth_states (
+      state TEXT PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
 }
 
 // Find or create user by Clerk ID. On first login, migrates existing user_id=1 data.
