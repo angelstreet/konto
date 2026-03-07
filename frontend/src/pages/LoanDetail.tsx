@@ -21,6 +21,7 @@ type LoanDetailResponse = {
     installments_left: number | null;
     start_date: string | null;
     end_date: string | null;
+    duration_months: number | null;
   };
   monthly_breakdown: {
     capital: number | null;
@@ -207,7 +208,8 @@ export default function LoanDetail() {
               <div className="flex justify-between pt-2 border-t border-border"><span className="text-muted">{t('loan_total_repaid') || 'Total remboursé'}</span><span>{fc(data.totals.repaid_total)}</span></div>
               <div className="flex justify-between"><span className="text-muted">{t('loan_remaining_total') || 'Reste à rembourser'}</span><span>{fc(data.totals.remaining_to_repay)}</span></div>
               <div className="flex justify-between"><span className="text-muted">Reste %</span><span>{Math.round(data.totals.remaining_pct)} %</span></div>
-              {data.loan.start_date && <div className="flex justify-between pt-2 border-t border-border"><span className="text-muted">Date de début</span><span>{data.loan.start_date}</span></div>}
+              {data.loan.duration_months && <div className="flex justify-between pt-2 border-t border-border"><span className="text-muted">Durée</span><span>{Math.round(data.loan.duration_months / 12)} ans ({data.loan.duration_months} mois)</span></div>}
+              {data.loan.start_date && <div className={`flex justify-between${data.loan.duration_months ? '' : ' pt-2 border-t border-border'}`}><span className="text-muted">Date de début</span><span>{data.loan.start_date}</span></div>}
               {data.loan.end_date && <div className="flex justify-between"><span className="text-muted">{t('loan_end_date') || 'Date de fin'}</span><span>{data.loan.end_date}</span></div>}
             </div>
           </div>
