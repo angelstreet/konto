@@ -428,6 +428,7 @@
   "fiscal_subtitle": "Tax data and benefit eligibility",
   "upload_avis": "Import PDF",
   "fiscal_upload_success": "Tax data extracted successfully",
+  "fiscal_upload_partial": "PDF uploaded but some data could not be extracted. You can edit it manually.",
   "manual_entry": "Manual entry",
   "fiscal_data_entry": "Tax data entry",
   "tax_year": "Tax year",

@@ -428,6 +428,7 @@
   "fiscal_subtitle": "Données fiscales et éligibilité aux aides",
   "upload_avis": "Importer PDF",
   "fiscal_upload_success": "Données fiscales extraites avec succès",
+  "fiscal_upload_partial": "PDF importé mais certaines données n'ont pas pu être extraites. Vous pouvez les saisir manuellement.",
   "manual_entry": "Saisie manuelle",
   "fiscal_data_entry": "Saisie des données fiscales",
   "tax_year": "Année fiscale",
