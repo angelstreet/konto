@@ -275,10 +275,16 @@ function buildLoanComputed(raw: any, monthlyFallback: number | null) {
 
   const repaidCapital = principal !== null ? Math.max(0, principal - remaining) : null;
 
-  const installmentsPaid = n(raw.installments_paid)
-    ?? (durationMonths !== null && repaidCapital !== null && principal && principal > 0
+  // Infer installments paid from start_date when DB value is null or 0 (e.g. PDF generated before any payments)
+  const inferredFromDate = raw.start_date
+    ? Math.max(0, Math.floor((Date.now() - new Date(raw.start_date).getTime()) / (1000 * 60 * 60 * 24 * 30.4375)))
+    : null;
+  const storedInstallments = n(raw.installments_paid);
+  const installmentsPaid = (storedInstallments !== null && storedInstallments > 0)
+    ? storedInstallments
+    : (durationMonths !== null && repaidCapital !== null && principal && principal > 0
       ? Math.round(durationMonths * (repaidCapital / principal))
-      : null);
+      : inferredFromDate);
 
   const installmentsLeft = durationMonths !== null
     ? Math.max(0, Math.round(durationMonths - (installmentsPaid || 0)))
