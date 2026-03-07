@@ -1,9 +1,9 @@
 import { API } from '../config';
-import { useMemo, useState } from 'react';
+import { useMemo, useState, useRef } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
-import { ArrowLeft, GraduationCap } from 'lucide-react';
+import { ArrowLeft, GraduationCap, Upload } from 'lucide-react';
 import { useApi } from '../useApi';
 import { usePreferences } from '../PreferencesContext';
 import { useAmountVisibility } from '../AmountVisibilityContext';
@@ -62,8 +62,32 @@ export default function LoanDetail() {
   const { formatCurrency } = usePreferences();
   const { hideAmounts } = useAmountVisibility();
   const [tab, setTab] = useState<'summary' | 'monthly' | 'learn' | 'assets'>('summary');
+  const [uploading, setUploading] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
 
-  const { data, loading } = useApi<LoanDetailResponse>(`${API}/loans/${loanId}`);
+  const { data, loading, refetch } = useApi<LoanDetailResponse>(`${API}/loans/${loanId}`);
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`${API}/loans/${loanId}/enrich`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
+        body: formData,
+      });
+      if (res.ok) {
+        refetch();
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setUploading(false);
+    }
+  };
 
   const fc = (amount: number | null | undefined) => {
     const value = amount || 0;
@@ -80,9 +104,22 @@ export default function LoanDetail() {
 
   return (
     <div>
-      <div className="flex items-center gap-2 mb-2">
-        <button onClick={() => navigate('/loans')} className="p-2 rounded-lg hover:bg-surface"><ArrowLeft size={16} /></button>
-        <h1 className="text-xl font-semibold truncate">{data.loan.name}</h1>
+      <div className="flex items-center justify-between gap-2 mb-2">
+        <div className="flex items-center gap-2">
+          <button onClick={() => navigate('/loans')} className="p-2 rounded-lg hover:bg-surface"><ArrowLeft size={16} /></button>
+          <h1 className="text-xl font-semibold truncate">{data.loan.name}</h1>
+        </div>
+        <div>
+          <input type="file" ref={fileRef} onChange={handleFileUpload} accept=".pdf" className="hidden" />
+          <button 
+            onClick={() => fileRef.current?.click()} 
+            disabled={uploading}
+            className="px-3 py-1.5 text-sm bg-surface border border-border rounded-lg hover:bg-surface-2 flex items-center gap-2"
+          >
+            <Upload size={14} />
+            {uploading ? '...' : 'Import PDF'}
+          </button>
+        </div>
       </div>
       <div className="text-muted text-sm mb-1">{data.loan.type_label}</div>
       <div className="text-4xl font-semibold text-accent-400 mb-3">{fc(data.loan.remaining)}</div>
