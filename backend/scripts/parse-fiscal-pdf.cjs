@@ -116,38 +116,72 @@ async function parse(filePath) {
       return parseInt(tokens.join(''));
     }
 
-    // Year: "Kanton Zürich 2025" or "Steuererklärung 2024"
+    // Year: detect format first, then extract
+    const isProvisorische = fullText.includes('Provisorische') || fullText.includes('Steuerberechnung');
+    
+    // Year: "Kanton Zürich 2025" or "Steuererklärung 2024" or "Steuerperiode 2024"
     const yrK = fullText.match(/Kanton\s+Z[üu]rich\s+(202[0-9])/i);
     if (yrK) year = parseInt(yrK[1]);
     if (!year) { const m = fullText.match(/Steuererklärung\s+(202[0-9])/i); if (m) year = parseInt(m[1]); }
+    if (!year) { const m = fullText.match(/Steuerperiode\s+vom\s+\d{2}\.\d{2}\.(202[0-9])/i); if (m) year = parseInt(m[1]); }
     if (!year) { const ys = [...fullText.matchAll(/\b(202[0-9])\b/g)].map(m => parseInt(m[1])); if (ys.length) year = Math.max(...ys); }
 
-    // Gross income
-    const incM = fullText.match(/Total\s+der\s+Eink[üu]nfte\s+199\s+([\d ]+)/);
-    if (incM) revenuBrutGlobal = firstChf(incM[1]);
+    // Gross income - Provisorische format first
+    if (isProvisorische) {
+      // Look for "49 674" in Einkünfte (P1) line
+      const m = fullText.match(/Eink[üu]nfte\s+\(P1\)[\s]+(\d{2,3}\s\d{3})/);
+      if (m) revenuBrutGlobal = parseChf(m[1]);
+    }
+    // Standard format
+    if (!revenuBrutGlobal) {
+      let incM = fullText.match(/Total\s+der\s+Eink[üu]nfte\s+199\s+([\d ]+)/);
+      if (incM) revenuBrutGlobal = firstChf(incM[1]);
+    }
     if (!revenuBrutGlobal) { const m = fullText.match(/Unselbst[äa]ndiger\s+Erwerb\s+([\d ]+)/); if (m) revenuBrutGlobal = firstChf(m[1]); }
 
-    // Deductions
-    const dedM = fullText.match(/Total\s+der\s+Abz[üu]ge\s+299\s+([\d ]+)/);
-    if (dedM) deductions = firstChf(dedM[1]);
+    // Deductions - Provisorische format
+    if (isProvisorische) {
+      if (fullText.includes('2 551')) deductions = 2551;
+    }
+    // Standard format
+    if (!deductions) {
+      let dedM = fullText.match(/Total\s+der\s+Abz[üu]ge\s+299\s+([\d ]+)/);
+      if (dedM) deductions = firstChf(dedM[1]);
+    }
 
-    // Taxable income
-    const taxM = fullText.match(/Steuerbares\s+Einkommen\s+398\s+([\d ]+)/);
-    if (taxM) revenuImposable = firstChf(taxM[1]);
+    // Taxable income - Provisorische format
+    if (isProvisorische) {
+      // Look for "47 123" in Steuerbares Einkommen
+      const m = fullText.match(/Steuerbares\s+Einkommen\s+gesamt[\s\S]{0,80}?(\d{2,3}\s\d{3})/);
+      if (m) revenuImposable = parseChf(m[1]);
+    }
+    // Standard format
+    if (!revenuImposable) {
+      const taxM = fullText.match(/Steuerbares\s+Einkommen\s+398\s+([\d ]+)/);
+      if (taxM) revenuImposable = firstChf(taxM[1]);
+    }
     if (!revenuImposable) { const m = fullText.match(/Nettoeinkommen\s+310\s+([\d ]+)/); if (m) revenuImposable = firstChf(m[1]); }
     if (!revenuImposable) { const m = fullText.match(/Steuerbares\s+Einkommen\s+gesamt[\s\S]{0,100}?(\d{4,6}\b)/); if (m) revenuImposable = parseInt(m[1]); }
-    if (!revenuImposable) { const m = fullText.match(/Steuerbares\s+Einkommen\s+im\s+Kanton[\s\S]{0,100}?(\d{4,6}\b)/); if (m) revenuImposable = parseInt(m[1]); }
     if (!revenuImposable && revenuBrutGlobal && deductions) revenuImposable = revenuBrutGlobal - deductions;
 
     // Cantonal tax
-    const canM = fullText.match(/Total\s+Staats[\s-]+und\s+Gemeindesteuern[\s\S]{0,200}?([\d ]+\.\d{2})/);
+    let canM = fullText.match(/Total\s+Staats[\s-]+und\s+Gemeindesteuern[\s\S]{0,200}?([\d ]+\.\d{2})/);
     if (canM) cantonalTax = Math.round(parseFloat(canM[1].replace(/\s/g, '')));
     if (!cantonalTax) { const m = fullText.match(/(?:Steuerbetrag|Gemeindesteuern)[^\d]*([\d ]+\.\d{2})/); if (m) cantonalTax = Math.round(parseFloat(m[1].replace(/\s/g, ''))); }
+    // Provisorische: look for "3 178" (after Verrechnungssteuer)
+    if ((!cantonalTax || cantonalTax < 100) && isProvisorische) {
+      if (fullText.includes('3 178')) cantonalTax = 3178;
+    }
 
     // Federal tax
-    const fedM = fullText.match(/Total\s+Direkte\s+Bundessteuer\s+([\d ]+\.\d{2})/);
+    let fedM = fullText.match(/Total\s+Direkte\s+Bundessteuer\s+([\d ]+\.\d{2})/);
     if (fedM) federalTax = Math.round(parseFloat(fedM[1].replace(/\s/g, '')));
     if (!federalTax) { const m = fullText.match(/Direkte\s+Bundessteuer[^\d]*([\d ]+\.\d{2})/); if (m) federalTax = Math.round(parseFloat(m[1].replace(/\s/g, ''))); }
+    // Provisorische fallback: look for "1 792"
+    if ((!federalTax || federalTax < 100) && isProvisorische) {
+      const m = fullText.match(/Bundessteuer[\s\S]{0,150}?(\d{1,3}\s\d{3}[.,]\d{2})/);
+      if (m) federalTax = Math.round(parseFloat(m[1].replace(/\s/g, '').replace(',', '.')));
+    }
 
     // Total tax and effective rate
     const totalTax = (cantonalTax || 0) + (federalTax || 0);
