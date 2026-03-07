@@ -624,6 +624,7 @@ router.get('/api/loans/:loanId', async (c) => {
       repaid_pct: loan.repaid_pct,
       installments_paid: loan.installments_paid,
       installments_left: loan.installments_left,
+      start_date: loan.start_date,
       end_date: loan.end_date,
     },
     monthly_breakdown: loan.monthly_breakdown,
