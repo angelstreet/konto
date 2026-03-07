@@ -378,6 +378,7 @@ export async function initDatabase() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL REFERENCES users(id),
       year INTEGER NOT NULL,
+      fiscal_residency TEXT NOT NULL DEFAULT 'FR',
       revenu_brut_global REAL,
       revenu_imposable REAL,
       parts_fiscales REAL NOT NULL DEFAULT 1,
@@ -389,7 +390,7 @@ export async function initDatabase() {
       breakdown_revenus_fonciers REAL,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
-      UNIQUE(user_id, year)
+      UNIQUE(user_id, year, fiscal_residency)
     );
   `);
 }
@@ -658,6 +659,62 @@ export async function migrateDatabase() {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     )
   `);
+
+  // Migrate fiscal_data: add fiscal_residency column and change unique constraint to (user_id, year, fiscal_residency)
+  // Check if current table has the old UNIQUE(user_id, year) constraint (without fiscal_residency)
+  const fiscalTableRow = await db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='fiscal_data'");
+  const fiscalSql = (fiscalTableRow.rows[0] as any)?.sql as string | undefined;
+  if (fiscalSql && !fiscalSql.includes('fiscal_residency')) {
+    // Table exists but missing fiscal_residency — recreate with new schema
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS fiscal_data_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        year INTEGER NOT NULL,
+        fiscal_residency TEXT NOT NULL DEFAULT 'FR',
+        revenu_brut_global REAL,
+        revenu_imposable REAL,
+        parts_fiscales REAL NOT NULL DEFAULT 1,
+        taux_marginal REAL,
+        taux_moyen REAL,
+        breakdown_salaries REAL,
+        breakdown_lmnp REAL,
+        breakdown_dividendes REAL,
+        breakdown_revenus_fonciers REAL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(user_id, year, fiscal_residency)
+      )
+    `);
+    await db.execute(`INSERT OR IGNORE INTO fiscal_data_new SELECT id, user_id, year, 'FR', revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, created_at, updated_at FROM fiscal_data`);
+    await db.execute(`DROP TABLE fiscal_data`);
+    await db.execute(`ALTER TABLE fiscal_data_new RENAME TO fiscal_data`);
+  } else if (fiscalSql && fiscalSql.includes('fiscal_residency') && !fiscalSql.includes('UNIQUE(user_id, year, fiscal_residency)')) {
+    // fiscal_residency column exists but still old unique constraint — recreate
+    await db.execute(`
+      CREATE TABLE IF NOT EXISTS fiscal_data_new (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id),
+        year INTEGER NOT NULL,
+        fiscal_residency TEXT NOT NULL DEFAULT 'FR',
+        revenu_brut_global REAL,
+        revenu_imposable REAL,
+        parts_fiscales REAL NOT NULL DEFAULT 1,
+        taux_marginal REAL,
+        taux_moyen REAL,
+        breakdown_salaries REAL,
+        breakdown_lmnp REAL,
+        breakdown_dividendes REAL,
+        breakdown_revenus_fonciers REAL,
+        created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+        UNIQUE(user_id, year, fiscal_residency)
+      )
+    `);
+    await db.execute(`INSERT OR IGNORE INTO fiscal_data_new SELECT id, user_id, year, COALESCE(fiscal_residency, 'FR'), revenu_brut_global, revenu_imposable, parts_fiscales, taux_marginal, taux_moyen, breakdown_salaries, breakdown_lmnp, breakdown_dividendes, breakdown_revenus_fonciers, created_at, updated_at FROM fiscal_data`);
+    await db.execute(`DROP TABLE fiscal_data`);
+    await db.execute(`ALTER TABLE fiscal_data_new RENAME TO fiscal_data`);
+  }
 }
 
 // Find or create user by Clerk ID. On first login, migrates existing user_id=1 data.

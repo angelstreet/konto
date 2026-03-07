@@ -5,7 +5,6 @@ import { Upload, Save, Trash2, Calculator, CheckCircle, AlertCircle, FileText, D
 import { ResponsiveContainer, PieChart, Pie, Cell, Tooltip } from 'recharts';
 import EyeToggle from '../components/EyeToggle';
 import { useAuth } from '@clerk/clerk-react';
-import { useAuthFetch } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import ConfirmDialog from '../components/ConfirmDialog';
 import AlertDialog from '../components/AlertDialog';
@@ -51,7 +50,6 @@ function useAuthToken() {
 
 export default function Fiscal() {
   const { t } = useTranslation();
-  const authFetch = useAuthFetch();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const getToken = useAuthToken();
   const [loading, setLoading] = useState(true);
@@ -59,14 +57,15 @@ export default function Fiscal() {
   const [uploading, setUploading] = useState(false);
   const [fiscalData, setFiscalData] = useState<FiscalData[]>([]);
   const [eligibilities, setEligibilities] = useState<Eligibility[]>([]);
-  const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear() - 1);
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [alertDialog, setAlertDialog] = useState<{open: boolean; title: string; message: string; variant: 'success' | 'error' | 'info'}>({open: false, title: '', message: '', variant: 'info'});
-  const [confirmDialog, setConfirmDialog] = useState<{open: boolean; year: number | null}>({open: false, year: null});
+  const [confirmDialog, setConfirmDialog] = useState<{open: boolean; id: number | null}>({open: false, id: null});
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [formData, setFormData] = useState<{
     year: number | string;
+    fiscalResidency: string;
     revenuBrutGlobal: string;
     revenuImposable: string;
     partsFiscales: string;
@@ -78,6 +77,7 @@ export default function Fiscal() {
     breakdownRevenusFonciers: string;
   }>({
     year: new Date().getFullYear() - 1,
+    fiscalResidency: 'FR',
     revenuBrutGlobal: '',
     revenuImposable: '',
     partsFiscales: '1',
@@ -111,12 +111,12 @@ export default function Fiscal() {
       const data = await res.json();
       setFiscalData(data.fiscalData || []);
       
-      const eligRes = await apiFetch(`${API}/fiscal/eligibilities`);
+      const eligRes = await apiFetch(`${API}/fiscal/eligibilities${selectedId ? `?id=${selectedId}` : ''}`);
       const eligData = await eligRes.json();
       setEligibilities(eligData.eligibilities || []);
       
       if (data.fiscalData && data.fiscalData.length > 0) {
-        setSelectedYear(data.fiscalData[0].year);
+        setSelectedId(prev => prev ?? data.fiscalData[0].id);
       }
     } catch (e) {
       console.error('Failed to load fiscal data:', e);
@@ -165,6 +165,7 @@ export default function Fiscal() {
     try {
       const payload = {
         year: parseInt(formData.year as any),
+        fiscalResidency: formData.fiscalResidency || 'FR',
         revenuBrutGlobal: formData.revenuBrutGlobal ? parseFloat(formData.revenuBrutGlobal) : null,
         revenuImposable: formData.revenuImposable ? parseFloat(formData.revenuImposable) : null,
         partsFiscales: parseFloat(formData.partsFiscales) || 1,
@@ -185,7 +186,9 @@ export default function Fiscal() {
       });
 
       if (res.ok) {
+        const saved = await res.json();
         await loadFiscalData();
+        if (saved.fiscalData?.id) setSelectedId(saved.fiscalData.id);
         setShowAddForm(false);
         resetForm();
       } else {
@@ -198,18 +201,18 @@ export default function Fiscal() {
     setSaving(false);
   };
 
-  const handleDelete = async (year: number) => {
-    setConfirmDialog({ open: true, year });
+  const handleDelete = (id: number) => {
+    setConfirmDialog({ open: true, id });
   };
 
   const confirmDelete = async () => {
-    const year = confirmDialog.year;
-    setConfirmDialog({ open: false, year: null });
-    if (!year) return;
-    
+    const id = confirmDialog.id;
+    setConfirmDialog({ open: false, id: null });
+    if (!id) return;
     try {
-      await apiFetch(`${API}/fiscal/${year}`, { method: 'DELETE' });
-      await loadFiscalData();
+      await apiFetch(`${API}/fiscal/${id}`, { method: 'DELETE' });
+      setFiscalData(prev => prev.filter(f => f.id !== id));
+      setSelectedId(prev => prev === id ? null : prev);
     } catch (e) {
       console.error('Delete error:', e);
       setAlertDialog({ open: true, title: t('error'), message: 'Failed to delete fiscal data', variant: 'error' });
@@ -219,6 +222,7 @@ export default function Fiscal() {
   const resetForm = () => {
     setFormData({
       year: new Date().getFullYear() - 1,
+      fiscalResidency: 'FR',
       revenuBrutGlobal: '',
       revenuImposable: '',
       partsFiscales: '1',
@@ -231,7 +235,7 @@ export default function Fiscal() {
     });
   };
 
-  const currentData = fiscalData.find(f => f.year === selectedYear);
+  const currentData = fiscalData.find(f => f.id === selectedId) ?? fiscalData[0] ?? null;
 
   const fmt = (v: number | null | undefined): string => {
     if (v == null) return '—';
@@ -305,15 +309,31 @@ export default function Fiscal() {
               </button>
             </div>
             <form onSubmit={handleManualSubmit} className="p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">{t('tax_year') || 'Année fiscale'} *</label>
-                <input
-                  type="number"
-                  value={formData.year}
-                  onChange={e => setFormData({ ...formData, year: e.target.value })}
-                  className="w-full px-3 py-2 bg-background border border-border rounded-lg"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">{t('tax_year') || 'Année fiscale'} *</label>
+                  <input
+                    type="number"
+                    value={formData.year}
+                    onChange={e => setFormData({ ...formData, year: e.target.value })}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">Pays *</label>
+                  <select
+                    value={formData.fiscalResidency}
+                    onChange={e => setFormData({ ...formData, fiscalResidency: e.target.value })}
+                    className="w-full px-3 py-2 bg-background border border-border rounded-lg"
+                  >
+                    <option value="FR">🇫🇷 France</option>
+                    <option value="CH">🇨🇭 Suisse</option>
+                    <option value="BE">🇧🇪 Belgique</option>
+                    <option value="DE">🇩🇪 Allemagne</option>
+                    <option value="OTHER">🌍 Autre</option>
+                  </select>
+                </div>
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div>
@@ -440,50 +460,28 @@ export default function Fiscal() {
       )}
 
       {fiscalData.length > 0 && (
-        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
-          {fiscalData.map(f => (
-            <div key={f.year} className="relative">
+        <div className="flex flex-wrap gap-2">
+          {fiscalData.map(f => {
+            const flag = f.fiscal_residency === 'FR' ? '🇫🇷'
+              : f.fiscal_residency?.startsWith('CH') ? '🇨🇭'
+              : f.fiscal_residency === 'BE' ? '🇧🇪'
+              : f.fiscal_residency === 'DE' ? '🇩🇪' : '🌍';
+            const isActive = selectedId === f.id;
+            return (
               <button
-                onClick={() => setSelectedYear(f.year)}
-                className={`w-full px-4 py-3 rounded-xl font-medium transition-all ${
-                  selectedYear === f.year
-                    ? 'bg-accent-500/20 text-accent-400 border-2 border-accent-500/50'
-                    : 'bg-surface border border-border hover:bg-surface-hover'
+                key={f.id}
+                onClick={() => setSelectedId(f.id)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-all ${
+                  isActive
+                    ? 'bg-accent-500 text-white'
+                    : 'bg-surface border border-border hover:bg-surface-hover text-muted hover:text-white'
                 }`}
               >
-                <div className="text-lg">{f.year}</div>
-                <div className="text-2xl mt-1">
-                  {f.fiscal_residency === 'FR' ? '🇫🇷' : 
-                   f.fiscal_residency?.startsWith('CH') ? '🇨🇭' :
-                   f.fiscal_residency === 'BE' ? '🇧🇪' :
-                   f.fiscal_residency === 'DE' ? '🇩🇪' : '🌍'}
-                </div>
+                <span>{f.year}</span>
+                <span>{flag}</span>
               </button>
-              <select
-                value={f.fiscal_residency || 'FR'}
-                onChange={async (e) => {
-                  const newResidency = e.target.value;
-                  await authFetch(`${API}/fiscal/${f.year}`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({ fiscal_residency: newResidency }),
-                  });
-                  setFiscalData(prev => prev.map(item => item.year === f.year ? { ...item, fiscal_residency: newResidency } : item));
-                }}
-                className="absolute bottom-1 right-1 w-6 h-4 opacity-0 cursor-pointer"
-                title="Changer la résidence"
-              >
-                <option value="FR">🇫🇷</option>
-                <option value="CH-ZH">🇨🇭</option>
-                <option value="CH-VD">🇨🇭</option>
-                <option value="CH-GE">🇨🇭</option>
-                <option value="CH-BE">🇨🇭</option>
-                <option value="CH-OTHER">🇨🇭</option>
-                <option value="BE">🇧🇪</option>
-                <option value="DE">🇩🇪</option>
-                <option value="OTHER">🌍</option>
-              </select>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -628,7 +626,7 @@ export default function Fiscal() {
 
           <div className="flex justify-end">
             <button
-              onClick={() => handleDelete(currentData.year)}
+              onClick={() => handleDelete(currentData.id)}
               className="flex items-center gap-2 px-4 py-2 text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
             >
               <Trash2 size={16} />
@@ -649,11 +647,11 @@ export default function Fiscal() {
       <ConfirmDialog
         open={confirmDialog.open}
         title={t('confirm_delete') || 'Confirmer la suppression'}
-        message={confirmDialog.year ? `Delete fiscal data for ${confirmDialog.year}?` : ''}
+        message={confirmDialog.id ? `Supprimer cette déclaration fiscale ?` : ''}
         confirmLabel={t('delete') || 'Supprimer'}
         variant="danger"
         onConfirm={confirmDelete}
-        onCancel={() => setConfirmDialog({ open: false, year: null })}
+        onCancel={() => setConfirmDialog({ open: false, id: null })}
       />
     </div>
   );
