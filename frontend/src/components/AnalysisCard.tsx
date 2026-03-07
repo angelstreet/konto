@@ -7,10 +7,11 @@ interface AnalysisCardProps {
   metric: string;
   subtitle?: string;
   to: string;
+  hideAmount?: boolean;
   children?: ReactNode;
 }
 
-export default function AnalysisCard({ icon, title, metric, subtitle, to, children }: AnalysisCardProps) {
+export default function AnalysisCard({ icon, title, metric, subtitle, to, hideAmount, children }: AnalysisCardProps) {
   const navigate = useNavigate();
 
   return (
@@ -31,7 +32,7 @@ export default function AnalysisCard({ icon, title, metric, subtitle, to, childr
 
       {/* Metric */}
       <div className="mb-1">
-        <span className="text-2xl font-bold text-white">{metric}</span>
+        <span className={`text-2xl font-bold text-white${hideAmount ? ' amount-masked' : ''}`}>{metric}</span>
       </div>
       {subtitle && <p className="text-xs text-muted mb-3">{subtitle}</p>}
 
