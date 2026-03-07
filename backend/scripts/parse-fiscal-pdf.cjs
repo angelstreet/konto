@@ -73,7 +73,9 @@ async function parse(filePath) {
     }
   }
 
-  const isSwiss = allText.includes('Kanton') || allText.includes('Steuererklärung') || allText.includes('Steuerformulare') || allText.includes('Zürich') || allText.includes('AHVN');
+  // Only detect as Swiss if text is readable (not garbled) AND has Swiss keywords
+  const hasSwissKeywords = /Kanton\s+Z[üu]rich|Steuererklärung\s+20\d{2}|Steuerformulare|AHVN\d{2}/.test(allText);
+  const isSwiss = hasSwissKeywords && !isTextGarbled(allText);
   
   if (isSwiss) {
     return parseSwiss(pdf, allText);
