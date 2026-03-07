@@ -17,6 +17,7 @@ export const POWENS_CLIENT_SECRET = process.env.POWENS_CLIENT_SECRET || '';
 export const POWENS_DOMAIN = process.env.POWENS_DOMAIN || 'your-domain.biapi.pro';
 export const POWENS_API = `https://${POWENS_DOMAIN}/2.0`;
 export const REDIRECT_URI = process.env.POWENS_REDIRECT_URI || (process.env.APP_URL ? `${process.env.APP_URL}/api/bank-callback` : 'http://localhost:3003/api/bank-callback');
+export const POWENS_CONNECTOR_CAPABILITIES = process.env.POWENS_CONNECTOR_CAPABILITIES || '';
 
 // --- Account classification helpers ---
 const SAVINGS_TYPES = new Set(['savings', 'deposit', 'livreta', 'livretb', 'ldds', 'cel', 'pel']);

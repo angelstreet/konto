@@ -3,7 +3,7 @@ import { randomBytes } from 'crypto';
 import db from '../db.js';
 import { encrypt, decrypt } from '../crypto.js';
 import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, decryptDriveConn,
-         POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI,
+         POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI, POWENS_CONNECTOR_CAPABILITIES,
          classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
          calcInvestmentDiff, calcInvDiff, formatCurrencyFR, escapeHtml } from '../shared.js';
@@ -19,7 +19,8 @@ router.get('/api/bank/connect-url', async (c) => {
   await db.execute({ sql: 'INSERT INTO oauth_states (state, user_id) VALUES (?, ?)', args: [state, userId] });
   // Expire states older than 10 minutes
   await db.execute({ sql: "DELETE FROM oauth_states WHERE created_at < datetime('now', '-10 minutes')", args: [] });
-  const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`;
+  const capabilitiesParam = POWENS_CONNECTOR_CAPABILITIES ? `&connector_capabilities=${POWENS_CONNECTOR_CAPABILITIES}` : '';
+  const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}${capabilitiesParam}`;
   return c.json({ url });
 });
 
@@ -79,7 +80,7 @@ router.get('/api/bank/reconnect-url/:accountId', async (c) => {
   }
 
   // Fallback to generic connect
-  const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`;
+  const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}${POWENS_CONNECTOR_CAPABILITIES ? `&connector_capabilities=${POWENS_CONNECTOR_CAPABILITIES}` : ''}`;
   return c.json({ url });
 });
 
