@@ -210,7 +210,7 @@ router.get('/api/fiscal/eligibilities', async (c) => {
     eligibilities.push({ name: 'APL', description: 'Personalized housing allowance', eligible: true, estimatedAmount: null, frequency: 'monthly', conditions: 'Tenant in France, rent below ceiling, income below threshold' });
   }
 
-  return c.json({ eligibilities, fiscalYear: fiscal.year });
+  return c.json({ eligibilities, fiscalYear: fiscal.year, fiscalResidency: fiscal.fiscal_residency });
 });
 
 // ========== PDF PARSING HELPER ==========
