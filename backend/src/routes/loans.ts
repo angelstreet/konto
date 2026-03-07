@@ -829,6 +829,7 @@ router.post('/api/loans/:loanId/enrich', async (c) => {
         if (data.endDate) { updates.push('end_date = ?'); args.push(data.endDate); }
         if (data.monthlyPayment) { updates.push('monthly_payment = ?'); args.push(data.monthlyPayment); }
         if (data.insuranceMonthly) { updates.push('insurance_monthly = ?'); args.push(data.insuranceMonthly); }
+        if (data.installmentsPaid != null) { updates.push('installments_paid = ?'); args.push(data.installmentsPaid); }
         
         if (updates.length > 0) {
           args.push(loanId, userId);
