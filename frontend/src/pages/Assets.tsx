@@ -636,6 +636,13 @@ export default function Assets() {
                         {companies.find(c => c.id === a.company_id)?.name || t('scope_pro')}
                       </span>
                     ) : null}
+                    <button
+                      onClick={e => { e.stopPropagation(); deleteAsset(a.id); }}
+                      className="p-1 text-muted hover:text-red-400 transition-colors flex-shrink-0"
+                      title={t('delete')}
+                    >
+                      <Trash2 size={14} />
+                    </button>
                     <ChevronDown size={14} className={`text-muted flex-shrink-0 transition-transform ${expanded ? '' : '-rotate-90'}`} />
                   </div>
                   {/* Line 2: Mobile: pnl | Desktop: loan badge + linked account */}
