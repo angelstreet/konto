@@ -101,3 +101,10 @@ select option {
   --accent-800: 6 95 70;
   --accent-900: 6 78 59;
 }
+
+/* PWA standalone mode - show BottomNav */
+@media (display-mode: standalone) {
+  .bottom-nav-container {
+    display: block !important;
+  }
+}

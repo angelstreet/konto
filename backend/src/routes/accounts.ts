@@ -119,33 +119,56 @@ router.get('/api/bank-callback', async (c) => {
 
     console.log('Powens token received:', { has_access: !!accessToken, has_refresh: !!refreshToken, expires_in: tokenData.expires_in });
 
-    if (connectionId) {
+    // Fetch connection details to get bank/institution info
+    let providerName: string | null = null;
+    let resolvedConnectionId: string | null = connectionId || null;
+    try {
+      const connsRes = await fetch(`${POWENS_API}/users/me/connections`, {
+        headers: { 'Authorization': `Bearer ${accessToken}` },
+      });
+      if (connsRes.ok) {
+        const connsData = await connsRes.json() as any;
+        const conns = connsData.connections || [];
+        if (conns.length > 0) {
+          // Use first connection (most recent)
+          const conn = conns[0];
+          resolvedConnectionId = String(conn.id);
+          providerName = conn.institution?.name || conn.institution_name || conn.bank_name || null;
+          console.log('Powens connection details:', { connection_id: resolvedConnectionId, provider_name: providerName });
+        }
+      }
+    } catch (err) {
+      console.error('Failed to fetch connection details:', err);
+    }
+
+    if (connectionId || resolvedConnectionId) {
       const existingConnRes = await db.execute({
         sql: 'SELECT * FROM bank_connections WHERE user_id = ? AND powens_connection_id = ? ORDER BY id DESC LIMIT 1',
-        args: [userId, connectionId],
+        args: [userId, resolvedConnectionId],
       });
       if (existingConnRes.rows.length > 0) {
         const existingConn = decryptBankConn(existingConnRes.rows[0] as any);
         const mergedRefresh = refreshToken || existingConn.powens_refresh_token || null;
+        const mergedProvider = providerName || existingConn.provider_name || null;
         await db.execute({
-          sql: 'UPDATE bank_connections SET powens_token = ?, powens_refresh_token = ?, status = ? WHERE id = ?',
-          args: [encrypt(accessToken), encrypt(mergedRefresh), 'active', (existingConnRes.rows[0] as any).id],
+          sql: 'UPDATE bank_connections SET powens_token = ?, powens_refresh_token = ?, status = ?, powens_connection_id = ?, provider_name = ? WHERE id = ?',
+          args: [encrypt(accessToken), encrypt(mergedRefresh), 'active', resolvedConnectionId, mergedProvider, (existingConnRes.rows[0] as any).id],
         });
         // Keep only latest active row for this Powens connection id.
         await db.execute({
           sql: 'UPDATE bank_connections SET status = ? WHERE user_id = ? AND powens_connection_id = ? AND id != ? AND status = ?',
-          args: ['replaced', userId, connectionId, (existingConnRes.rows[0] as any).id, 'active'],
+          args: ['replaced', userId, resolvedConnectionId, (existingConnRes.rows[0] as any).id, 'active'],
         });
       } else {
         await db.execute({
-          sql: 'INSERT INTO bank_connections (user_id, powens_connection_id, powens_token, powens_refresh_token, status) VALUES (?, ?, ?, ?, ?)',
-          args: [userId, connectionId, encrypt(accessToken), encrypt(refreshToken), 'active']
+          sql: 'INSERT INTO bank_connections (user_id, powens_connection_id, powens_token, powens_refresh_token, status, provider_name) VALUES (?, ?, ?, ?, ?, ?)',
+          args: [userId, resolvedConnectionId, encrypt(accessToken), encrypt(refreshToken), 'active', providerName]
         });
       }
     } else {
       await db.execute({
-        sql: 'INSERT INTO bank_connections (user_id, powens_connection_id, powens_token, powens_refresh_token, status) VALUES (?, ?, ?, ?, ?)',
-        args: [userId, null, encrypt(accessToken), encrypt(refreshToken), 'active']
+        sql: 'INSERT INTO bank_connections (user_id, powens_connection_id, powens_token, powens_refresh_token, status, provider_name) VALUES (?, ?, ?, ?, ?, ?)',
+        args: [userId, resolvedConnectionId, encrypt(accessToken), encrypt(refreshToken), 'active', providerName]
       });
     }
 
@@ -663,10 +686,13 @@ router.post('/api/bank/sync-all', async (c) => {
       }
 
       // Sync each account
+      const connProviderName = conn.provider_name || null;
       for (const powensAcc of powensAccounts) {
         const providerId = String(powensAcc.id);
         const meta = extractPowensBankMeta(powensAcc);
-        const storedBankName = meta.bankName || null;
+        // Use connection's provider_name as fallback when Powens doesn't return bank info in account response
+        const bankNameFromMeta = meta.bankName || connProviderName;
+        const storedBankName = bankNameFromMeta || null;
         const accType = classifyAccountType(powensAcc.type, powensAcc.name || powensAcc.original_name || '');
         const accRes = await db.execute({
           sql: 'SELECT id, type, company_id FROM bank_accounts WHERE user_id = ? AND provider = ? AND provider_account_id = ?',
@@ -755,5 +781,70 @@ router.post('/api/bank/sync-all', async (c) => {
 });
 
 
+
+// Migration: backfill bank info for existing connections
+router.post("/api/bank/migrate-connection-info", async (c) => {
+  try {
+    console.log("[migrate] Starting migration");
+    const userId = await getUserId(c);
+    console.log("[migrate] userId:", userId);
+    const connectionsResult = await db.execute({
+      sql: 'SELECT * FROM bank_connections WHERE user_id = ? AND status = ? AND provider_name IS NULL',
+      args: [userId, 'active']
+    });
+    console.log("[migrate] connections found:", connectionsResult.rows.length);
+    const connections = (connectionsResult.rows as any[]).map(decryptBankConn);
+
+  let updated = 0;
+  for (const conn of connections) {
+    if (!conn.powens_token) continue;
+    try {
+      // Fetch connections to get bank info
+      const connsRes = await fetch(`${POWENS_API}/users/me/connections`, {
+        headers: { 'Authorization': `Bearer ${conn.powens_token}` },
+      });
+      if (!connsRes.ok) continue;
+      const connsData = await connsRes.json() as any;
+      const conns = connsData.connections || [];
+      if (conns.length > 0) {
+        const connData = conns[0];
+        const providerName = connData.institution?.name || connData.institution_name || connData.bank_name || null;
+        const connId = String(connData.id);
+        await db.execute({
+          sql: 'UPDATE bank_connections SET powens_connection_id = ?, provider_name = ? WHERE id = ?',
+          args: [connId, providerName, conn.id]
+        });
+        updated++;
+        console.log(`Migrated connection ${conn.id}: ${connId} -> ${providerName}`);
+      }
+    } catch (err) {
+      console.error(`Migration failed for connection ${conn.id}:`, err);
+    }
+  }
+
+  // Also backfill bank_accounts with provider_bank_name from connection
+  const accountsResult = await db.execute({
+    sql: `SELECT ba.*, bc.provider_name FROM bank_accounts ba 
+          JOIN bank_connections bc ON bc.user_id = ba.user_id AND bc.status = 'active'
+          WHERE ba.user_id = ? AND ba.provider = 'powens' AND (ba.provider_bank_name IS NULL OR ba.provider_bank_name = '')`,
+    args: [userId]
+  });
+  let accountsUpdated = 0;
+  for (const acc of accountsResult.rows as any[]) {
+    if (acc.provider_name) {
+      await db.execute({
+        sql: 'UPDATE bank_accounts SET provider_bank_name = ? WHERE id = ?',
+        args: [acc.provider_name, acc.id]
+      });
+      accountsUpdated++;
+    }
+  }
+
+    return c.json({ connections_updated: updated, accounts_updated: accountsUpdated });
+  } catch (err: any) {
+    console.error('[migrate] Error:', err);
+    return c.json({ error: err.message }, 500);
+  }
+});
 
 export default router;
