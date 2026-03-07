@@ -3,6 +3,7 @@ import db from '../db.js';
 import 'dotenv/config';
 import { cronMonitor } from './cronMonitor.js';
 import { decrypt } from '../crypto.js';
+import { refreshPowensToken } from '../shared.js';
 
 const JOB_NAME = 'refresh-stale-connections';
 const POWENS_DOMAIN = process.env.POWENS_DOMAIN || 'your-domain.biapi.pro';
@@ -86,14 +87,22 @@ async function refreshStaleConnections() {
   for (const userRow of staleUsers) {
     const userId = userRow.user_id;
     try {
-      // Get active token for user
+      // Get active connection and proactively refresh its token
       const connRes = await db.execute({
-        sql: 'SELECT powens_token FROM bank_connections WHERE user_id = ? AND status = "active" LIMIT 1',
+        sql: 'SELECT id, powens_token FROM bank_connections WHERE user_id = ? AND status = "active" LIMIT 1',
         args: [userId],
       });
-      const token = decrypt((connRes.rows[0] as any)?.powens_token);
-      if (!token) {
+      if (!connRes.rows.length) {
         console.warn(`No active Powens connection for user ${userId}`);
+        Z++;
+        continue;
+      }
+      const connId = (connRes.rows[0] as any).id;
+      // Always refresh token proactively — access tokens expire in ~1h
+      const freshToken = await refreshPowensToken(connId);
+      const token = freshToken || decrypt((connRes.rows[0] as any)?.powens_token);
+      if (!token) {
+        console.warn(`No usable token for connection ${connId} (user ${userId})`);
         Z++;
         continue;
       }
