@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import AnalysisCard from '../components/AnalysisCard';
+import EyeToggle from '../components/EyeToggle';
 import { useAuthFetch } from '../useApi';
+import { useAmountVisibility } from '../AmountVisibilityContext';
 import { API } from '../config';
 
 function getTier(pct: number): string {
@@ -158,6 +160,8 @@ export default function AnalysisSynthesis() {
   const data = mockData[scope];
   const scopeLabel = isProScope ? 'Pro' : 'Perso';
 
+  const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
+
   const [rankingMetric, setRankingMetric] = useState<string>('—');
   const [rankingSubtitle, setRankingSubtitle] = useState<string>('Classement mondial');
   const [rankingPct, setRankingPct] = useState<number>(50);
@@ -184,42 +188,43 @@ export default function AnalysisSynthesis() {
         <div className="flex items-center gap-1 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">Synthèse {scopeLabel}</h1>
         </div>
+        <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
       </div>
 
       {/* Grid 3-col desktop, 2-col tablet, 1-col mobile */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {/* Row 1 */}
-        <AnalysisCard icon="💰" title="Budget" metric={data.budget.metric} subtitle={data.budget.subtitle} to="/budget">
+        <AnalysisCard icon="💰" title="Budget" metric={data.budget.metric} subtitle={data.budget.subtitle} to="/budget" hideAmount={hideAmounts}>
           <CategoryBars />
         </AnalysisCard>
 
-        <AnalysisCard icon="🔄" title="Abonnements" metric={data.subscriptions.metric} subtitle={data.subscriptions.subtitle} to="/subscriptions">
+        <AnalysisCard icon="🔄" title="Abonnements" metric={data.subscriptions.metric} subtitle={data.subscriptions.subtitle} to="/subscriptions" hideAmount={hideAmounts}>
           <TopList items={['Spotify · 9,99 €', 'Netflix · 17,99 €', 'SFR · 34,99 €']} />
         </AnalysisCard>
 
-        <AnalysisCard icon="📅" title="Cashflow" metric={data.cashflow.metric} subtitle={data.cashflow.subtitle} to="/cashflow">
+        <AnalysisCard icon="📅" title="Cashflow" metric={data.cashflow.metric} subtitle={data.cashflow.subtitle} to="/cashflow" hideAmount={hideAmounts}>
           <CalendarHeatmap />
         </AnalysisCard>
 
         {/* Row 2 */}
-        <AnalysisCard icon="📊" title="Bilan" metric={data.bilan.metric} subtitle={data.bilan.subtitle} to="/bilan">
+        <AnalysisCard icon="📊" title="Bilan" metric={data.bilan.metric} subtitle={data.bilan.subtitle} to="/bilan" hideAmount={hideAmounts}>
           <Donut />
         </AnalysisCard>
 
-        <AnalysisCard icon="📈" title="Tendances" metric={data.trends.metric} subtitle={data.trends.subtitle} to="/trends">
+        <AnalysisCard icon="📈" title="Tendances" metric={data.trends.metric} subtitle={data.trends.subtitle} to="/trends" hideAmount={hideAmounts}>
           <Sparkline />
         </AnalysisCard>
 
-        <AnalysisCard icon="🏆" title="Classement" metric={rankingMetric} subtitle={rankingSubtitle} to="/ranking">
+        <AnalysisCard icon="🏆" title="Classement" metric={rankingMetric} subtitle={rankingSubtitle} to="/ranking" hideAmount={hideAmounts}>
           <PercentileBar value={rankingPct} />
         </AnalysisCard>
 
         {/* Row 3 */}
-        <AnalysisCard icon="💶" title="Revenus passifs" metric={data.income.metric} subtitle={data.income.subtitle} to="/income">
+        <AnalysisCard icon="💶" title="Revenus passifs" metric={data.income.metric} subtitle={data.income.subtitle} to="/income" hideAmount={hideAmounts}>
           <IncomeBars />
         </AnalysisCard>
 
-        <AnalysisCard icon="📈" title="Simulateur" metric={data.simulators.metric} subtitle={data.simulators.subtitle} to="/simulators">
+        <AnalysisCard icon="📈" title="Simulateur" metric={data.simulators.metric} subtitle={data.simulators.subtitle} to="/simulators" hideAmount={hideAmounts}>
           <GrowthCurve />
         </AnalysisCard>
       </div>
