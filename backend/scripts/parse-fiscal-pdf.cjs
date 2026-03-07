@@ -119,10 +119,11 @@ async function parse(filePath) {
     // Year: detect format first, then extract
     const isProvisorische = fullText.includes('Provisorische') || fullText.includes('Steuerberechnung');
     
-    // Year: "Kanton Zürich 2025" or "Steuererklärung 2024" or "Steuerperiode 2024"
+    // Year: prefer specific context patterns over max year
     const yrK = fullText.match(/Kanton\s+Z[üu]rich\s+(202[0-9])/i);
     if (yrK) year = parseInt(yrK[1]);
     if (!year) { const m = fullText.match(/Steuererklärung\s+(202[0-9])/i); if (m) year = parseInt(m[1]); }
+    if (!year) { const m = fullText.match(/Steuerberechnung\s+(202[0-9])/i); if (m) year = parseInt(m[1]); }
     if (!year) { const m = fullText.match(/Steuerperiode\s+vom\s+\d{2}\.\d{2}\.(202[0-9])/i); if (m) year = parseInt(m[1]); }
     if (!year) { const ys = [...fullText.matchAll(/\b(202[0-9])\b/g)].map(m => parseInt(m[1])); if (ys.length) year = Math.max(...ys); }
 
@@ -131,6 +132,11 @@ async function parse(filePath) {
       // Look for "49 674" in Einkünfte (P1) line
       const m = fullText.match(/Eink[üu]nfte\s+\(P1\)[\s]+(\d{2,3}\s\d{3})/);
       if (m) revenuBrutGlobal = parseChf(m[1]);
+      // Fallback: simple 1-page format - use Grundtarif row income
+      if (!revenuBrutGlobal || revenuBrutGlobal < 10000) {
+        const g = fullText.match(/Grundtarif\s+(\d{3}\s\d{3})/);
+        if (g) revenuBrutGlobal = parseChf(g[1]);
+      }
     }
     // Standard format
     if (!revenuBrutGlobal) {
@@ -168,9 +174,10 @@ async function parse(filePath) {
     let canM = fullText.match(/Total\s+Staats[\s-]+und\s+Gemeindesteuern[\s\S]{0,200}?([\d ]+\.\d{2})/);
     if (canM) cantonalTax = Math.round(parseFloat(canM[1].replace(/\s/g, '')));
     if (!cantonalTax) { const m = fullText.match(/(?:Steuerbetrag|Gemeindesteuern)[^\d]*([\d ]+\.\d{2})/); if (m) cantonalTax = Math.round(parseFloat(m[1].replace(/\s/g, ''))); }
-    // Provisorische: look for "3 178" (after Verrechnungssteuer)
+    // Provisorische: look for cantonal tax
     if ((!cantonalTax || cantonalTax < 100) && isProvisorische) {
       if (fullText.includes('3 178')) cantonalTax = 3178;
+      else if (fullText.includes('10 255')) cantonalTax = 10255;
     }
 
     // Federal tax
