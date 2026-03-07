@@ -61,6 +61,8 @@ export default function Fiscal() {
   const [uploading, setUploading] = useState(false);
   const [fiscalData, setFiscalData] = useState<FiscalData[]>([]);
   const [eligibilities, setEligibilities] = useState<Eligibility[]>([]);
+  const [eligFiscalYear, setEligFiscalYear] = useState<number | null>(null);
+  const [eligResidency, setEligResidency] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
   const [alertDialog, setAlertDialog] = useState<{open: boolean; title: string; message: string; variant: 'success' | 'error' | 'info'}>({open: false, title: '', message: '', variant: 'info'});
@@ -115,9 +117,11 @@ export default function Fiscal() {
       const data = await res.json();
       setFiscalData(data.fiscalData || []);
       
-      const eligRes = await apiFetch(`${API}/fiscal/eligibilities${selectedId ? `?id=${selectedId}` : ''}`);
+      const eligRes = await apiFetch(`${API}/fiscal/eligibilities`);
       const eligData = await eligRes.json();
       setEligibilities(eligData.eligibilities || []);
+      setEligFiscalYear(eligData.fiscalYear || null);
+      setEligResidency(eligData.fiscalResidency || null);
       
       if (data.fiscalData && data.fiscalData.length > 0) {
         setSelectedId(prev => prev ?? data.fiscalData[0].id);
@@ -555,7 +559,7 @@ export default function Fiscal() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
             {/* Left — Répartition des revenus */}
-            <div className="bg-surface border border-border rounded-xl p-4 h-[420px] flex flex-col">
+            <div className="bg-surface border border-border rounded-xl p-4 h-[330px] flex flex-col">
               <h3 className="font-medium mb-4 flex-shrink-0">{t('income_breakdown') || 'Répartition des revenus'}</h3>
               {breakdownTotal > 0 ? (
                 <div className="flex flex-col items-center gap-4 flex-1 min-h-0">
@@ -616,7 +620,7 @@ export default function Fiscal() {
             </div>
 
             {/* Right — Synthèse fiscale */}
-            <div className="bg-surface border border-border rounded-xl p-4 h-[420px] flex flex-col">
+            <div className="bg-surface border border-border rounded-xl p-4 h-[330px] flex flex-col">
               <h3 className="font-medium mb-4 flex-shrink-0">{isCH ? '🇨🇭 Synthèse fiscale' : '🇫🇷 Synthèse fiscale'}</h3>
               <div className="divide-y divide-border text-sm overflow-auto flex-1">
                 {([
@@ -660,13 +664,16 @@ export default function Fiscal() {
           </div>
 
           <div className="bg-surface border border-border rounded-xl p-4">
-            <h3 className="font-medium mb-4">{t('eligibility_check') || 'Éligibilité aux aides'}</h3>
-            {currentData?.fiscal_residency && !currentData.fiscal_residency.startsWith('FR') ? (
+            <h3 className="font-medium mb-3">{t('eligibility_check') || 'Éligibilité aux aides'}</h3>
+            {eligFiscalYear && (
+              <p className="text-xs text-muted mb-3">Basé sur les revenus {eligFiscalYear} (dernière année importée)</p>
+            )}
+            {eligResidency && !eligResidency.startsWith('FR') ? (
               <div className="text-muted text-sm bg-surface-2 rounded-lg p-4">
                 <AlertCircle size={16} className="inline mr-2" />
                 Les aides françaises (Prime d'activité, APL, France Rénov') ne sont disponibles que pour les résidents fiscaux français.
                 <br />
-                <span className="text-xs opacity-70">Résidence actuelle: {currentData.fiscal_residency}</span>
+                <span className="text-xs opacity-70">Résidence fiscale : {eligResidency}</span>
               </div>
             ) : eligibilities.length === 0 ? (
               <p className="text-muted text-sm">{t('no_eligibilities') || 'Aucune aide disponible pour votre situation'}</p>
