@@ -30,16 +30,6 @@ type RankingResponse = {
   available?: boolean;
 };
 
-const COUNTRY_POPULATION: Record<string, number> = {
-  FR: 64_000_000,
-  DE: 84_000_000,
-  CH: 9_000_000,
-  US: 340_000_000,
-  CN: 1_410_000_000,
-};
-
-const WORLD_POPULATION = 8_100_000_000;
-
 const COUNTRIES = [
   { value: 'FR', flag: '🇫🇷', label: 'France' },
   { value: 'DE', flag: '🇩🇪', label: 'Germany' },
@@ -72,17 +62,7 @@ function getRankColor(p: number) {
 function fmt(key: string, v: number | undefined): string {
   if (v === undefined || v === null) return '\u2014';
   if (key === 'savings_rate') return `${Math.round(v)}%`;
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
-}
-
-function fmtInt(v: number | null): string {
-  if (!v || Number.isNaN(v)) return '\u2014';
-  return new Intl.NumberFormat('fr-FR').format(Math.max(1, Math.round(v)));
-}
-
-function fmtCompact(v: number | null): string {
-  if (!v || Number.isNaN(v)) return '\u2014';
-  return new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 }).format(Math.max(1, Math.round(v)));
+  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v) + ' €';
 }
 
 function getTopLabel(p: number): string {
@@ -95,18 +75,6 @@ function getTier(percentile: number): string {
   if (percentile >= 75) return 'Silver I';
   if (percentile >= 50) return 'Silver II';
   return 'Bronze';
-}
-
-function getPool(scope: RankingScope, countryCode?: string | null): number | null {
-  if (scope === 'world') return WORLD_POPULATION;
-  if (scope === 'country') return COUNTRY_POPULATION[(countryCode || '').toUpperCase()] || null;
-  return null;
-}
-
-function getEstimatedRank(percentile: number, pool: number | null): number | null {
-  if (!pool) return null;
-  const behindRatio = (100 - clampPercentile(percentile)) / 100;
-  return Math.max(1, Math.round(pool * behindRatio));
 }
 
 function getTierProgress(percentile: number) {
@@ -193,15 +161,9 @@ export default function Ranking() {
   }), [data]);
 
   const overallPercentile = Math.round((percentiles.net_worth + percentiles.income + percentiles.savings_rate) / 3);
-  const activeCountry = scope === 'country' ? country : data?.user_country;
-  const pool = getPool(scope, activeCountry);
-  const overallRank = getEstimatedRank(overallPercentile, pool);
   const tier = getTier(overallPercentile);
   const rankLabel = getTopLabel(overallPercentile);
   const tierProgress = getTierProgress(overallPercentile);
-  const placesToNext = pool && tierProgress.nextPercentile
-    ? Math.max(0, (getEstimatedRank(overallPercentile, pool) || 1) - (getEstimatedRank(tierProgress.nextPercentile, pool) || 1))
-    : null;
 
   return (
     <div>
@@ -267,11 +229,6 @@ export default function Ranking() {
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-base font-semibold text-white">{tier}</span>
                   <span className="text-sm text-emerald-400 font-semibold">{rankLabel}</span>
-                  {overallRank && pool ? (
-                    <span className="text-sm text-white/90">#{fmtCompact(overallRank)} of {fmtCompact(pool)}</span>
-                  ) : (
-                    <span className="text-sm text-white/80">P{overallPercentile}</span>
-                  )}
                 </div>
                 <div className="text-xs text-muted mt-1">Ahead of {overallPercentile}%</div>
               </div>
@@ -282,8 +239,7 @@ export default function Ranking() {
               </div>
               {tierProgress.nextPercentile ? (
                 <div className="text-[11px] text-muted mt-1.5">
-                  Next: {tierProgress.nextTier}
-                  {placesToNext !== null ? ` • ${fmtInt(placesToNext)} places` : ''}
+                  Next: {tierProgress.nextTier} · need Top {100 - tierProgress.nextPercentile}%
                 </div>
               ) : (
                 <div className="text-[11px] text-emerald-400 mt-1.5">Top tier reached</div>
@@ -297,7 +253,6 @@ export default function Ranking() {
               const color = getRankColor(p);
               const label = getRankLabel(m.key, p);
               const val = fmt(m.key, data?.user?.[m.key]);
-              const metricRank = getEstimatedRank(p, pool);
 
               return (
                 <div key={m.key} className="bg-surface border border-border rounded-xl p-4">
@@ -306,13 +261,8 @@ export default function Ranking() {
                       <div className="text-xs text-muted">{m.label}</div>
                       <div className="text-sm font-semibold text-white mt-0.5">{val}</div>
                     </div>
-                    <div className="text-right">
-                      <div className={`text-xs font-bold px-2 py-0.5 rounded-full inline-block ${color.bgLight} ${color.text}`}>
-                        {label}
-                      </div>
-                      <div className="text-[11px] text-white/70 mt-1">
-                        {metricRank && pool ? `#${fmtCompact(metricRank)} of ${fmtCompact(pool)}` : `P${p}`}
-                      </div>
+                    <div className={`text-xs font-bold px-2 py-0.5 rounded-full inline-block ${color.bgLight} ${color.text}`}>
+                      {label}
                     </div>
                   </div>
                   <div className="text-[11px] text-muted mb-1">Ahead of {p}%</div>
