@@ -87,10 +87,15 @@ export default function Income() {
   const { data: benchmarkDb } = useApi<Record<string, Record<number, { p: number; gross: number }[]>>>(`${API}/salary-benchmarks`);
 
   const entries = incomeData?.entries || [];
-  const availableYears = useMemo(() => [...new Set(entries.map(e => e.year))].sort((a, b) => b - a), [entries]);
-  const [activeYear, setActiveYear] = useState<number>(() => availableYears[0] ?? new Date().getFullYear());
+  const thisYear = new Date().getFullYear();
+  const availableYears = useMemo(() => {
+    const fromEntries = new Set(entries.map(e => e.year));
+    // Always include current year and past 2 years
+    [thisYear, thisYear - 1, thisYear - 2].forEach(y => fromEntries.add(y));
+    return [...fromEntries].sort((a, b) => b - a);
+  }, [entries, thisYear]);
+  const [activeYear, setActiveYear] = useState<number>(thisYear);
   useEffect(() => {
-    if (availableYears.length === 0) return;
     if (!availableYears.includes(activeYear)) setActiveYear(availableYears[0]);
   }, [availableYears, activeYear]);
   const entriesForYear = useMemo(() => entries.filter(e => e.year === activeYear), [entries, activeYear]);
@@ -424,21 +429,19 @@ export default function Income() {
         </div>
       </div>
 
-      {availableYears.length > 0 && (
-        <div className="flex flex-wrap gap-2 mb-3">
-          {availableYears.map(y => (
-            <button
-              key={y}
-              onClick={() => { setActiveYear(y); setExpandedYears(null); }}
-              className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                y === activeYear ? 'bg-accent-500 text-white' : 'bg-surface-hover text-muted hover:text-white'
-              }`}
-            >
-              {y}
-            </button>
-          ))}
-        </div>
-      )}
+      <div className="flex flex-wrap gap-2 mb-3">
+        {availableYears.map(y => (
+          <button
+            key={y}
+            onClick={() => { setActiveYear(y); setExpandedYears(null); }}
+            className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+              y === activeYear ? 'bg-accent-500 text-white' : 'bg-surface-hover text-muted hover:text-white'
+            }`}
+          >
+            {y}
+          </button>
+        ))}
+      </div>
 
       <div className="space-y-4">
       {/* ===== SECTION 1: Income Tracking ===== */}
@@ -1006,7 +1009,7 @@ export default function Income() {
       )}
 
       {/* ===== SECTION 4: Revenus Passifs ===== */}
-      <PassiveIncomeSection />
+      <PassiveIncomeSection year={activeYear} />
       </div>
     </div>
   );
@@ -1017,6 +1020,8 @@ interface PassiveIncomeData {
   monthly: number;
   yearly: number;
   yield_pct: number;
+  year: number;
+  is_past_year: boolean;
   upcoming: { source: string; type: string; amount: number; date: string }[];
   received: { source: string; type: string; amount: number; date: string }[];
   by_source: { type: string; label: string; monthly: number; pct: number }[];
@@ -1123,16 +1128,16 @@ function CategoryGroupedList({
   );
 }
 
-function PassiveIncomeSection() {
+function PassiveIncomeSection({ year }: { year: number }) {
   const [passiveOpen, setPassiveOpen] = useState(true);
-  const [activeTab, setActiveTab] = useState<'upcoming' | 'received'>('upcoming');
-  const { data, loading } = useApi<PassiveIncomeData>(`${API}/analysis/passive-income?usage=personal`);
-  const upcomingNextMonth = useMemo(() => {
-    if (!data?.upcoming?.length) return [];
-    const sorted = [...data.upcoming].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-    const firstMonth = sorted[0]?.date.slice(0, 7);
-    return firstMonth ? sorted.filter(i => i.date.startsWith(firstMonth)) : sorted;
-  }, [data]);
+  const currentYear = new Date().getFullYear();
+  const isPastYear = year < currentYear;
+  const [activeTab, setActiveTab] = useState<'upcoming' | 'received'>(isPastYear ? 'received' : 'upcoming');
+  // Reset to received tab when switching to a past year
+  useEffect(() => {
+    if (isPastYear) setActiveTab('received');
+  }, [isPastYear]);
+  const { data, loading } = useApi<PassiveIncomeData>(`${API}/analysis/passive-income?usage=personal&year=${year}`);
 
   const fmt = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 
@@ -1148,7 +1153,7 @@ function PassiveIncomeSection() {
     return d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' });
   };
 
-  const displayItems = data ? (activeTab === 'upcoming' ? upcomingNextMonth : data.received || []) : [];
+  const displayItems = data ? (activeTab === 'upcoming' ? data.upcoming || [] : data.received || []) : [];
 
 
   return (
@@ -1180,19 +1185,21 @@ function PassiveIncomeSection() {
             </div>
           </div>
 
-          {/* Tabs */}
+          {/* Tabs — hide "À venir" for past years */}
           <div className="flex gap-1 bg-surface-2 rounded-lg p-1 w-fit">
-            <button
-              onClick={() => setActiveTab('upcoming')}
-              className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'upcoming' ? 'bg-accent-500 text-white' : 'text-muted hover:text-white'}`}
-            >
-              À venir
-            </button>
+            {!isPastYear && (
+              <button
+                onClick={() => setActiveTab('upcoming')}
+                className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'upcoming' ? 'bg-accent-500 text-white' : 'text-muted hover:text-white'}`}
+              >
+                À venir
+              </button>
+            )}
             <button
               onClick={() => setActiveTab('received')}
               className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${activeTab === 'received' ? 'bg-accent-500 text-white' : 'text-muted hover:text-white'}`}
             >
-              Perçus
+              Perçus {year}
             </button>
           </div>
 
