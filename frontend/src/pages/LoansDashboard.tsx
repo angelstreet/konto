@@ -387,7 +387,7 @@ export default function LoansDashboard() {
                       <th className="text-right px-4 py-3">{t('loan_total_repaid') || 'Total remboursé'}</th>
                       <th className="text-right px-4 py-3">{t('interest_rate') || "Taux d'intérêt"}</th>
                       <th className="text-right px-4 py-3">{t('loan_monthly') || 'Mensualité'}</th>
-                      <th className="text-right px-4 py-3">{t('loan_remaining_principal') || 'Capital restant dû'}</th>
+                      <th className="text-right px-4 py-3">{t('loan_remaining_principal') || 'Restant dû'}</th>
                       <th className="text-right px-4 py-3">...</th>
                     </tr>
                   </thead>
@@ -467,7 +467,7 @@ export default function LoansDashboard() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <input className="bg-background border border-border rounded-lg px-3 py-2" placeholder={t('label') || 'Nom'} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} />
               <input className="bg-background border border-border rounded-lg px-3 py-2" placeholder={t('provider_name') || 'Banque'} value={form.provider_name} onChange={(e) => setForm((f) => ({ ...f, provider_name: e.target.value }))} />
-              <input className="bg-background border border-border rounded-lg px-3 py-2" placeholder={t('loan_remaining_principal') || 'Capital restant dû'} value={form.remaining} onChange={(e) => setForm((f) => ({ ...f, remaining: e.target.value }))} />
+              <input className="bg-background border border-border rounded-lg px-3 py-2" placeholder={t('loan_remaining_principal') || 'Restant dû'} value={form.remaining} onChange={(e) => setForm((f) => ({ ...f, remaining: e.target.value }))} />
               <input className="bg-background border border-border rounded-lg px-3 py-2" placeholder={t('loan_principal') || 'Capital initial'} value={form.principal_amount} onChange={(e) => setForm((f) => ({ ...f, principal_amount: e.target.value }))} />
               <input className="bg-background border border-border rounded-lg px-3 py-2" placeholder={t('loan_monthly') || 'Mensualité'} value={form.monthly_payment} onChange={(e) => setForm((f) => ({ ...f, monthly_payment: e.target.value }))} />
               <input className="bg-background border border-border rounded-lg px-3 py-2" placeholder={t('interest_rate') || "Taux d'intérêt"} value={form.interest_rate} onChange={(e) => setForm((f) => ({ ...f, interest_rate: e.target.value }))} />
