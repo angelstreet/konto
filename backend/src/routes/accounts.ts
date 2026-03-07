@@ -12,37 +12,24 @@ const router = new Hono();
 
 
 router.get('/api/bank/connect-url', (c) => {
-  const url = `https://webview.powens.com/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+  const lang = c.req.query('lang') || 'fr';
+  const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
   return c.json({ url });
 });
 
-// Powens webview wrapper — forces light mode so QR codes remain scannable
+// Powens webview — redirect directly (Powens blocks iframes via X-Frame-Options: DENY)
 router.get('/api/bank/webview', (c) => {
   const target = c.req.query('url');
   if (!target || !target.startsWith('https://webview.powens.com/')) {
     return c.text('Invalid URL', 400);
   }
-  return c.html(`<!DOCTYPE html>
-<html style="color-scheme:light only">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <meta name="color-scheme" content="light only">
-  <title>Bank Connection</title>
-  <style>
-    *{margin:0;padding:0}
-    html,body{height:100%;background:#fff;color-scheme:light only}
-    iframe{width:100%;height:100%;border:none}
-    @media(prefers-color-scheme:dark){html,body{background:#fff;color:#000}}
-  </style>
-</head>
-<body><iframe src="${target.replace(/"/g, '&quot;')}"></iframe></body>
-</html>`);
+  return c.redirect(target, 302);
 });
 
 // Reconnect a specific SCA-blocked connection
 router.get('/api/bank/reconnect-url/:accountId', async (c) => {
   const accountId = c.req.param('accountId');
+  const lang = c.req.query('lang') || 'fr';
   const userId = await getUserId(c);
 
   const accRes = await db.execute({
@@ -72,18 +59,18 @@ router.get('/api/bank/reconnect-url/:accountId', async (c) => {
         });
         if (!codeRes.ok) {
           // Fallback: use token directly
-          const url = `https://webview.powens.com/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&token=${conn.powens_token}`;
+          const url = `https://webview.powens.com/${lang}/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&token=${conn.powens_token}`;
           return c.json({ url, connection_id: conn.powens_connection_id });
         }
         const codeData = await codeRes.json() as any;
-        const url = `https://webview.powens.com/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&code=${codeData.code}`;
+        const url = `https://webview.powens.com/${lang}/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&code=${codeData.code}`;
         return c.json({ url, connection_id: conn.powens_connection_id });
       }
     } catch {}
   }
 
   // Fallback to generic connect
-  const url = `https://webview.powens.com/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
+  const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`;
   return c.json({ url });
 });
 

@@ -85,7 +85,8 @@ interface BankConnection {
 type AddMode = null | 'choose' | 'manual' | 'blockchain' | 'metamask-scanning' | 'binance';
 
 export default function Accounts() {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const lang = i18n.language?.slice(0, 2) || 'fr';
   const { convertToDisplay } = usePreferences();
   let getTokenAcc: (() => Promise<string | null>) | undefined;
   if (clerkEnabledAcc) { try { const auth = useAuth(); getTokenAcc = auth.getToken; } catch {} }
@@ -150,16 +151,15 @@ export default function Accounts() {
   };
 
   const connectBank = async () => {
-    const res = await authFetch(`${API}/bank/connect-url`);
+    const res = await authFetch(`${API}/bank/connect-url?lang=${lang}`);
     const { url } = await res.json();
-    // Use light-mode wrapper so Powens QR codes remain scannable
     window.location.href = `${API}/bank/webview?url=${encodeURIComponent(url)}`;
   };
 
   const reconnectAccount = async (accountId: number) => {
-    const res = await authFetch(`${API}/bank/reconnect-url/${accountId}`);
+    const res = await authFetch(`${API}/bank/reconnect-url/${accountId}?lang=${lang}`);
     const { url } = await res.json();
-    window.location.href = `${API}/bank/webview?url=${encodeURIComponent(url)}`;
+    window.open(`${API}/bank/webview?url=${encodeURIComponent(url)}`, '_blank');
   };
 
   const connectCoinbase = async () => {
@@ -195,8 +195,8 @@ export default function Accounts() {
           connectBank();
           return;
         }
-        // If SCA and investment account — redirect to reconnect so user can fix it
-        if (result.sca_required && acc?.type === 'investment') {
+        // If SCA required — redirect to reconnect so user can fix it
+        if (result.sca_required) {
           reconnectAccount(id);
           return;
         }
@@ -1232,7 +1232,7 @@ export default function Accounts() {
                         <AlertTriangle size={10} />
                         {t('sync_expired')}
                       </button>
-                    ) : acc.sca_required && acc.type === 'investment' ? (
+                    ) : acc.sca_required ? (
                       <button
                         onClick={() => reconnectAccount(acc.id)}
                         className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors flex items-center gap-1"
