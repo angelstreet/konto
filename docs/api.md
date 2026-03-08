@@ -47,7 +47,28 @@ Portfolio positions. Fields: label, code, quantity, unit_value, current_value, t
 Real estate + other assets. Fields: name, type (real_estate|vehicle|other), current_value, purchase_value, monthly_rent.
 
 ### GET /api/v1/loans
-Active loans. Fields: name, remaining_amount, monthly_payment, rate, start_date, end_date.
+Active loans with full details.
+```json
+{
+  "loans": [
+    {
+      "name": "Cic Immo Prêt Modulable",
+      "remaining_amount": -414670.03,
+      "monthly_payment": 2121.49,
+      "rate": 2.6,
+      "start_date": "2023-03-29",
+      "end_date": "2048-03-05",
+      "duration_months": 300,
+      "installments_paid": 15,
+      "insurance_monthly": 57.29,
+      "provider": "CIC"
+    }
+  ]
+}
+```
+Fields: name, remaining_amount (negative), monthly_payment, rate (%),
+start_date (YYYY-MM-DD), end_date (YYYY-MM-DD), duration_months,
+installments_paid, insurance_monthly, provider.
 
 ---
 
