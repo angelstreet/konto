@@ -96,13 +96,8 @@ router.get('/api/bank-callback', async (c) => {
       <h1 style="color:#ef4444;">Connection failed</h1><p>${escapeHtml(error)}</p>
       <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
   }
-  if (!code) {
-    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
-      <h1 style="color:#ef4444;">No code received</h1>
-      <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
-  }
-
-  // Validate OAuth state to prevent CSRF
+  // Validate OAuth state to prevent CSRF (always — code and no-code flows)
+  let stateUserId: number | null = null;
   if (state) {
     const stateRes = await db.execute({ sql: 'SELECT user_id FROM oauth_states WHERE state = ?', args: [state] });
     if (stateRes.rows.length === 0) {
@@ -110,8 +105,39 @@ router.get('/api/bank-callback', async (c) => {
         <h1 style="color:#ef4444;">Invalid or expired session</h1><p>Please try connecting your bank again.</p>
         <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`, 403);
     }
+    stateUserId = (stateRes.rows[0] as any).user_id;
     // Consume the state (one-time use)
     await db.execute({ sql: 'DELETE FROM oauth_states WHERE state = ?', args: [state] });
+  }
+
+  // Powens reconnect flow: redirects back with connection_id but no code when SCA is resolved
+  // In this case the existing token is still valid — just clear SCA flag and sync
+  if (!code && connectionId) {
+    const userId = stateUserId ?? await getUserId(c);
+    await db.execute({
+      sql: 'UPDATE bank_connections SET status = ? WHERE user_id = ? AND powens_connection_id = ? AND status = ?',
+      args: ['active', userId, connectionId, 'sca_required'],
+    });
+    await db.execute({
+      sql: `UPDATE bank_accounts SET sca_required = 0
+            WHERE user_id = ? AND provider = 'powens'
+            AND provider_account_id IN (
+              SELECT ba.provider_account_id FROM bank_accounts ba
+              JOIN bank_connections bc ON bc.user_id = ba.user_id AND bc.powens_connection_id = ?
+              WHERE ba.user_id = ?
+            )`,
+      args: [userId, connectionId, userId],
+    });
+    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"><meta http-equiv="refresh" content="3;url=/konto/accounts"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#d4a812;">✅ Bank reconnected!</h1><p>Your accounts have been refreshed.</p>
+      <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a>
+    </body></html>`);
+  }
+
+  if (!code) {
+    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#ef4444;">No code received</h1>
+      <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`);
   }
 
   try {
@@ -537,15 +563,51 @@ router.post('/api/bank/accounts/:id/sync', async (c) => {
       if (connStateRes.ok) {
         const connState = await connStateRes.json() as any;
         if (connState.state === 'SCARequired' || connState.error === 'SCARequired') {
-          connectionNeedsSCA = true;
-          console.log(`Connection ${matchedConn.id} (powens ${matchedConn.powens_connection_id}) needs SCA — will sync cached data`);
+          // Before giving up, try to silently refresh the token — refresh tokens can sometimes
+          // resolve an expired-session SCARequired without the user going through the webview
+          if (matchedConn.powens_refresh_token) {
+            const refreshed = await refreshPowensToken(matchedConn.id);
+            if (refreshed) {
+              connectionToken = refreshed;
+              // Re-check connection state with the fresh token
+              const reCheckRes = await fetch(`${POWENS_API}/users/me/connections/${matchedConn.powens_connection_id}`, {
+                headers: { 'Authorization': `Bearer ${connectionToken}` },
+              });
+              if (reCheckRes.ok) {
+                const reState = await reCheckRes.json() as any;
+                if (!reState.state || reState.state === 'active' || (!reState.error)) {
+                  console.log(`Connection ${matchedConn.id} SCA resolved by token refresh`);
+                  // SCA resolved — continue without flagging
+                } else {
+                  connectionNeedsSCA = true;
+                  console.log(`Connection ${matchedConn.id} still needs SCA after token refresh`);
+                }
+              } else {
+                connectionNeedsSCA = true;
+              }
+            } else {
+              connectionNeedsSCA = true;
+              console.log(`Connection ${matchedConn.id} (powens ${matchedConn.powens_connection_id}) needs SCA — will sync cached data`);
+            }
+          } else {
+            connectionNeedsSCA = true;
+            console.log(`Connection ${matchedConn.id} (powens ${matchedConn.powens_connection_id}) needs SCA — will sync cached data`);
+          }
         } else if (connState.error && connState.error !== 'SCARequired') {
-          // Real errors like wrongpass — require reconnect
-          console.log(`Connection ${matchedConn.id} has error: ${connState.error} — requires reconnect`);
-          return c.json({
-            error: `Bank connection error: ${connState.error}`,
-            reconnect_required: true,
-          }, 400);
+          // Real errors like wrongpass — but first try refresh token before forcing reconnect
+          if (matchedConn.powens_refresh_token) {
+            const refreshed = await refreshPowensToken(matchedConn.id);
+            if (refreshed) {
+              connectionToken = refreshed;
+              console.log(`Connection ${matchedConn.id} error '${connState.error}' resolved by token refresh`);
+            } else {
+              console.log(`Connection ${matchedConn.id} has error: ${connState.error} — requires reconnect`);
+              return c.json({ error: `Bank connection error: ${connState.error}`, reconnect_required: true }, 400);
+            }
+          } else {
+            console.log(`Connection ${matchedConn.id} has error: ${connState.error} — requires reconnect`);
+            return c.json({ error: `Bank connection error: ${connState.error}`, reconnect_required: true }, 400);
+          }
         }
       }
     } catch (err: any) {
@@ -690,6 +752,15 @@ router.post('/api/bank/accounts/:id/sync', async (c) => {
       sql: 'UPDATE bank_accounts SET last_sync = ?, sca_required = ? WHERE id = ?',
       args: [new Date().toISOString(), connectionNeedsSCA ? 1 : 0, account.id]
     });
+
+    // When reconnect succeeds (no SCA), clear the flag on all sibling accounts sharing the same connection
+    if (!connectionNeedsSCA && matchedConn?.powens_connection_id) {
+      await db.execute({
+        sql: `UPDATE bank_accounts SET sca_required = 0
+              WHERE user_id = ? AND provider = 'powens' AND sca_required = 1 AND id != ?`,
+        args: [account.user_id, account.id],
+      });
+    }
 
     return c.json({
       synced: transactions.length,
