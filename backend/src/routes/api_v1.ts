@@ -136,18 +136,27 @@ router.get('/api/v1/loans', async (c) => {
   const userId = await getApiUserId(c);
   if (!userId) return c.json({ error: 'Unauthorized' }, 401);
   const result = await db.execute({
-    sql: `SELECT COALESCE(custom_name, name) as name, balance
-          FROM bank_accounts WHERE user_id = ? AND type = 'loan' ORDER BY balance ASC`,
+    sql: `SELECT ba.id, COALESCE(ba.custom_name, ba.name) as name, ba.balance, ba.bank_name,
+                 ld.monthly_payment, ld.interest_rate, ld.start_date, ld.end_date,
+                 ld.duration_months, ld.installments_paid, ld.insurance_monthly, ld.source
+          FROM bank_accounts ba
+          LEFT JOIN loan_details ld ON ld.bank_account_id = ba.id AND ld.user_id = ba.user_id
+          WHERE ba.user_id = ? AND ba.type = 'loan' AND ba.hidden = 0
+          ORDER BY ba.balance ASC`,
     args: [userId],
   });
   return c.json({
     loans: (result.rows as any[]).map((r) => ({
       name: r.name || '',
       remaining_amount: Math.round((r.balance || 0) * 100) / 100,
-      monthly_payment: null,
-      rate: null,
-      start_date: null,
-      end_date: null,
+      monthly_payment: r.monthly_payment ? Math.round(r.monthly_payment * 100) / 100 : null,
+      rate: r.interest_rate ? Math.round(r.interest_rate * 100) / 100 : null,
+      start_date: r.start_date || null,
+      end_date: r.end_date || null,
+      duration_months: r.duration_months || null,
+      installments_paid: r.installments_paid || null,
+      insurance_monthly: r.insurance_monthly ? Math.round(r.insurance_monthly * 100) / 100 : null,
+      provider: r.bank_name || null,
     })),
   });
 });
