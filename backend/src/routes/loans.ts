@@ -269,8 +269,8 @@ function buildLoanComputed(raw: any, monthlyFallback: number | null) {
   const balance = Number(raw.balance || 0);
   const remaining = Math.abs(Math.min(balance, 0));
   const monthlyPayment = n(raw.monthly_payment) ?? monthlyFallback;
-  const principal = n(raw.principal_amount) ?? (remaining > 0 ? remaining : null);
-  const durationMonths = n(raw.duration_months)
+  const principal = (n(raw.principal_amount) || null) ?? (remaining > 0 ? remaining : null);
+  const durationMonths = (n(raw.duration_months) || null)
     ?? monthsBetween(d(raw.start_date), d(raw.end_date));
 
   const repaidCapital = principal !== null ? Math.max(0, principal - remaining) : null;
@@ -282,7 +282,7 @@ function buildLoanComputed(raw: any, monthlyFallback: number | null) {
   const storedInstallments = n(raw.installments_paid);
   const installmentsPaid = (storedInstallments !== null && storedInstallments > 0)
     ? storedInstallments
-    : (durationMonths !== null && repaidCapital !== null && principal && principal > 0
+    : (durationMonths !== null && repaidCapital !== null && repaidCapital > 0 && principal && principal > 0
       ? Math.round(durationMonths * (repaidCapital / principal))
       : inferredFromDate);
 
