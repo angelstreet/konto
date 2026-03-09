@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, Treemap, Cell } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { Plus, Download, GraduationCap, Pencil, Trash2 } from 'lucide-react';
 import { useApi, useAuthFetch, invalidateApi } from '../useApi';
 import { useFilter } from '../FilterContext';
@@ -321,29 +321,23 @@ export default function LoansDashboard() {
                   </div>
                   <div className="h-64">
                     <ResponsiveContainer width="100%" height="100%">
-                      <Treemap
-                        data={filteredDistribution}
-                        dataKey="remaining"
-                        stroke="#111"
-                        content={({ x, y, width, height, index, name, value }) => {
-                          if (width < 40 || height < 25) return <g />;
-                          return (
-                            <g>
-                              <rect x={x} y={y} width={width} height={height} fill={TREEMAP_COLORS[(index || 0) % TREEMAP_COLORS.length]} opacity={0.9} />
-                              <text x={x + 6} y={y + 16} fill="#fff" fontSize={11} fontWeight="600" pointerEvents="none">
-                                {name}
-                              </text>
-                              <text x={x + 6} y={y + 32} fill="#d1d5db" fontSize={10} pointerEvents="none">
-                                {formatCurrency(Number(value || 0))}
-                              </text>
-                            </g>
-                          );
-                        }}
-                      >
-                        {filteredDistribution.map((_, idx) => (
-                          <Cell key={idx} fill={TREEMAP_COLORS[idx % TREEMAP_COLORS.length]} />
-                        ))}
-                      </Treemap>
+                      <PieChart>
+                        <Pie
+                          data={filteredDistribution}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={40}
+                          outerRadius={60}
+                          dataKey="remaining"
+                          nameKey="name"
+                          stroke="none"
+                        >
+                          {filteredDistribution.map((_, idx) => (
+                            <Cell key={idx} fill={TREEMAP_COLORS[idx % TREEMAP_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value: any) => fc(value)} />
+                      </PieChart>
                     </ResponsiveContainer>
                   </div>
                   <div className="mt-3 space-y-1 text-xs text-muted">
@@ -353,7 +347,7 @@ export default function LoansDashboard() {
                           <span className="inline-block w-3 h-3 rounded-sm" style={{ backgroundColor: TREEMAP_COLORS[idx % TREEMAP_COLORS.length] }} />
                           <span className="text-white">{d.name}</span>
                         </span>
-                        <span className="text-muted">{formatCurrency(d.remaining)} · {d.share_pct}%</span>
+                        <span className="text-muted">{fc(d.remaining)} · {d.share_pct}%</span>
                       </div>
                     ))}
                   </div>

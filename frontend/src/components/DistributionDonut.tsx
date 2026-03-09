@@ -1,4 +1,3 @@
-import { useRef } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 
 const COLORS: Record<string, string> = {
@@ -39,12 +38,11 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
   const positiveData = data.filter(d => d.value > 0);
   if (positiveData.length === 0) return null;
   const fc = (n: number): React.ReactNode => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
-  const hasAnimated = useRef(false);
+  const posSum = positiveData.reduce((s, x) => s + x.value, 0);
 
   return (
     <div className="bg-surface rounded-xl border border-border p-4">
       <h3 className="text-sm font-medium text-muted tracking-wide mb-3">Répartition du patrimoine</h3>
-      <div>
       <div className="flex flex-col sm:flex-row items-center gap-4">
         <div className="w-40 h-40 relative flex-shrink-0" style={{ minWidth: 160, minHeight: 160 }}>
           <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
@@ -58,8 +56,6 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
                 dataKey="value"
                 nameKey="key"
                 stroke="none"
-                isAnimationActive={!hasAnimated.current}
-                onAnimationEnd={() => { hasAnimated.current = true; }}
               >
                 {positiveData.map((entry) => (
                   <Cell key={entry.key} fill={COLORS[entry.key] || '#6b7280'} />
@@ -68,7 +64,6 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
               <Tooltip
                 formatter={(value: any, name: any) => [fc(value as number), LABELS[name as string] || name]}
                 contentStyle={{ backgroundColor: '#1a1a1a', border: '1px solid #333', borderRadius: 8, fontSize: 12, color: '#e5e5e5' }}
-                itemStyle={{ color: '#e5e5e5' }}
               />
             </PieChart>
           </ResponsiveContainer>
@@ -78,7 +73,6 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
         </div>
         <div className="flex-1 space-y-1.5">
           {positiveData.map(d => {
-            const posSum = positiveData.reduce((s, x) => s + x.value, 0);
             const pct = posSum > 0 ? (d.value / posSum) * 100 : 0;
             return (
               <div key={d.key} className="flex items-center justify-between text-xs">
@@ -104,7 +98,6 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
           )}
         </div>
       </div>
-      </div>{/* end collapsible */}
     </div>
   );
 }
