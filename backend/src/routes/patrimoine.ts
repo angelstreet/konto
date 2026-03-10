@@ -906,6 +906,45 @@ router.get('/api/properties/roi', async (c) => {
   // Calculate occupancy rate (nights booked / total possible nights)
   const totalDays = Math.round((now.getTime() - fromDate.getTime()) / 86400000);
 
+  // Build costs breakdown by category
+  const buildCostsBreakdown = (matchedCosts: { label: string; amount: number; date: string }[]) => {
+    const categories: Record<string, { amount: number; items: { label: string; amount: number; date: string }[] }> = {};
+    
+    for (const cost of matchedCosts) {
+      const label = cost.label.toLowerCase();
+      let category = 'Autres';
+      
+      // Categorize based on keywords
+      if (label.includes('eau') || label.includes('water') || label.includes('vod')) {
+        category = 'Eau';
+      } else if (label.includes('electric') || label.includes('électric') || label.includes('enel') || label.includes('edf') || label.includes('esch')) {
+        category = 'Électricité';
+      } else if (label.includes('gaz') || label.includes('gas') || label.includes('energie')) {
+        category = 'Gaz';
+      } else if (label.includes('internet') || label.includes('fiber') || label.includes('fibre') || label.includes('wifi') || label.includes('orange') || label.includes('swisscom')) {
+        category = 'Internet';
+      } else if (label.includes('assurance') || label.includes('insurance') || label.includes('maison') || label.includes('habitation')) {
+        category = 'Assurance';
+      } else if (label.includes('taxe') || label.includes('impot') || label.includes('tax') || label.includes('foncier')) {
+        category = 'Taxes';
+      } else if (label.includes('nettoyage') || label.includes('cleaning') || label.includes('ménage')) {
+        category = 'Ménage';
+      } else if (label.includes('réparation') || label.includes('repair') || label.includes('maintenance') || label.includes('travaux')) {
+        category = 'Réparations';
+      }
+      
+      if (!categories[category]) {
+        categories[category] = { amount: 0, items: [] };
+      }
+      categories[category].amount += cost.amount;
+      categories[category].items.push(cost);
+    }
+    
+    return Object.entries(categories)
+      .map(([category, data]) => ({ category, amount: Math.round(data.amount * 100) / 100, items: data.items }))
+      .sort((a, b) => b.amount - a.amount);
+  };
+
   // Build response
   const properties = apartments.map((apt: any) => {
     const rev = revenueByApt[apt.id] || { total: 0, byMonth: {}, nights: 0, bookingCount: 0 };
@@ -914,6 +953,7 @@ router.get('/api/properties/roi', async (c) => {
     const occupancyRate = totalDays > 0 ? Math.round((rev.nights / totalDays) * 100) : 0;
     const monthlyRevenue = monthsParam > 0 ? Math.round(rev.total / monthsParam) : 0;
     const monthlyCosts = monthsParam > 0 ? Math.round(costs.total / monthsParam) : 0;
+    const costsBreakdown = buildCostsBreakdown(costs.matched);
 
     return {
       id: apt.id,
@@ -930,6 +970,7 @@ router.get('/api/properties/roi', async (c) => {
       revenueByMonth: rev.byMonth,
       costsByMonth: costs.byMonth,
       matchedCosts: costs.matched,
+      costsBreakdown,
     };
   });
 

@@ -5,9 +5,9 @@ import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
 import ScopeSelect from '../components/ScopeSelect';
 import { useFilter } from '../FilterContext';
-import { ArrowLeft, Home } from 'lucide-react';
+import { ArrowLeft, Home, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 interface Property {
   id: number;
@@ -23,6 +23,7 @@ interface Property {
   bookings: number;
   revenueByMonth: Record<string, number>;
   costsByMonth: Record<string, number>;
+  costsBreakdown?: { category: string; amount: number; items: { label: string; amount: number; date: string }[] }[];
 }
 
 interface ROIData {
@@ -52,13 +53,18 @@ export default function PropertyROI() {
   const [data, setData] = useState<ROIData | null>(() => roiCache[6] ?? null);
   const [loading, setLoading] = useState(!roiCache[6]);
   const animatedProperties = useRef<Set<number>>(new Set());
+  const [showChargesModal, setShowChargesModal] = useState(false);
+  const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
 
   // Reset animation tracking when months filter changes
   useEffect(() => {
     animatedProperties.current = new Set();
   }, [months, appendScope, authFetch]);
-  const [_showCharges, _setShowCharges] = useState(false);
-  const [_selectedProp, _setSelectedProp] = useState<Property | null>(null);
+
+  const handleMonthsChange = (value: string) => {
+    const val = value === 'year' ? 12 : parseInt(value);
+    setMonths(val);
+  };
 
   useEffect(() => {
     if (roiCache[months]) {
@@ -98,13 +104,14 @@ export default function PropertyROI() {
         <div className="flex items-center gap-1 flex-shrink-0">
           <ScopeSelect />
           <select
-            value={months}
-            onChange={(e) => setMonths(parseInt(e.target.value))}
+            value={months === 12 ? 'year' : months}
+            onChange={(e) => handleMonthsChange(e.target.value)}
             className="bg-card border border-border rounded-md px-2 py-1 text-sm"
           >
             <option value={3}>3 mois</option>
             <option value={6}>6 mois</option>
             <option value={12}>12 mois</option>
+            <option value="year">Par an</option>
           </select>
           <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>
@@ -168,12 +175,15 @@ export default function PropertyROI() {
                         {h ? '•••' : fmt(prop.monthlyRevenue)}
                       </p>
                     </div>
-                    <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-2 text-center">
+                    <button
+                      onClick={() => { setSelectedProperty(prop); setShowChargesModal(true); }}
+                      className="bg-red-500/5 border border-red-500/20 rounded-lg p-2 text-center hover:bg-red-500/10 transition-colors"
+                    >
                       <p className="text-[10px] text-muted-foreground">Charges/mois</p>
                       <p className={`text-sm font-semibold text-red-500 ${h ? 'amount-masked' : ''}`}>
                         {h ? '•••' : fmt(prop.monthlyCosts)}
                       </p>
-                    </div>
+                    </button>
                     <div className={`rounded-lg p-2 text-center border ${prop.monthlyNet >= 0 ? 'bg-green-500/5 border-green-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
                       <p className="text-[10px] text-muted-foreground">Net/mois</p>
                       <p className={`text-sm font-semibold ${prop.monthlyNet >= 0 ? 'text-green-500' : 'text-red-500'} ${h ? 'amount-masked' : ''}`}>
@@ -207,6 +217,89 @@ export default function PropertyROI() {
             })}
           </div>
         </>
+      )}
+
+      {/* Charges breakdown modal */}
+      {showChargesModal && selectedProperty && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4" onClick={() => setShowChargesModal(false)}>
+          <div className="bg-[#1c1c1e] rounded-xl border border-white/10 p-4 max-w-md w-full max-h-[80vh] flex flex-col" onClick={e => e.stopPropagation()}>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Répartition des charges</h2>
+                <p className="text-sm text-muted-foreground">{selectedProperty.name}</p>
+              </div>
+              <button onClick={() => setShowChargesModal(false)} className="text-muted hover:text-white p-1">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Donut chart */}
+            {selectedProperty.costsBreakdown && selectedProperty.costsBreakdown.length > 0 && (
+              <div className="h-40 mb-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={selectedProperty.costsBreakdown.map(c => ({ name: c.category, value: c.amount }))}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={60}
+                      paddingAngle={2}
+                      dataKey="value"
+                    >
+                      {selectedProperty.costsBreakdown.map((_, index) => (
+                        <Cell key={`cell-${index}`} fill={['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6'][index % 6]} />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      formatter={(v: any) => h ? '•••' : fmt(v)}
+                      contentStyle={{ fontSize: 11, backgroundColor: 'var(--card)', border: '1px solid var(--border)', borderRadius: 6, color: '#e5e5e5' }}
+                    />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+
+            {/* Charges list */}
+            <div className="flex-1 overflow-auto">
+              {selectedProperty.costsBreakdown && selectedProperty.costsBreakdown.length > 0 ? (
+                <div className="space-y-3">
+                  {selectedProperty.costsBreakdown.map((cat, idx) => (
+                    <div key={cat.category} className="bg-surface rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <div className={`w-3 h-3 rounded-full bg-[${{ 0: '#ef4444', 1: '#f97316', 2: '#eab308', 3: '#22c55e', 4: '#3b82f6', 5: '#8b5cf6'}[idx % 6]}]`} style={{ backgroundColor: ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6'][idx % 6] }} />
+                          <span className="text-sm font-medium text-white">{cat.category}</span>
+                        </div>
+                        <span className={`text-sm font-semibold text-red-400 ${h ? 'amount-masked' : ''}`}>
+                          {h ? '•••' : fmt(cat.amount)}
+                        </span>
+                      </div>
+                      <div className="space-y-1">
+                        {cat.items.slice(0, 5).map((item, i) => (
+                          <div key={i} className="flex items-center justify-between text-xs text-muted-foreground">
+                            <span className="truncate flex-1">{item.label}</span>
+                            <span className={`ml-2 ${h ? 'amount-masked' : ''}`}>{h ? '•••' : fmt(item.amount)}</span>
+                          </div>
+                        ))}
+                        {cat.items.length > 5 && (
+                          <div className="text-xs text-muted-foreground text-center pt-1">
+                            +{cat.items.length - 5} autres...
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-muted py-8">
+                  <p className="text-sm">Aucune détail de charges disponible</p>
+                  <p className="text-xs mt-1">Les charges sont récupérées depuis les transactions bancaires</p>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
