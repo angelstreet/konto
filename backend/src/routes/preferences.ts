@@ -1,11 +1,6 @@
 import { Hono } from 'hono';
 import db from '../db.js';
-import { encrypt, decrypt } from '../crypto.js';
-import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, decryptDriveConn,
-         POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI,
-         classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
-         refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
-         calcInvestmentDiff, calcInvDiff, formatCurrencyFR, escapeHtml } from '../shared.js';
+import { getUserId } from '../shared.js';
 
 
 const router = new Hono();
