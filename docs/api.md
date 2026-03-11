@@ -101,6 +101,36 @@ top_subscriptions (merchant, users_pct, avg_amount), avg_monthly_subscriptions
 | Invoices | /api/invoices/* |
 | Reports | /api/report/patrimoine |
 | Crypto | /api/crypto/prices, /api/binance/* |
+| Integration | /api/integration/status |
+
+### GET /api/integration/status
+Returns integration/connection status for the authenticated user. Supports API Key or Clerk auth.
+
+**Response:**
+```json
+{
+  "app_id": "konto",
+  "authenticated": true,
+  "auth_mode": "api_key|clerk",
+  "exists": true,
+  "local_user_id": 123,
+  "clerk_user_id": "user_xxxxx",
+  "onboarded": true,
+  "available_features": ["summary", "accounts", "transactions", "loans", "assets", "bank_sync"],
+  "summary": {
+    "has_bank_connections": true,
+    "has_accounts": true,
+    "has_loans": true,
+    "has_assets": true,
+    "counts": {
+      "bank_connections": 2,
+      "accounts": 28,
+      "loans": 2,
+      "assets": 4
+    }
+  }
+}
+```
 
 ## Errors
 401 Unauthorized, 403 Access denied / Analytics scope required, 404 Not found, 429 Rate limited (100 req/min)
