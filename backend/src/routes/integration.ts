@@ -1,9 +1,21 @@
 import { Hono } from 'hono';
 import db from '../db.js';
+import { getUserId } from '../shared.js';
 import { kontoIntegrationManifest } from '../integration/manifest.js';
 import { kontoIntegrationActions, runKontoIntegrationAction, type KontoIntegrationActionId } from '../integration/actions.js';
 
 const router = new Hono();
+
+function isLocalIntegrationRequest(c: any) {
+  const host = String(c.req.header('host') || '').toLowerCase();
+  const forwardedFor = String(c.req.header('x-forwarded-for') || '').toLowerCase();
+  return (
+    host.startsWith('127.0.0.1:') ||
+    host.startsWith('localhost:') ||
+    forwardedFor.startsWith('127.0.0.1') ||
+    forwardedFor.startsWith('::1')
+  );
+}
 
 async function getExistingUserForIntegration(c: any) {
   if ((c as any).apiKeyUserId) {
@@ -25,9 +37,23 @@ async function getExistingUserForIntegration(c: any) {
   return row.rows[0] || null;
 }
 
+async function getIntegrationUser(c: any) {
+  const existingUser = await getExistingUserForIntegration(c);
+  if (existingUser) return existingUser;
+
+  if (!isLocalIntegrationRequest(c)) return null;
+
+  const fallbackUserId = await getUserId(c);
+  const row = await db.execute({
+    sql: 'SELECT id, clerk_id FROM users WHERE id = ?',
+    args: [fallbackUserId],
+  });
+  return row.rows[0] || null;
+}
+
 router.get('/api/integration/status', async (c) => {
   const authMode = (c as any).apiKeyUserId ? 'api_key' : (c as any).clerkUserId ? 'clerk' : 'none';
-  const user = await getExistingUserForIntegration(c);
+  const user = await getIntegrationUser(c);
 
   if (!user) {
     return c.json({
@@ -104,7 +130,7 @@ router.get('/api/integration/actions', (c) => {
 });
 
 router.post('/api/integration/execute/:actionId', async (c) => {
-  const user = await getExistingUserForIntegration(c);
+  const user = await getIntegrationUser(c);
   if (!user) return c.json({ error: 'No local user for integration' }, 404);
 
   const actionId = c.req.param('actionId') as KontoIntegrationActionId;
