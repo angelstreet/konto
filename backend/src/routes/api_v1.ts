@@ -14,15 +14,32 @@ const router = new Hono();
 
 // ========== PUBLIC API v1 ==========
 
-// Helper: get user ID from API key context or Clerk JWT
+// Helper: get user ID from API key, Clerk JWT, or OAuth Bearer token
 async function getApiUserId(c: any): Promise<number | null> {
   const apiUserId = (c as any).apiKeyUserId;
   if (apiUserId) return apiUserId;
   try {
-    return await getUserId(c);
+    const clerkUserId = await getUserId(c);
+    if (clerkUserId) return clerkUserId;
   } catch {
-    return null;
+    // not authenticated via Clerk
   }
+  // OAuth Bearer token (non-konto_ prefix)
+  const auth = c.req.header('Authorization');
+  if (auth?.startsWith('Bearer ')) {
+    const token = auth.slice(7);
+    if (!token.startsWith('konto_')) {
+      const hash = sha256(token);
+      const row = await db.execute({
+        sql: `SELECT user_id FROM oauth_access_tokens WHERE token_hash = ? AND active = 1 AND expires_at > datetime('now')`,
+        args: [hash],
+      });
+      if (row.rows.length > 0) {
+        return Number((row.rows[0] as any).user_id);
+      }
+    }
+  }
+  return null;
 }
 
 function getApiScope(c: any): string {

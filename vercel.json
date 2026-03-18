@@ -5,6 +5,7 @@
   "outputDirectory": "frontend/dist",
   "rewrites": [
     { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/oauth/(.*)", "destination": "/api/oauth/$1" },
     { "source": "/konto/manifest.webmanifest", "destination": "/manifest.webmanifest" },
     { "source": "/konto/sw.js", "destination": "/sw.js" },
     { "source": "/konto/registerSW.js", "destination": "/registerSW.js" },

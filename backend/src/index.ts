@@ -33,6 +33,8 @@ import loansRoutes from './routes/loans.js';
 import fiscalRoutes from './routes/fiscal.js';
 import incomeRoutes from './routes/income.js';
 import integrationRoutes from './routes/integration.js';
+import oauthAuthorizeRoutes from './routes/oauth-authorize.js';
+import oauthTokenRoutes from './routes/oauth-token.js';
 
 // Lazy-load Bitcoin modules (contain WASM that breaks Vercel serverless)
 let bip32: any = null;
@@ -91,6 +93,14 @@ app.use('/*', cors({
   },
   credentials: true,
 }));
+
+// --- OAuth2 CORS: allow cross-origin token requests ---
+app.use('/api/oauth/*', async (c, next) => {
+  c.header('Access-Control-Allow-Origin', '*');
+  c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  if (c.req.method === 'OPTIONS') return c.body(null, 204);
+  await next();
+});
 
 // --- CSRF Protection: Origin header validation ---
 // Runs on all state-changing requests (POST, PUT, PATCH, DELETE).
@@ -301,6 +311,19 @@ app.route('', apiV1Routes);
 app.route('', loansRoutes);
 app.route('', fiscalRoutes);
 app.route('/api/income', incomeRoutes);
+
+// --- OAuth2 Server for ClawBox ---
+app.route('/api/oauth', oauthAuthorizeRoutes); // handles GET /api/oauth/authorize
+app.post('/api/oauth/token', async (c) => {
+  c.header('Content-Type', 'application/x-www-form-urlencoded');
+  return oauthTokenRoutes.fetch(c.req.raw as Request);
+});
+app.options('/api/oauth/token', (c) => {
+  c.header('Access-Control-Allow-Origin', '*');
+  c.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  c.header('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+  return c.body(null, 204);
+});
 
 // ========== START SERVER ==========
 

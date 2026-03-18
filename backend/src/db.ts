@@ -660,6 +660,55 @@ export async function migrateDatabase() {
     )
   `);
 
+  // --- OAuth2 Server for ClawBox Integration ---
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS oauth_clients (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_id TEXT UNIQUE NOT NULL,
+      name TEXT NOT NULL,
+      redirect_uri TEXT NOT NULL,
+      scopes TEXT NOT NULL DEFAULT 'openid profile email loans assets',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      active INTEGER NOT NULL DEFAULT 1
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS oauth_authorization_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      code TEXT UNIQUE NOT NULL,
+      client_id TEXT NOT NULL,
+      user_id INTEGER NOT NULL,
+      scope TEXT,
+      code_challenge TEXT,
+      code_challenge_method TEXT,
+      redirect_uri TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used INTEGER NOT NULL DEFAULT 0,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS oauth_access_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT UNIQUE NOT NULL,
+      user_id INTEGER NOT NULL,
+      client_id TEXT NOT NULL,
+      scope TEXT,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      active INTEGER NOT NULL DEFAULT 1,
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )
+  `);
+
+  // Seed ClawBox as an OAuth client (dev redirect URI)
+  await db.execute({
+    sql: `INSERT OR IGNORE INTO oauth_clients (client_id, name, redirect_uri, scopes) VALUES (?, ?, ?, ?)`,
+    args: ['clawbox', 'ClawBox', 'http://localhost:5006/integrations/konto/connect/callback', 'openid profile email loans assets']
+  });
+
   // Migrate fiscal_data: add fiscal_residency column and change unique constraint to (user_id, year, fiscal_residency)
   // Check if current table has the old UNIQUE(user_id, year) constraint (without fiscal_residency)
   const fiscalTableRow = await db.execute("SELECT sql FROM sqlite_master WHERE type='table' AND name='fiscal_data'");
