@@ -19,7 +19,7 @@ function escapeHtml(s: string): string {
 }
 
 // GET /oauth/authorize — show login or consent page
-router.get('/oauth/authorize', async (c) => {
+router.get('/authorize', async (c) => {
   const clientId = c.req.query('client_id');
   const redirectUri = c.req.query('redirect_uri');
   const responseType = c.req.query('response_type');
@@ -83,7 +83,7 @@ router.get('/oauth/authorize', async (c) => {
 });
 
 // POST /oauth/authorize — form submission (approve or deny)
-router.post('/oauth/authorize', async (c) => {
+router.post('/authorize', async (c) => {
   const body = await c.req.parseBody();
   const action = body['action'] as string;
   const clientId = body['client_id'] as string;
