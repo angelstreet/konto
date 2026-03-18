@@ -661,6 +661,7 @@ export async function migrateDatabase() {
   `);
 
   // --- OAuth2 Server for ClawBox Integration ---
+  try {
   await db.execute(`
     CREATE TABLE IF NOT EXISTS oauth_clients (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -708,6 +709,9 @@ export async function migrateDatabase() {
     sql: `INSERT OR IGNORE INTO oauth_clients (client_id, name, redirect_uri, scopes) VALUES (?, ?, ?, ?)`,
     args: ['clawbox', 'ClawBox', 'http://localhost:5006/integrations/konto/connect/callback', 'openid profile email loans assets']
   });
+  } catch (oauthMigrationErr) {
+    console.warn('[db] OAuth migration warning (non-fatal):', oauthMigrationErr);
+  }
 
   // Migrate fiscal_data: add fiscal_residency column and change unique constraint to (user_id, year, fiscal_residency)
   // Check if current table has the old UNIQUE(user_id, year) constraint (without fiscal_residency)
