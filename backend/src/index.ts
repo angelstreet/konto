@@ -245,6 +245,9 @@ app.use('/api/*', async (c, next) => {
   const path = c.req.path;
   if (path === '/api/health' || path === '/api/bank-callback' || path === '/api/coinbase-callback' || path === '/api/preferences') return next();
 
+  // OAuth endpoints are public (auth is done via the consent flow)
+  if (path.startsWith('/api/oauth/')) return next();
+
   const authHeader = c.req.header('Authorization');
 
   // Allow API token access for agents (backward compatible)
