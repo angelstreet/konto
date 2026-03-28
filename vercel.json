@@ -4,7 +4,9 @@
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
   "rewrites": [
+    { "source": "/konto/api/(.*)", "destination": "/api" },
     { "source": "/api/(.*)", "destination": "/api" },
+    { "source": "/konto/oauth/(.*)", "destination": "/api/oauth/$1" },
     { "source": "/oauth/(.*)", "destination": "/api/oauth/$1" },
     { "source": "/konto/manifest.webmanifest", "destination": "/manifest.webmanifest" },
     { "source": "/konto/sw.js", "destination": "/sw.js" },
