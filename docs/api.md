@@ -93,7 +93,7 @@ top_subscriptions (merchant, users_pct, avg_amount), avg_monthly_subscriptions
 | Group | Endpoints |
 |-------|-----------|
 | Analysis | /api/analysis/{categories,subscriptions,summary,cashflow,passive-income} |
-| Settings | /api/settings/api-keys (GET/POST/DELETE, POST /:id/renew) |
+| Settings | /api/settings/api-keys (GET/POST/DELETE, POST /:id/renew), /api/settings/integrations (GET/PUT) |
 | Bank | /api/bank/{connect-url,sync,accounts,connections} |
 | Dashboard | /api/dashboard, /api/dashboard/history |
 | Assets | /api/assets (CRUD) |
@@ -131,6 +131,28 @@ Returns integration/connection status for the authenticated user. Supports API K
   }
 }
 ```
+
+### GET /api/settings/integrations
+Returns per-user integration settings (e.g., Smoobu API key status).
+
+**Response:**
+```json
+{
+  "smoobu_api_key": "••••••••" // null if not set
+}
+```
+
+### PUT /api/settings/integrations
+Update per-user integration settings. Smoobu API key is AES-256-GCM encrypted before storage.
+
+**Request:**
+```json
+{
+  "smoobu_api_key": "your-smoobu-api-key" // null to remove
+}
+```
+
+**Response:** `{ "ok": true }`
 
 ## Errors
 401 Unauthorized, 403 Access denied / Analytics scope required, 404 Not found, 429 Rate limited (100 req/min)
