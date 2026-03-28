@@ -9,6 +9,27 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          calcInvestmentDiff, calcInvDiff, formatCurrencyFR, escapeHtml } from '../shared.js';
 import { categorizeTransaction } from '../categorizer.js';
 
+// --- Helper: deduplicated bank account find-or-create ---
+// Tries to find an existing account by (company_id, provider, provider_account_id) first,
+// then by (user_id, provider, iban) as fallback. Returns { id } or null.
+async function findBankAccountByProviderId(userId: number, companyId: number | null, provider: string, providerAccountId: string | null, iban: string | null): Promise<number | null> {
+  if (providerAccountId) {
+    const existing = await db.execute({
+      sql: 'SELECT id FROM bank_accounts WHERE user_id = ? AND company_id = ? AND provider = ? AND provider_account_id = ?',
+      args: [userId, companyId, provider, providerAccountId]
+    });
+    if (existing.rows.length > 0) return existing.rows[0].id as number;
+  }
+  if (iban) {
+    const existing = await db.execute({
+      sql: 'SELECT id FROM bank_accounts WHERE user_id = ? AND provider = ? AND iban = ?',
+      args: [userId, provider, iban]
+    });
+    if (existing.rows.length > 0) return existing.rows[0].id as number;
+  }
+  return null;
+}
+
 const router = new Hono();
 
 
@@ -223,24 +244,18 @@ router.get('/api/bank-callback', async (c) => {
         const meta = extractPowensBankMeta(acc);
         const storedBankName = meta.bankName || null;
 
-        // Match existing account by: 1) same provider_account_id, 2) same account_number/webid (unique UUID per pocket — before IBAN since e.g. Revolut shares one IBAN across all currency pockets), 3) same iban (last resort)
-        let existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE provider_account_id = ?', args: [String(acc.id)] });
-        if (existing.rows.length === 0 && accNumber) {
-          existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE user_id = ? AND provider = ? AND account_number = ?', args: [userId, 'powens', accNumber] });
-        }
-        if (existing.rows.length === 0 && accIban) {
-          existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE user_id = ? AND provider = ? AND iban = ? AND (account_number IS NULL OR account_number = \'\')', args: [userId, 'powens', accIban] });
-        }
+        // Deduplicate: find existing account by (company_id, provider, provider_account_id) or by iban
+        const existingId = await findBankAccountByProviderId(userId, null, 'powens', String(acc.id), accIban);
 
         let bankAccountId: number;
-        if (existing.rows.length === 0) {
+        if (existingId === null) {
           const ins = await db.execute({
             sql: 'INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, provider_bank_id, provider_bank_name, name, bank_name, account_number, iban, balance, type, usage, subtype, last_sync) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
             args: [userId, null, 'powens', String(acc.id), meta.bankId, meta.bankName, acc.name || acc.original_name || 'Account', storedBankName, accNumber, accIban, acc.balance || 0, accType, classifyAccountUsage(acc.usage, null), classifyAccountSubtype(accType, 'powens', acc.name || acc.original_name || ''), new Date().toISOString()]
           });
           bankAccountId = Number(ins.lastInsertRowid);
         } else {
-          bankAccountId = (existing.rows[0] as any).id;
+          bankAccountId = existingId;
           // Update existing account: identifiers + metadata + balance
           await db.execute({
             sql: 'UPDATE bank_accounts SET provider_account_id = ?, provider_bank_id = ?, provider_bank_name = COALESCE(?, provider_bank_name), name = ?, bank_name = COALESCE(?, bank_name), account_number = COALESCE(?, account_number), iban = COALESCE(?, iban), type = ?, usage = ?, subtype = ?, balance = ?, last_sync = ? WHERE id = ?',
@@ -336,18 +351,13 @@ router.post('/api/bank/sync', async (c) => {
         const accType = classifyAccountType(acc.type, acc.name || acc.original_name || '');
         const accNumber = acc.number || acc.webid || null;
         const accIban = acc.iban || null;
-        let existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE provider_account_id = ?', args: [String(acc.id)] });
-        if (existing.rows.length === 0 && accNumber) {
-          existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE user_id = ? AND provider = ? AND account_number = ?', args: [userId, 'powens', accNumber] });
-        }
-        if (existing.rows.length === 0 && accIban) {
-          existing = await db.execute({ sql: 'SELECT id FROM bank_accounts WHERE user_id = ? AND provider = ? AND iban = ? AND (account_number IS NULL OR account_number = \'\')', args: [userId, 'powens', accIban] });
-        }
+        // Deduplicate: find by (company_id, provider, provider_account_id) or by iban
+        const existingId = await findBankAccountByProviderId(userId, null, 'powens', String(acc.id), accIban);
         let bankAccountId: number;
-        if (existing.rows.length > 0) {
-          const full = await db.execute({ sql: 'SELECT company_id FROM bank_accounts WHERE id = ?', args: [existing.rows[0].id as number] });
+        if (existingId !== null) {
+          const full = await db.execute({ sql: 'SELECT company_id FROM bank_accounts WHERE id = ?', args: [existingId] });
           const row = full.rows[0] as any;
-          bankAccountId = existing.rows[0].id as number;
+          bankAccountId = existingId;
           await db.execute({
             sql: 'UPDATE bank_accounts SET provider_account_id = ?, provider_bank_id = ?, provider_bank_name = COALESCE(?, provider_bank_name), name = ?, bank_name = COALESCE(?, bank_name), account_number = COALESCE(?, account_number), iban = COALESCE(?, iban), balance = ?, last_sync = ?, type = ?, usage = ?, subtype = ? WHERE id = ?',
             args: [String(acc.id), meta.bankId, meta.bankName, acc.name || acc.original_name || 'Account', storedBankName, accNumber, accIban, acc.balance || 0, new Date().toISOString(), accType, classifyAccountUsage(acc.usage, row?.company_id || null), classifyAccountSubtype(accType, 'powens', acc.name || acc.original_name || ''), bankAccountId]
@@ -841,10 +851,17 @@ router.post('/api/bank/sync-all', async (c) => {
         const bankNameFromMeta = meta.bankName || connProviderName;
         const storedBankName = bankNameFromMeta || null;
         const accType = classifyAccountType(powensAcc.type, powensAcc.name || powensAcc.original_name || '');
-        const accRes = await db.execute({
+        // Deduplicate: try by provider_account_id first, then by iban
+        let accRes = await db.execute({
           sql: 'SELECT id, type, company_id FROM bank_accounts WHERE user_id = ? AND provider = ? AND provider_account_id = ?',
           args: [userId, 'powens', providerId]
         });
+        if (accRes.rows.length === 0 && powensAcc.iban) {
+          accRes = await db.execute({
+            sql: 'SELECT id, type, company_id FROM bank_accounts WHERE user_id = ? AND provider = ? AND iban = ?',
+            args: [userId, 'powens', powensAcc.iban]
+          });
+        }
         if (accRes.rows.length === 0) continue;
         const localAcc = accRes.rows[0] as any;
 

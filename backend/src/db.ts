@@ -86,6 +86,7 @@ export async function initDatabase() {
       currency TEXT DEFAULT 'EUR',
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_bank_accounts_unique ON bank_accounts(company_id, provider, provider_account_id);
 
     CREATE TABLE IF NOT EXISTS transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
