@@ -607,6 +607,13 @@ export async function migrateDatabase() {
     SELECT id FROM users WHERE id NOT IN (SELECT user_id FROM user_profiles)
   `);
 
+  // Add smoobu_api_key (encrypted) to user_preferences
+  try {
+    await db.execute("SELECT smoobu_api_key FROM user_preferences LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE user_preferences ADD COLUMN smoobu_api_key TEXT");
+  }
+
   // API keys table for agent/AI access
   await db.execute(`
     CREATE TABLE IF NOT EXISTS api_keys (

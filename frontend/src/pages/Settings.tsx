@@ -36,6 +36,29 @@ export default function Settings() {
   const [showCurrency, setShowCurrency] = useState(false);
   const [showCryptoMode, setShowCryptoMode] = useState(false);
 
+  // Integrations (Smoobu)
+  const [smoobuKey, setSmoobuKey] = useState('');
+  const [smoobuSaved, setSmoobuSaved] = useState(false);
+  const [smoobuHasKey, setSmoobuHasKey] = useState(false);
+  const [showIntegrations, setShowIntegrations] = useState(false);
+
+  useEffect(() => {
+    authFetch(`${API}/settings/integrations`).then(r => r.ok ? r.json() : null).then(d => {
+      if (d?.smoobu_api_key) setSmoobuHasKey(true);
+    }).catch(() => {});
+  }, []);
+
+  const saveSmoobu = async () => {
+    await authFetch(`${API}/settings/integrations`, {
+      method: 'PUT',
+      body: JSON.stringify({ smoobu_api_key: smoobuKey || null }),
+    });
+    setSmoobuHasKey(!!smoobuKey);
+    setSmoobuKey('');
+    setSmoobuSaved(true);
+    setTimeout(() => setSmoobuSaved(false), 2000);
+  };
+
   // Google Drive global connection
   const [driveStatus, setDriveStatus] = useState<{ connected: boolean; folder_path?: string } | null>(null);
   const [driveLoading, setDriveLoading] = useState(false);
@@ -348,6 +371,48 @@ export default function Settings() {
             </span>
           </span>
         </button>
+
+        {/* Integrations */}
+        <button
+          onClick={() => setShowIntegrations(!showIntegrations)}
+          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+        >
+          <Shield size={18} className="text-muted" />
+          <span className="text-sm">Intégrations</span>
+          <span className={`ml-auto text-xs ${smoobuHasKey ? 'text-green-500' : 'text-muted-foreground'}`}>
+            {smoobuHasKey ? 'Smoobu ✓' : ''}
+          </span>
+        </button>
+        {showIntegrations && (
+          <div className="px-4 pb-3 space-y-3">
+            <div>
+              <label className="text-xs text-muted-foreground block mb-1">Clé API Smoobu</label>
+              <div className="flex gap-2">
+                <input
+                  type="password"
+                  placeholder={smoobuHasKey ? '••••••••' : 'Coller votre clé API'}
+                  value={smoobuKey}
+                  onChange={e => setSmoobuKey(e.target.value)}
+                  className="flex-1 bg-surface-hover border border-border rounded px-3 py-1.5 text-sm"
+                />
+                <button
+                  onClick={saveSmoobu}
+                  className="px-3 py-1.5 bg-accent-500 text-white rounded text-sm hover:opacity-90"
+                >
+                  {smoobuSaved ? '✓' : 'Enregistrer'}
+                </button>
+              </div>
+              {smoobuHasKey && (
+                <button
+                  onClick={() => { setSmoobuKey(''); saveSmoobu(); }}
+                  className="text-xs text-red-400 mt-1 hover:underline"
+                >
+                  Supprimer la clé
+                </button>
+              )}
+            </div>
+          </div>
+        )}
 
         {/* Hide amounts toggle */}
         <button

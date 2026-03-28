@@ -128,6 +128,30 @@ router.post('/api/settings/api-keys/:id/renew', async (c) => {
   return c.json({ id: newId, name: old_key.name, key_prefix: keyPrefix, scope: old_key.scope, key: rawKey, created_at: new Date().toISOString() });
 });
 
+// --- Integrations (per-user encrypted API keys for external services) ---
+router.get('/api/settings/integrations', async (c) => {
+  const userId = await getUserId(c);
+  const row = await db.execute({ sql: 'SELECT smoobu_api_key FROM user_preferences WHERE user_id = ?', args: [userId] });
+  const prefs = row.rows[0] as any;
+  return c.json({
+    smoobu_api_key: prefs?.smoobu_api_key ? '••••••••' : null,
+  });
+});
+
+router.put('/api/settings/integrations', async (c) => {
+  const userId = await getUserId(c);
+  const body = await c.req.json();
+  if (body.smoobu_api_key !== undefined) {
+    const encrypted = body.smoobu_api_key ? encrypt(body.smoobu_api_key) : null;
+    await db.execute({
+      sql: `INSERT INTO user_preferences (user_id, smoobu_api_key) VALUES (?, ?)
+            ON CONFLICT(user_id) DO UPDATE SET smoobu_api_key = excluded.smoobu_api_key, updated_at = datetime('now')`,
+      args: [userId, encrypted],
+    });
+  }
+  return c.json({ ok: true });
+});
+
 // --- Profile ---
 router.get('/api/profile', async (c) => {
   const userId = await getUserId(c);
@@ -204,6 +228,7 @@ async function deleteAccountData(userId: number, clerkUserId?: string): Promise<
   await db.execute({ sql: 'DELETE FROM bank_accounts WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM bank_connections WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM companies WHERE user_id = ?', args: [userId] });
+  await db.execute({ sql: 'UPDATE user_preferences SET smoobu_api_key = NULL WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM user_preferences WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM user_profiles WHERE user_id = ?', args: [userId] });
   await db.execute({ sql: 'DELETE FROM users WHERE id = ?', args: [userId] });

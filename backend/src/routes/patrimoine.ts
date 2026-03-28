@@ -814,7 +814,6 @@ router.get('/api/kozy/properties', async (c) => {
 // ========== PROPERTY ROI — Smoobu Revenue vs Bank Costs ==========
 
 const SMOOBU_API = 'https://login.smoobu.com/api';
-const SMOOBU_API_KEY = process.env.SMOOBU_API_KEY || '';
 
 // Property cost matching patterns (label keywords → apartment ID)
 const PROPERTY_COST_PATTERNS: { apartmentId: number; patterns: string[] }[] = [
@@ -824,7 +823,11 @@ const PROPERTY_COST_PATTERNS: { apartmentId: number; patterns: string[] }[] = [
 ];
 
 router.get('/api/properties/roi', async (c) => {
-  if (!SMOOBU_API_KEY) return c.json({ error: 'SMOOBU_API_KEY not configured' }, 500);
+  const userId = await getUserId(c);
+  const prefsRow = await db.execute({ sql: 'SELECT smoobu_api_key FROM user_preferences WHERE user_id = ?', args: [userId] });
+  const encryptedKey = (prefsRow.rows[0] as any)?.smoobu_api_key;
+  const SMOOBU_API_KEY = encryptedKey ? decrypt(encryptedKey) : null;
+  if (!SMOOBU_API_KEY) return c.json({ error: 'Smoobu API key not configured. Add it in Settings → Integrations.' }, 400);
 
   const monthsParam = parseInt(c.req.query('months') || '6');
   const now = new Date();
@@ -875,7 +878,6 @@ router.get('/api/properties/roi', async (c) => {
   }
 
   // Fetch bank transactions for cost matching
-  const userId = await getUserId(c);
   const txResult = await db.execute({
     sql: `SELECT t.date, t.amount, t.label FROM transactions t
           LEFT JOIN bank_accounts ba ON ba.id = t.bank_account_id
