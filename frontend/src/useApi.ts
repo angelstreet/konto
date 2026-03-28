@@ -35,7 +35,7 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
     if (!cache.has(url)) setLoading(true);
     getAuthHeaders(getTokenRef.current)
       .then(headers => fetch(url, { headers }))
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(`API ${r.status}`); return r.json(); })
       .then(d => {
         cache.set(url, d);
         if (urlRef.current === url) setData(d);

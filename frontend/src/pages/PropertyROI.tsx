@@ -75,9 +75,9 @@ export default function PropertyROI() {
     setLoading(true);
     const url = appendScope(`${API}/properties/roi?months=${months}`);
     authFetch(url)
-      .then(r => r.json())
-      .then(d => { roiCache[months] = d; setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(r => { if (!r.ok) throw new Error(`API ${r.status}`); return r.json(); })
+      .then(d => { if (d.error) throw new Error(d.error); roiCache[months] = d; setData(d); setLoading(false); })
+      .catch(() => { setData(null); setLoading(false); });
   }, [months]);
 
   const h = hideAmounts;
@@ -118,6 +118,10 @@ export default function PropertyROI() {
       </div>
 
       {loading && <div className="text-center text-muted-foreground py-12">Chargement…</div>}
+
+      {!loading && !data && (
+        <div className="text-center text-muted-foreground py-12">Impossible de charger les données de rentabilité.</div>
+      )}
 
       {!loading && data && (
         <>

@@ -413,7 +413,7 @@ router.get('/api/loans/export.csv', async (c) => {
 
 router.get('/api/loans', async (c) => {
   const userId = await getUserId(c);
-  await inferAndPersistLoanDetails(userId);
+  try { await inferAndPersistLoanDetails(userId); } catch (e) { console.error('[loans] inferAndPersistLoanDetails failed:', e); }
   const usage = c.req.query('usage');
   const companyId = c.req.query('company_id');
   const { where, args } = buildScopeWhere(usage, companyId);
@@ -469,24 +469,26 @@ router.get('/api/loans', async (c) => {
 
   const timeline = toYearlyTimeline(startYear, Math.max(startYear + 2, maxKnownEnd), totalOutstanding);
 
-  const notifications: any[] = [];
-  for (const loan of loans) {
-    const pct = Math.round(loan.repaid_pct || 0);
-    if (!pct) continue;
-    for (const milestone of MILESTONES) {
-      if (pct < milestone) continue;
-      const exists = await db.execute({
-        sql: 'SELECT id FROM loan_milestone_events WHERE user_id = ? AND bank_account_id = ? AND milestone = ? LIMIT 1',
-        args: [userId, loan.loan_id, milestone],
-      });
-      if (exists.rows.length > 0) continue;
-      await db.execute({
-        sql: 'INSERT INTO loan_milestone_events (user_id, bank_account_id, milestone) VALUES (?, ?, ?)',
-        args: [userId, loan.loan_id, milestone],
-      });
-      notifications.push({ loan_id: loan.loan_id, loan_name: loan.name, milestone, repaid_pct: loan.repaid_pct });
+  let notifications: any[] = [];
+  try {
+    for (const loan of loans) {
+      const pct = Math.round(loan.repaid_pct || 0);
+      if (!pct) continue;
+      for (const milestone of MILESTONES) {
+        if (pct < milestone) continue;
+        const exists = await db.execute({
+          sql: 'SELECT id FROM loan_milestone_events WHERE user_id = ? AND bank_account_id = ? AND milestone = ? LIMIT 1',
+          args: [userId, loan.loan_id, milestone],
+        });
+        if (exists.rows.length > 0) continue;
+        await db.execute({
+          sql: 'INSERT INTO loan_milestone_events (user_id, bank_account_id, milestone) VALUES (?, ?, ?)',
+          args: [userId, loan.loan_id, milestone],
+        });
+        notifications.push({ loan_id: loan.loan_id, loan_name: loan.name, milestone, repaid_pct: loan.repaid_pct });
+      }
     }
-  }
+  } catch (e) { console.error('[loans] milestone tracking failed:', e); }
 
   return c.json({
     date: toDateOnly(new Date().toISOString()),
