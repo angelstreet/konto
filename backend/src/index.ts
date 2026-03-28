@@ -468,10 +468,14 @@ let serverBootstrapPromise: Promise<void> | null = null;
 export async function ensureServerBootstrap(): Promise<void> {
   if (!serverBootstrapPromise) {
     serverBootstrapPromise = (async () => {
-      await initDatabase();
-      await migrateDatabase();
-      // Keep demo seed behavior on both local and serverless cold starts.
-      await seedDemoCryptoTransactions();
+      try {
+        await initDatabase();
+        await migrateDatabase();
+        await seedDemoCryptoTransactions();
+      } catch (e) {
+        serverBootstrapPromise = null; // allow retry on next request
+        throw e;
+      }
     })();
   }
   return serverBootstrapPromise;
