@@ -8,6 +8,7 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
          calcInvestmentDiff, calcInvDiff, formatCurrencyFR, escapeHtml } from '../shared.js';
 import { categorizeTransaction } from '../categorizer.js';
+import { inferAndPersistLoanDetails } from './loans.js';
 
 // --- Helper: deduplicated bank account find-or-create ---
 // Tries to find an existing account by (company_id, provider, provider_account_id) first,
@@ -301,6 +302,9 @@ router.get('/api/bank-callback', async (c) => {
       console.error('Failed to fetch accounts:', e);
     }
 
+    // Infer loan details from newly connected accounts (non-blocking)
+    inferAndPersistLoanDetails(userId).catch(e => console.error('[bank-callback] loan inference failed:', e));
+
     return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"><meta http-equiv="refresh" content="15;url=/konto/accounts"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#d4a812;">✅ Bank connected!</h1><p>${accounts.length} account(s) synced.</p>
       <p style="color:#888;font-size:14px;">Redirecting in <span id="t">15</span>s...</p>
@@ -399,6 +403,9 @@ router.post('/api/bank/sync', async (c) => {
       console.error(`Sync failed for connection ${conn.id}:`, err.message);
     }
   }
+  // Infer loan details from synced data (non-blocking)
+  inferAndPersistLoanDetails(userId).catch(e => console.error('[sync] loan inference failed:', e));
+
   return c.json({ synced: totalSynced });
 });
 
