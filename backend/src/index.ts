@@ -59,6 +59,12 @@ const { cronMonitor } = await import('./jobs/cronMonitor.js');
 
 const app = new Hono();
 
+// Global error handler — return JSON instead of plain text "Internal Server Error"
+app.onError((err, c) => {
+  console.error('[api] Unhandled error:', err.message, err.stack);
+  return c.json({ error: 'Internal Server Error', message: err.message }, 500);
+});
+
 function normalizeOrigin(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return '';
