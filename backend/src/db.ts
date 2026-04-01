@@ -97,8 +97,10 @@ export async function initDatabase() {
       category TEXT,
       is_pro INTEGER DEFAULT 1,
       invoice_id INTEGER REFERENCES invoices(id),
+      tx_hash TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_tx_hash ON transactions(bank_account_id, tx_hash);
 
     CREATE TABLE IF NOT EXISTS investments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -481,8 +483,9 @@ export async function migrateDatabase() {
     await db.execute("SELECT tx_hash FROM transactions LIMIT 1");
   } catch {
     await db.execute("ALTER TABLE transactions ADD COLUMN tx_hash TEXT");
-    await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_tx_hash ON transactions(bank_account_id, tx_hash)");
   }
+  // Always ensure the unique index exists (may have been missed in earlier deploys)
+  await db.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_transactions_tx_hash ON transactions(bank_account_id, tx_hash)");
 
   // Add folder_path to drive_connections (stores human-readable path label)
   try {
