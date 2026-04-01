@@ -249,7 +249,7 @@ app.use('/api/*', async (c, next) => {
 
   // Public endpoints that don't need auth
   const path = c.req.path;
-  if (path === '/api/health' || path === '/api/bank-callback' || path === '/api/coinbase-callback' || path === '/api/preferences') return next();
+  if (path === '/api/health' || path === '/api/bank-callback' || path === '/api/coinbase-callback' || path === '/api/preferences' || path === '/api/bank/webview') return next();
 
   // OAuth endpoints are public (auth is done via the consent flow)
   if (path.startsWith('/api/oauth/')) return next();
