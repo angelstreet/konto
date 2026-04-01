@@ -1,7 +1,7 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
 import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign, MoreVertical, Search, AlertTriangle, Upload, FileText } from 'lucide-react';
-import { useState, useRef, useMemo } from 'react';
+import { useState, useRef, useMemo, useEffect } from 'react';
 import { useApi } from '../useApi';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
@@ -149,6 +149,17 @@ export default function Accounts() {
     refetchAccounts();
     refetchConnections();
   };
+
+  // Listen for bank reconnect success from callback popup tab
+  useEffect(() => {
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'konto-bank-reconnected') {
+        refetchAll();
+      }
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []);
 
   const connectBank = async () => {
     const res = await authFetch(`${API}/bank/connect-url?lang=${lang}`);
@@ -399,9 +410,9 @@ export default function Accounts() {
   const formatBalance = (n: number, currency?: string | null) => {
     const cur = currency || 'EUR';
     if (cur !== 'EUR' && ['BTC', 'ETH', 'SOL'].includes(cur)) {
-      return `${n.toLocaleString('fr-FR', { maximumFractionDigits: 8 })} ${cur}`;
+      return `${n.toLocaleString('de-DE', { maximumFractionDigits: 8 })} ${cur}`;
     }
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: cur }).format(n);
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: cur }).format(n);
   };
 
   const maskNumber = (num: string) => {
@@ -583,7 +594,7 @@ export default function Accounts() {
     return { count: csvRows.length, income: Math.round(income * 100) / 100, expenses: Math.round(expenses * 100) / 100, from: dates[0], to: dates[dates.length - 1] };
   }, [csvRows]);
 
-  const fmtCsv = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+  const fmtCsv = (n: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
 
   const allAccounts = accounts || [];
   const uniqueBanks = [...new Set(allAccounts.map(a => a.bank_name).filter(Boolean))] as string[];

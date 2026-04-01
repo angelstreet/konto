@@ -150,9 +150,13 @@ router.get('/api/bank-callback', async (c) => {
             )`,
       args: [userId, connectionId, userId],
     });
-    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"><meta http-equiv="refresh" content="3;url=/konto/accounts"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
-      <h1 style="color:#d4a812;">✅ Bank reconnected!</h1><p>Your accounts have been refreshed.</p>
+    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#d4a812;">✅ Bank reconnected!</h1><p>Your accounts have been refreshed. This tab will close automatically.</p>
       <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a>
+      <script>
+        if (window.opener) { window.opener.postMessage({ type: 'konto-bank-reconnected' }, '*'); }
+        setTimeout(() => { try { window.close(); } catch(e) { window.location.href = '/konto/accounts'; } }, 1500);
+      </script>
     </body></html>`);
   }
 
@@ -305,11 +309,13 @@ router.get('/api/bank-callback', async (c) => {
     // Infer loan details from newly connected accounts (non-blocking)
     inferAndPersistLoanDetails(userId).catch(e => console.error('[bank-callback] loan inference failed:', e));
 
-    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"><meta http-equiv="refresh" content="15;url=/konto/accounts"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
-      <h1 style="color:#d4a812;">✅ Bank connected!</h1><p>${accounts.length} account(s) synced.</p>
-      <p style="color:#888;font-size:14px;">Redirecting in <span id="t">15</span>s...</p>
+    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#d4a812;">✅ Bank connected!</h1><p>${accounts.length} account(s) synced. This tab will close automatically.</p>
       <a href="/konto/accounts" style="color:#d4a812;font-size:18px;">← Back to Konto</a>
-      <script>let s=15;setInterval(()=>{s--;if(s>=0)document.getElementById('t').textContent=s;},1000);</script>
+      <script>
+        if (window.opener) { window.opener.postMessage({ type: 'konto-bank-reconnected' }, '*'); }
+        setTimeout(() => { try { window.close(); } catch(e) { window.location.href = '/konto/accounts'; } }, 2000);
+      </script>
     </body></html>`);
   } catch (err: any) {
     console.error('Powens callback error:', err);
