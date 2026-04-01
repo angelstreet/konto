@@ -39,9 +39,15 @@ export async function fetchBlockchainBalance(network: string, address: string): 
     return { balance: (data.result?.value || 0) / 1e9, currency: 'SOL' };
   }
   if (network === 'bitcoin') {
-    await loadBitcoinModules();
     // xpub → derive native segwit (bc1) addresses and scan via Blockstream
     if (/^[xyz]pub/.test(address)) {
+      try {
+        await loadBitcoinModules();
+      } catch {
+        // WASM not available (Vercel serverless) — return -1 to signal unavailability
+        console.warn('[crypto] Bitcoin WASM modules unavailable, skipping xpub derivation');
+        return { balance: -1, currency: 'BTC' };
+      }
       const node = bip32.fromBase58(address);
       let totalBalance = 0;
       // Scan receiving (m/0/i) and change (m/1/i) addresses
@@ -90,9 +96,15 @@ export async function fetchBlockchainBalance(network: string, address: string): 
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getBalance', params: [address, 'latest'], id: 1 }),
     });
-    const data = await res.json() as any;
-    const balance = data.result ? parseInt(data.result, 16) / Math.pow(10, chain.decimals) : 0;
-    return { balance, currency: chain.currency };
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      const balance = data.result ? parseInt(data.result, 16) / Math.pow(10, chain.decimals) : 0;
+      return { balance, currency: chain.currency };
+    } catch {
+      console.warn(`[crypto] ${network} RPC returned non-JSON (${res.status}): ${text.slice(0, 100)}`);
+      return { balance: 0, currency: chain.currency };
+    }
   }
   throw new Error(`Unsupported network: ${network}`);
 }
@@ -307,7 +319,12 @@ router.post('/api/accounts/:id/sync-blockchain', async (c) => {
 
   try {
     const { balance, currency } = await fetchBlockchainBalance(account.blockchain_network, account.blockchain_address);
-    await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), id] });
+    // balance -1 means the fetch was unavailable (e.g. WASM missing on Vercel) — keep old balance
+    if (balance >= 0) {
+      await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), id] });
+    } else {
+      await db.execute({ sql: 'UPDATE bank_accounts SET last_sync = ? WHERE id = ?', args: [new Date().toISOString(), id] });
+    }
 
     // Fetch and insert on-chain transactions
     let txCount = 0;
@@ -324,7 +341,7 @@ router.post('/api/accounts/:id/sync-blockchain', async (c) => {
       console.error(`Blockchain tx fetch failed for account ${id}:`, txErr.message);
     }
 
-    return c.json({ balance, currency, synced: txCount });
+    return c.json({ balance: balance >= 0 ? balance : account.balance, currency, synced: txCount });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
