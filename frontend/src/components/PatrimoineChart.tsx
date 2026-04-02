@@ -7,7 +7,7 @@ const ranges = ['1m', '3m', '6m', '1y', 'max'] as const;
 const rangeLabels: Record<string, string> = { '1m': '1M', '3m': '3M', '6m': '6M', '1y': '1A', max: 'Max' };
 
 function formatCurrency(v: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 }
 
 export default function PatrimoineChart({ showNet = true, hideAmounts = false }: { showNet?: boolean; hideAmounts?: boolean }) {
