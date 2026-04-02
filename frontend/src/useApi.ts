@@ -19,10 +19,12 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
   const urlRef = useRef(url);
 
   let getToken: (() => Promise<string | null>) | undefined;
+  let isLoaded = true;
   if (clerkEnabled) {
     try {
       const auth = useAuth();
       getToken = auth.getToken;
+      isLoaded = auth.isLoaded;
     } catch {
       // Clerk not available (e.g. outside ClerkProvider)
     }
@@ -43,7 +45,7 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
       .finally(() => setLoading(false));
   }, [url]);
 
-  // When URL changes, show cached data immediately then always re-fetch
+  // Wait for Clerk to load before fetching, to avoid 401s
   useEffect(() => {
     urlRef.current = url;
     const cached = cache.get(url);
@@ -53,8 +55,9 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
     } else {
       setData(null);
     }
+    if (!isLoaded) return;
     fetchData();
-  }, [url, fetchData]);
+  }, [url, fetchData, isLoaded]);
 
   const updateData = useCallback((d: T) => {
     cache.set(url, d);

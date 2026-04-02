@@ -1,6 +1,5 @@
 import { API } from '../config';
 import { useState, useEffect, useRef } from 'react';
-import { useTranslation } from 'react-i18next';
 import { useAuth } from '@clerk/clerk-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
@@ -8,14 +7,12 @@ const ranges = ['1m', '3m', '6m', '1y', 'max'] as const;
 const rangeLabels: Record<string, string> = { '1m': '1M', '3m': '3M', '6m': '6M', '1y': '1A', max: 'Max' };
 
 function formatCurrency(v: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 }
 
 export default function PatrimoineChart({ showNet = true, hideAmounts = false }: { showNet?: boolean; hideAmounts?: boolean }) {
-  const { t } = useTranslation();
   const [range, setRange] = useState<string>('6m');
   const [data, setData] = useState<{ date: string; value: number }[]>([]);
-  const [baselineDate, setBaselineDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const hasAnimated = useRef(false);
 
@@ -51,17 +48,12 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
       .then(r => r.json())
       .then(d => {
         setData(d.history || []);
-        setBaselineDate(d.baselineDate || null);
       })
       .finally(() => setLoading(false));
   }, [range, showNet]);
 
   const latestValue = data.length > 0 ? data[data.length - 1].value : 0;
-  // Use the first snapshot on or after the baseline date (when current accounts were all present)
-  const baselinePoint = baselineDate
-    ? (data.find(d => d.date >= baselineDate) ?? data[0])
-    : data[0];
-  const firstValue = baselinePoint ? baselinePoint.value : 0;
+  const firstValue = data.length > 0 ? data[0].value : 0;
   const change = latestValue - firstValue;
   const changePct = firstValue !== 0 ? (change / Math.abs(firstValue)) * 100 : 0;
 
@@ -71,7 +63,7 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
     <div className="bg-surface rounded-xl border border-border p-4">
       <div className="mb-3">
         <div className="flex items-baseline gap-2 flex-wrap">
-          <h3 className="text-sm font-medium text-muted tracking-wide whitespace-nowrap">{t('patrimoine_evolution_short') || t('patrimoine_evolution') || 'Évolution'}{!showNet ? ` (${t('balance_brut') || 'brut'})` : ''}</h3>
+          <h3 className="text-sm font-medium text-muted tracking-wide whitespace-nowrap">{showNet ? 'Patrimoine net' : 'Patrimoine brut'}</h3>
           {data.length > 0 && (
             <>
               <span className="text-lg font-bold text-accent-400 whitespace-nowrap">{hideAmounts ? <span className="amount-masked">{formatCurrency(latestValue)}</span> : formatCurrency(latestValue)}</span>
