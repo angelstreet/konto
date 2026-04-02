@@ -34,7 +34,7 @@ function TreemapCell({ x, y, width, height, name, value, posSum, hideAmounts }: 
   const showValue = width > 60 && height > 50;
   return (
     <g>
-      <rect x={x} y={y} width={width} height={height} rx={4} fill={COLORS[name] || '#6b7280'} stroke="#1a1a1a" strokeWidth={2} />
+      <rect x={x} y={y} width={width} height={height} rx={4} fill={COLORS[name] || '#6b7280'} stroke="transparent" strokeWidth={2} />
       {showLabel && (
         <text x={x + width / 2} y={y + height / 2 - (showValue ? 8 : 0)} textAnchor="middle" dominantBaseline="central" fill="#fff" fontSize={11} fontWeight={600}>
           {label}
@@ -42,7 +42,7 @@ function TreemapCell({ x, y, width, height, name, value, posSum, hideAmounts }: 
       )}
       {showValue && (
         <text x={x + width / 2} y={y + height / 2 + 10} textAnchor="middle" dominantBaseline="central" fill="rgba(255,255,255,0.75)" fontSize={10}>
-          {hideAmounts ? '••••' : `${formatCurrency(value)} (${pct}%)`}
+          {hideAmounts ? '••••' : `${formatCurrency(value)} · ${pct}%`}
         </text>
       )}
     </g>
