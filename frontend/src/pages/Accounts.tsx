@@ -200,12 +200,7 @@ export default function Accounts() {
       } else {
         const res = await authFetch(`${API}/bank/accounts/${id}/sync`, { method: 'POST' });
         const result = await res.json();
-        if (result.reconnect_required) {
-          connectBank();
-          return;
-        }
-        // If SCA required — redirect to reconnect so user can fix it
-        if (result.sca_required) {
+        if (result.reconnect_required || result.sca_required) {
           reconnectAccount(id);
           return;
         }
