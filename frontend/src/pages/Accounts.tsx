@@ -201,9 +201,12 @@ export default function Accounts() {
         const res = await authFetch(`${API}/bank/accounts/${id}/sync`, { method: 'POST' });
         const result = await res.json();
         if (result.reconnect_required || result.sca_required) {
+          updateAccount(id, { sca_required: 1 });
           reconnectAccount(id);
           return;
         }
+        // Sync succeeded — update UI immediately
+        updateAccount(id, { sca_required: 0, last_sync: new Date().toISOString() });
       }
     } finally {
       setSyncingId(null);
