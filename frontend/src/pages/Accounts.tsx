@@ -150,21 +150,19 @@ export default function Accounts() {
     refetchConnections();
   };
 
-  // Listen for bank reconnect success from callback popup tab
+  // Listen for bank reconnect/connect success from callback tab via BroadcastChannel
   useEffect(() => {
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type === 'konto-bank-reconnected') {
-        refetchAll();
-      }
-    };
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
+    try {
+      const ch = new BroadcastChannel('konto-bank');
+      ch.onmessage = () => { refetchAll(); };
+      return () => ch.close();
+    } catch { /* BroadcastChannel not supported */ }
   }, []);
 
   const connectBank = async () => {
     const res = await authFetch(`${API}/bank/connect-url?lang=${lang}`);
     const { url } = await res.json();
-    window.location.href = `${API}/bank/webview?url=${encodeURIComponent(url)}`;
+    window.open(`${API}/bank/webview?url=${encodeURIComponent(url)}`, '_blank');
   };
 
   const reconnectAccount = async (accountId: number) => {
