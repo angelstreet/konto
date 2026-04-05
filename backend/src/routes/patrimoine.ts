@@ -36,7 +36,10 @@ router.get('/api/assets', async (c) => {
     const revenuesResult = await db.execute({ sql: 'SELECT * FROM asset_revenues WHERE asset_id = ? ORDER BY id', args: [asset.id] });
     asset.revenues = revenuesResult.rows;
     asset.monthly_costs = (asset.costs as any[]).reduce((sum: number, c: any) => sum + (c.frequency === 'yearly' ? c.amount / 12 : c.frequency === 'one_time' ? 0 : c.amount), 0);
-    asset.monthly_revenues = (asset.revenues as any[]).reduce((sum: number, r: any) => sum + (r.frequency === 'yearly' ? r.amount / 12 : r.frequency === 'one_time' ? 0 : r.amount), 0);
+    // monthly_rent is the primary rent income for long-term rentals; revenues[] are additional streams
+    const rentRevenue = asset.property_usage === 'rented_long' && asset.monthly_rent ? Number(asset.monthly_rent) : 0;
+    const revenuesFromArray = (asset.revenues as any[]).reduce((sum: number, r: any) => sum + (r.frequency === 'yearly' ? r.amount / 12 : r.frequency === 'one_time' ? 0 : r.amount), 0);
+    asset.monthly_revenues = rentRevenue + revenuesFromArray;
     const totalAcquisition = asset.purchase_price ? asset.purchase_price + (asset.notary_fees || 0) + (asset.travaux || 0) : null;
     asset.pnl = asset.current_value && totalAcquisition ? asset.current_value - totalAcquisition : null;
     asset.pnl_percent = asset.pnl != null && totalAcquisition ? (asset.pnl / totalAcquisition) * 100 : null;
@@ -346,13 +349,21 @@ router.get('/api/budget/cashflow', async (c) => {
   let totalIncome = 0, totalExpense = 0;
   const byCategory: Record<string, { income: number; expense: number; count: number }> = {};
   const byMonth: Record<string, { income: number; expense: number }> = {};
+  // Categories that are internal movements, not real income/expense
+  const EXCLUDED_CATS = new Set(['virement', 'retrait']);
 
   for (const tx of result.rows as any[]) {
     const cat = tx.category || 'Autre';
     if (!byCategory[cat]) byCategory[cat] = { income: 0, expense: 0, count: 0 };
-    if (tx.amount >= 0) { totalIncome += tx.amount; byCategory[cat].income += tx.amount; }
-    else { totalExpense += Math.abs(tx.amount); byCategory[cat].expense += Math.abs(tx.amount); }
+    if (tx.amount >= 0) { byCategory[cat].income += tx.amount; }
+    else { byCategory[cat].expense += Math.abs(tx.amount); }
     byCategory[cat].count++;
+
+    // Exclude internal transfers from totals and monthly chart
+    if (EXCLUDED_CATS.has(cat)) continue;
+
+    if (tx.amount >= 0) totalIncome += tx.amount;
+    else totalExpense += Math.abs(tx.amount);
 
     const month = tx.date?.substring(0, 7) || 'unknown';
     if (!byMonth[month]) byMonth[month] = { income: 0, expense: 0 };
