@@ -21,6 +21,63 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
 
 const router = new Hono();
 
+// Map native currency codes to CoinGecko IDs
+const COINGECKO_IDS: Record<string, string> = {
+  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple',
+  POL: 'matic-network', MATIC: 'matic-network', BNB: 'binancecoin',
+  AVAX: 'avalanche-2', DOGE: 'dogecoin', ADA: 'cardano', DOT: 'polkadot',
+  LINK: 'chainlink', UNI: 'uniswap', AAVE: 'aave', LTC: 'litecoin',
+};
+
+// Stablecoins pegged ~1 USD → use fixed EUR rate
+const STABLECOINS = new Set(['USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'USDP', 'FDUSD']);
+
+async function fetchEurPrice(currency: string): Promise<number> {
+  if (currency === 'EUR') return 1;
+  if (STABLECOINS.has(currency)) {
+    // ~1 USD, fetch EUR/USD rate from CoinGecko via tether
+    try {
+      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=eur');
+      const data = await res.json() as any;
+      return data?.tether?.eur || 0.93;
+    } catch { return 0.93; }
+  }
+  const cgId = COINGECKO_IDS[currency];
+  if (!cgId) return 0;
+  try {
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${cgId}&vs_currencies=eur`);
+    const data = await res.json() as any;
+    return data?.[cgId]?.eur || 0;
+  } catch { return 0; }
+}
+
+async function upsertCryptoInvestment(accountId: number | string, currency: string, quantity: number, eurPrice: number) {
+  const valuation = quantity * eurPrice;
+  const isinCode = `CRYPTO:${currency}`;
+  const label = currency;
+  const now = new Date().toISOString();
+
+  const existing = await db.execute({
+    sql: 'SELECT id, unit_price FROM investments WHERE bank_account_id = ? AND isin_code = ?',
+    args: [accountId, isinCode],
+  });
+
+  if (existing.rows.length > 0) {
+    const unitPrice = Number((existing.rows[0] as any).unit_price) || eurPrice;
+    const diff = valuation - (quantity * unitPrice);
+    const diffPercent = unitPrice > 0 ? ((eurPrice / unitPrice) - 1) * 100 : 0;
+    await db.execute({
+      sql: `UPDATE investments SET quantity = ?, unit_value = ?, valuation = ?, diff = ?, diff_percent = ?, currency = 'EUR', last_update = ? WHERE id = ?`,
+      args: [quantity, eurPrice, valuation, diff, diffPercent, now, (existing.rows[0] as any).id],
+    });
+  } else {
+    await db.execute({
+      sql: `INSERT INTO investments (bank_account_id, provider_investment_id, label, isin_code, code_type, quantity, unit_price, unit_value, valuation, diff, diff_percent, portfolio_share, currency, vdate, last_update)
+            VALUES (?, ?, ?, ?, 'CRYPTO', ?, ?, ?, ?, 0, 0, 0, 'EUR', ?, ?)`,
+      args: [accountId, isinCode, label, isinCode, quantity, eurPrice, eurPrice, valuation, now, now],
+    });
+  }
+}
 
 // ========== BLOCKCHAIN WALLETS ==========
 
@@ -304,10 +361,20 @@ router.post('/api/accounts/blockchain', async (c) => {
   }
 
   const result = await db.execute({
-    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, balance, type, usage, subtype, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, ?, 'blockchain', ?, ?, ?, 'investment', 'personal', 'crypto', ?, ?, ?, ?)`,
-    args: [userId, body.company_id || null, body.name || `${currency} Wallet`, body.custom_name || null, balance, body.address, network, currency, new Date().toISOString()]
+    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, balance, type, usage, subtype, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, ?, 'blockchain', ?, ?, 0, 'investment', 'personal', 'crypto', ?, ?, ?, ?)`,
+    args: [userId, body.company_id || null, body.name || `${currency} Wallet`, body.custom_name || null, body.address, network, currency, new Date().toISOString()]
   });
-  const account = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ?', args: [Number(result.lastInsertRowid)] });
+  const newId = Number(result.lastInsertRowid);
+
+  // Create investment record with EUR valuation
+  if (balance > 0) {
+    const eurPrice = await fetchEurPrice(currency);
+    if (eurPrice > 0) {
+      await upsertCryptoInvestment(newId, currency, balance, eurPrice);
+    }
+  }
+
+  const account = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ?', args: [newId] });
   return c.json(account.rows[0]);
 });
 
@@ -319,12 +386,20 @@ router.post('/api/accounts/:id/sync-blockchain', async (c) => {
 
   try {
     const { balance, currency } = await fetchBlockchainBalance(account.blockchain_network, account.blockchain_address);
-    // balance -1 means the fetch was unavailable (e.g. WASM missing on Vercel) — keep old balance
-    if (balance >= 0) {
-      await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), id] });
-    } else {
-      await db.execute({ sql: 'UPDATE bank_accounts SET last_sync = ? WHERE id = ?', args: [new Date().toISOString(), id] });
+    const effectiveBalance = balance >= 0 ? balance : Number(account.balance || 0);
+    const effectiveCurrency = currency || account.currency;
+
+    // Fetch EUR price and create/update investment record
+    const eurPrice = await fetchEurPrice(effectiveCurrency);
+    if (eurPrice > 0 && effectiveBalance > 0) {
+      await upsertCryptoInvestment(id, effectiveCurrency, effectiveBalance, eurPrice);
     }
+
+    // Set balance to 0 — EUR valuation is now tracked in the investment record
+    await db.execute({
+      sql: 'UPDATE bank_accounts SET balance = 0, currency = ?, last_sync = ? WHERE id = ?',
+      args: [effectiveCurrency, new Date().toISOString(), id],
+    });
 
     // Fetch and insert on-chain transactions
     let txCount = 0;
@@ -341,7 +416,7 @@ router.post('/api/accounts/:id/sync-blockchain', async (c) => {
       console.error(`Blockchain tx fetch failed for account ${id}:`, txErr.message);
     }
 
-    return c.json({ balance: balance >= 0 ? balance : account.balance, currency, synced: txCount });
+    return c.json({ balance: effectiveBalance, currency: effectiveCurrency, synced: txCount });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -472,13 +547,26 @@ router.post('/api/coinbase/sync', async (c) => {
         const balance = parseFloat(acc.balance?.amount || '0');
         const currency = acc.balance?.currency || acc.currency?.code || 'USD';
         const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
+        let bankAccountId: number;
         if (existing.rows.length > 0) {
-          await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), existing.rows[0].id as number] });
+          bankAccountId = existing.rows[0].id as number;
+          await db.execute({ sql: 'UPDATE bank_accounts SET balance = 0, currency = ?, last_sync = ? WHERE id = ?', args: [currency, new Date().toISOString(), bankAccountId] });
         } else if (balance !== 0) {
-          await db.execute({
-            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
-            args: [userId, null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()]
+          const insertRes = await db.execute({
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', 0, 'investment', 'personal', 'crypto', ?, ?)`,
+            args: [userId, null, acc.id, acc.name || `${currency} Wallet`, currency, new Date().toISOString()]
           });
+          bankAccountId = Number(insertRes.lastInsertRowid);
+        } else {
+          totalSynced++;
+          continue;
+        }
+        // Create/update investment record with EUR valuation
+        if (balance > 0) {
+          const eurPrice = await fetchEurPrice(currency);
+          if (eurPrice > 0) {
+            await upsertCryptoInvestment(bankAccountId, currency, balance, eurPrice);
+          }
         }
         totalSynced++;
       }
@@ -593,37 +681,38 @@ router.post('/api/binance/sync', async (c) => {
       const account = await fetchBinanceAccount(conn.api_key, conn.api_secret);
       const balances = (account.balances || []).filter((b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0);
       
-      for (const balance of balances) {
-        const asset = balance.asset;
-        const amount = parseFloat(balance.free) + parseFloat(balance.locked);
-        
-        // Calculate value in USD
-        let usdValue = 0;
-        if (asset === 'USDT' || asset === 'BUSD' || asset === 'USDC') {
-          usdValue = amount;
-        } else {
-          const priceSymbol = `${asset}USDT`;
-          const price = prices[priceSymbol] || prices[`${asset}BUSD`] || prices[`${asset}BTC`] * prices['BTCUSDT'] || 0;
-          usdValue = amount * price;
-        }
-        
+      for (const bal of balances) {
+        const asset = bal.asset;
+        const amount = parseFloat(bal.free) + parseFloat(bal.locked);
+
         // Check if account already exists
         const accountId = `binance-${conn.id}-${asset}`;
         const existing = await db.execute({
           sql: "SELECT id FROM bank_accounts WHERE provider = 'binance' AND provider_account_id = ? AND user_id = ?",
           args: [accountId, userId]
         });
-        
+
+        let bankAccountId: number;
         if (existing.rows.length > 0) {
+          bankAccountId = existing.rows[0].id as number;
           await db.execute({
-            sql: `UPDATE bank_accounts SET balance = ?, last_sync = ? WHERE id = ?`,
-            args: [usdValue, new Date().toISOString(), existing.rows[0].id]
+            sql: `UPDATE bank_accounts SET balance = 0, last_sync = ? WHERE id = ?`,
+            args: [new Date().toISOString(), bankAccountId]
           });
         } else {
-          await db.execute({
-            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'binance', ?, ?, ?, ?, 'investment', 'personal', 'crypto', 'USD', ?)`,
-            args: [userId, null, accountId, `${asset} Wallet`, conn.account_name || 'Binance', usdValue, new Date().toISOString()]
+          const insertRes = await db.execute({
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'binance', ?, ?, ?, 0, 'investment', 'personal', 'crypto', ?, ?)`,
+            args: [userId, null, accountId, `${asset} Wallet`, conn.account_name || 'Binance', asset, new Date().toISOString()]
           });
+          bankAccountId = Number(insertRes.lastInsertRowid);
+        }
+
+        // Create/update investment record with EUR valuation
+        if (amount > 0) {
+          const eurPrice = await fetchEurPrice(asset);
+          if (eurPrice > 0) {
+            await upsertCryptoInvestment(bankAccountId, asset, amount, eurPrice);
+          }
         }
         totalSynced++;
       }
