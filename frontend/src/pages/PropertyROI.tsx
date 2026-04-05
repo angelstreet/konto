@@ -33,7 +33,7 @@ interface ROIData {
 }
 
 function fmt(n: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
 }
 
 function monthLabel(m: string) {
@@ -52,6 +52,7 @@ export default function PropertyROI() {
   const [months, setMonths] = useState(6);
   const [data, setData] = useState<ROIData | null>(() => roiCache[6] ?? null);
   const [loading, setLoading] = useState(!roiCache[6]);
+  const [error, setError] = useState<string | null>(null);
   const animatedProperties = useRef<Set<number>>(new Set());
   const [showChargesModal, setShowChargesModal] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
@@ -75,9 +76,9 @@ export default function PropertyROI() {
     setLoading(true);
     const url = appendScope(`${API}/properties/roi?months=${months}`);
     authFetch(url)
-      .then(r => { if (!r.ok) throw new Error(`API ${r.status}`); return r.json(); })
-      .then(d => { if (d.error) throw new Error(d.error); roiCache[months] = d; setData(d); setLoading(false); })
-      .catch(() => { setData(null); setLoading(false); });
+      .then(async r => { const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || `API ${r.status}`); return d; })
+      .then(d => { roiCache[months] = d; setData(d); setError(null); setLoading(false); })
+      .catch((e) => { setData(null); setError(e.message); setLoading(false); });
   }, [months]);
 
   const h = hideAmounts;
@@ -120,7 +121,7 @@ export default function PropertyROI() {
       {loading && <div className="text-center text-muted-foreground py-12">Chargement…</div>}
 
       {!loading && !data && (
-        <div className="text-center text-muted-foreground py-12">Impossible de charger les données de rentabilité.</div>
+        <div className="text-center text-muted-foreground py-12">{error || 'Impossible de charger les données de rentabilité.'}</div>
       )}
 
       {!loading && data && (
