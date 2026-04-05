@@ -14,7 +14,6 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
   const [range, setRange] = useState<string>('6m');
   const [data, setData] = useState<{ date: string; value: number }[]>([]);
   const [loading, setLoading] = useState(true);
-  const hasAnimated = useRef(false);
   const prevShowNet = useRef(showNet);
 
   // Auth — get Clerk token for API calls
@@ -29,18 +28,11 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
 
-  // Reset animation flag when range changes so new data animates once
-  useEffect(() => {
-    hasAnimated.current = false;
-  }, [range]);
-
   useEffect(() => {
     // Only show loading spinner on initial load or range change, not brut/net toggle
     const isNetToggle = prevShowNet.current !== showNet;
     prevShowNet.current = showNet;
     if (!isNetToggle) setLoading(true);
-    // Skip animation on brut/net toggle
-    if (isNetToggle) hasAnimated.current = true;
     const params = new URLSearchParams({ range, category: 'all' });
     if (showNet) params.set('net', '1');
     (async () => {
@@ -98,7 +90,7 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
         <div className="h-48 flex items-center justify-center text-muted text-sm">...</div>
       ) : (
         <ResponsiveContainer width="100%" height={200}>
-          <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
+          <AreaChart key={range} data={data} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
             <defs>
               <linearGradient id="patrimoineGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="var(--color-accent-400, #d4a812)" stopOpacity={0.3} />
@@ -134,8 +126,7 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
               stroke="#d4a812"
               strokeWidth={2}
               fill="url(#patrimoineGradient)"
-              isAnimationActive={!hasAnimated.current}
-              onAnimationEnd={() => { hasAnimated.current = true; }}
+              isAnimationActive={false}
             />
           </AreaChart>
         </ResponsiveContainer>
