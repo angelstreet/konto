@@ -1,8 +1,25 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 
+const CACHE_KEY = 'konto_api_cache';
 const cache = new Map<string, any>();
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
+
+// Restore cache from sessionStorage on load (stale-while-revalidate)
+try {
+  const stored = sessionStorage.getItem(CACHE_KEY);
+  if (stored) {
+    const entries = JSON.parse(stored) as [string, any][];
+    for (const [k, v] of entries) cache.set(k, v);
+  }
+} catch {}
+
+function persistCache() {
+  try {
+    const entries = Array.from(cache.entries());
+    sessionStorage.setItem(CACHE_KEY, JSON.stringify(entries));
+  } catch {}
+}
 
 /** Get auth headers — Clerk JWT if available, empty otherwise */
 async function getAuthHeaders(getToken?: () => Promise<string | null>): Promise<Record<string, string>> {
@@ -40,6 +57,7 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
       .then(r => { if (!r.ok) throw new Error(`API ${r.status}`); return r.json(); })
       .then(d => {
         cache.set(url, d);
+        persistCache();
         if (urlRef.current === url) setData(d);
       })
       .finally(() => setLoading(false));
@@ -61,6 +79,7 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
 
   const updateData = useCallback((d: T) => {
     cache.set(url, d);
+    persistCache();
     setData(d);
   }, [url]);
 
@@ -104,8 +123,10 @@ export function useAuthFetch() {
 
 export function invalidateApi(url: string) {
   cache.delete(url);
+  persistCache();
 }
 
 export function invalidateAllApi() {
   cache.clear();
+  persistCache();
 }
