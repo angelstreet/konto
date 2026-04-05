@@ -82,6 +82,7 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [investments, setInvestments] = useState<InvestmentRow[]>([]);
   const [txs, setTxs] = useState<TxRow[]>([]);
+  const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({});
   const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
 
   useEffect(() => {
@@ -98,10 +99,11 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
       setLoading(true);
       setError(null);
       try {
-        const [accRes, invRes, txRes] = await Promise.all([
+        const [accRes, invRes, txRes, pricesRes] = await Promise.all([
           authFetch(`${API}/bank/accounts`),
           authFetch(`${API}/investments`),
           authFetch(`${API}/transactions?limit=2000&offset=0`),
+          authFetch(`${API}/crypto/prices`).catch(() => null),
         ]);
 
         const accJson = await accRes.json();
@@ -111,6 +113,18 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
         if (!accRes.ok) throw new Error(accJson?.error || 'Failed loading accounts');
         if (!invRes.ok) throw new Error(invJson?.error || 'Failed loading investments');
         if (!txRes.ok) throw new Error(txJson?.error || 'Failed loading transactions');
+
+        // Build currency→EUR price map from CoinGecko response
+        // Response shape: { bitcoin: { eur: 84000 }, ethereum: { eur: 3200 }, ... }
+        const priceMap: Record<string, number> = {};
+        if (pricesRes?.ok) {
+          const cgMap: Record<string, string> = { bitcoin: 'BTC', ethereum: 'ETH', solana: 'SOL', ripple: 'XRP', 'matic-network': 'POL', binancecoin: 'BNB', 'avalanche-2': 'AVAX' };
+          const pricesJson = await pricesRes.json();
+          for (const [cgId, data] of Object.entries(pricesJson as Record<string, any>)) {
+            const code = cgMap[cgId];
+            if (code && data?.eur) priceMap[code] = data.eur;
+          }
+        }
 
         const allAccounts = (accJson as AccountRow[]).filter(a => !a.hidden);
         const filteredAccounts = allAccounts.filter(accountFilter);
@@ -126,6 +140,7 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
         setAccounts(filteredAccounts);
         setInvestments(filteredInv);
         setTxs(filteredTx);
+        setCryptoPrices(priceMap);
         setSelectedTx(filteredTx[0] || null);
       } catch (e: any) {
         if (mounted) setError(e?.message || 'Failed loading asset class');
@@ -158,11 +173,19 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
 
     // Use investment total when positions exist (avoids double-counting with account balance)
     for (const row of byAcc.values()) {
-      row.total = row.positions.length > 0 ? row.invTotal : Math.max(0, Number(row.account.balance || 0));
+      if (row.positions.length > 0) {
+        row.total = row.invTotal;
+      } else {
+        const bal = Math.max(0, Number(row.account.balance || 0));
+        const cur = row.account.currency || 'EUR';
+        // Convert native crypto balance to EUR (e.g. 0.73 BTC → 0.73 × 84000)
+        const eurPrice = cryptoPrices[cur];
+        row.total = eurPrice ? bal * eurPrice : bal;
+      }
     }
 
     return Array.from(byAcc.values()).sort((a, b) => b.total - a.total);
-  }, [accounts, investments]);
+  }, [accounts, investments, cryptoPrices]);
 
   const totalValue = useMemo(() => grouped.reduce((s, g) => s + g.total, 0), [grouped]);
   const filteredTxByRange = useMemo(() => {

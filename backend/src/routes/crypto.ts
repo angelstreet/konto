@@ -21,28 +21,6 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
 
 const router = new Hono();
 
-// ========== EUR PRICE HELPER ==========
-const CRYPTO_TO_COINGECKO: Record<string, string> = {
-  BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple',
-  POL: 'matic-network', MATIC: 'matic-network', BNB: 'binancecoin',
-  AVAX: 'avalanche-2', DOGE: 'dogecoin', ADA: 'cardano', DOT: 'polkadot',
-  LINK: 'chainlink', UNI: 'uniswap', AAVE: 'aave', LTC: 'litecoin',
-};
-
-// Single CoinGecko call → returns EUR price per currency code
-async function fetchEurPrices(currencies: string[]): Promise<Record<string, number>> {
-  const ids = [...new Set(currencies.map(c => CRYPTO_TO_COINGECKO[c]).filter(Boolean))];
-  if (ids.length === 0) return {};
-  try {
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=eur`);
-    const data = await res.json() as Record<string, { eur?: number }>;
-    const prices: Record<string, number> = {};
-    for (const [code, cgId] of Object.entries(CRYPTO_TO_COINGECKO)) {
-      if (data[cgId]?.eur) prices[code] = data[cgId].eur;
-    }
-    return prices;
-  } catch { return {}; }
-}
 
 // ========== BLOCKCHAIN WALLETS ==========
 
@@ -325,16 +303,9 @@ router.post('/api/accounts/blockchain', async (c) => {
     console.error(`Blockchain balance fetch failed for ${network}:${body.address}:`, err.message);
   }
 
-  // Convert native balance to EUR
-  let eurBalance = balance;
-  if (balance > 0 && currency !== 'EUR') {
-    const prices = await fetchEurPrices([currency]);
-    if (prices[currency]) eurBalance = balance * prices[currency];
-  }
-
   const result = await db.execute({
-    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, balance, balance_native, type, usage, subtype, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, ?, 'blockchain', ?, ?, ?, ?, 'investment', 'personal', 'crypto', ?, ?, ?, ?)`,
-    args: [userId, body.company_id || null, body.name || `${currency} Wallet`, body.custom_name || null, eurBalance, balance, body.address, network, currency, new Date().toISOString()]
+    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, balance, type, usage, subtype, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, ?, 'blockchain', ?, ?, ?, 'investment', 'personal', 'crypto', ?, ?, ?, ?)`,
+    args: [userId, body.company_id || null, body.name || `${currency} Wallet`, body.custom_name || null, balance, body.address, network, currency, new Date().toISOString()]
   });
   const account = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ?', args: [Number(result.lastInsertRowid)] });
   return c.json(account.rows[0]);
@@ -348,22 +319,12 @@ router.post('/api/accounts/:id/sync-blockchain', async (c) => {
 
   try {
     const { balance, currency } = await fetchBlockchainBalance(account.blockchain_network, account.blockchain_address);
-
-    // Use fetched balance if available, otherwise fall back to stored native balance
-    const nativeBalance = balance >= 0 ? balance : Number(account.balance_native || account.balance || 0);
-    const cur = currency || account.currency;
-
-    // Convert to EUR
-    let eurBalance = nativeBalance;
-    if (nativeBalance > 0 && cur !== 'EUR') {
-      const prices = await fetchEurPrices([cur]);
-      if (prices[cur]) eurBalance = nativeBalance * prices[cur];
+    // balance -1 means the fetch was unavailable (e.g. WASM missing on Vercel) — keep old balance
+    if (balance >= 0) {
+      await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), id] });
+    } else {
+      await db.execute({ sql: 'UPDATE bank_accounts SET last_sync = ? WHERE id = ?', args: [new Date().toISOString(), id] });
     }
-
-    await db.execute({
-      sql: 'UPDATE bank_accounts SET balance = ?, balance_native = ?, currency = ?, last_sync = ? WHERE id = ?',
-      args: [eurBalance, nativeBalance, cur, new Date().toISOString(), id],
-    });
 
     // Fetch and insert on-chain transactions
     let txCount = 0;
@@ -507,21 +468,16 @@ router.post('/api/coinbase/sync', async (c) => {
       const accRes = await fetch(`${COINBASE_API}/accounts?limit=100`, { headers: { 'Authorization': `Bearer ${token}` } });
       const accData = await accRes.json() as any;
 
-      // Collect all currencies, fetch EUR prices in one batch call
-      const allCurrencies = (accData.data || []).map((a: any) => a.balance?.currency || a.currency?.code || 'USD');
-      const prices = await fetchEurPrices(allCurrencies);
-
       for (const acc of (accData.data || [])) {
-        const nativeBalance = parseFloat(acc.balance?.amount || '0');
+        const balance = parseFloat(acc.balance?.amount || '0');
         const currency = acc.balance?.currency || acc.currency?.code || 'USD';
-        const eurBalance = prices[currency] ? nativeBalance * prices[currency] : nativeBalance;
         const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
         if (existing.rows.length > 0) {
-          await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, balance_native = ?, currency = ?, last_sync = ? WHERE id = ?', args: [eurBalance, nativeBalance, currency, new Date().toISOString(), existing.rows[0].id as number] });
-        } else if (nativeBalance !== 0) {
+          await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), existing.rows[0].id as number] });
+        } else if (balance !== 0) {
           await db.execute({
-            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, balance_native, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, ?, 'investment', 'personal', 'crypto', ?, ?)`,
-            args: [userId, null, acc.id, acc.name || `${currency} Wallet`, eurBalance, nativeBalance, currency, new Date().toISOString()]
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
+            args: [userId, null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()]
           });
         }
         totalSynced++;
@@ -629,53 +585,44 @@ router.post('/api/binance/sync', async (c) => {
   });
   
   let totalSynced = 0;
-  const binancePrices = await fetchBinancePrices();
-
+  const prices = await fetchBinancePrices();
+  
   for (const rawConn of connections.rows as any[]) {
     const conn = decryptBinanceConn(rawConn);
     try {
       const account = await fetchBinanceAccount(conn.api_key, conn.api_secret);
       const balances = (account.balances || []).filter((b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0);
-
-      // Fetch EUR prices in one batch call
-      const assets = balances.map((b: any) => b.asset as string);
-      const eurPrices = await fetchEurPrices(assets);
-
+      
       for (const balance of balances) {
         const asset = balance.asset;
         const amount = parseFloat(balance.free) + parseFloat(balance.locked);
-
-        // Calculate value in EUR (prefer CoinGecko EUR price, fall back to Binance USD→EUR)
-        let eurValue = 0;
-        if (eurPrices[asset]) {
-          eurValue = amount * eurPrices[asset];
+        
+        // Calculate value in USD
+        let usdValue = 0;
+        if (asset === 'USDT' || asset === 'BUSD' || asset === 'USDC') {
+          usdValue = amount;
         } else {
-          // Fallback: Binance USD price * rough EUR/USD
-          let usdValue = amount;
-          if (asset !== 'USDT' && asset !== 'BUSD' && asset !== 'USDC') {
-            const priceSymbol = `${asset}USDT`;
-            const price = binancePrices[priceSymbol] || binancePrices[`${asset}BUSD`] || (binancePrices[`${asset}BTC`] || 0) * (binancePrices['BTCUSDT'] || 0);
-            usdValue = amount * price;
-          }
-          eurValue = usdValue * 0.93;
+          const priceSymbol = `${asset}USDT`;
+          const price = prices[priceSymbol] || prices[`${asset}BUSD`] || prices[`${asset}BTC`] * prices['BTCUSDT'] || 0;
+          usdValue = amount * price;
         }
-
+        
         // Check if account already exists
         const accountId = `binance-${conn.id}-${asset}`;
         const existing = await db.execute({
           sql: "SELECT id FROM bank_accounts WHERE provider = 'binance' AND provider_account_id = ? AND user_id = ?",
           args: [accountId, userId]
         });
-
+        
         if (existing.rows.length > 0) {
           await db.execute({
-            sql: `UPDATE bank_accounts SET balance = ?, balance_native = ?, currency = ?, last_sync = ? WHERE id = ?`,
-            args: [eurValue, amount, asset, new Date().toISOString(), existing.rows[0].id]
+            sql: `UPDATE bank_accounts SET balance = ?, last_sync = ? WHERE id = ?`,
+            args: [usdValue, new Date().toISOString(), existing.rows[0].id]
           });
         } else {
           await db.execute({
-            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, balance_native, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'binance', ?, ?, ?, ?, ?, 'investment', 'personal', 'crypto', ?, ?)`,
-            args: [userId, null, accountId, `${asset} Wallet`, conn.account_name || 'Binance', eurValue, amount, asset, new Date().toISOString()]
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'binance', ?, ?, ?, ?, 'investment', 'personal', 'crypto', 'USD', ?)`,
+            args: [userId, null, accountId, `${asset} Wallet`, conn.account_name || 'Binance', usdValue, new Date().toISOString()]
           });
         }
         totalSynced++;
