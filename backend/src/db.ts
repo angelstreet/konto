@@ -441,6 +441,36 @@ export async function migrateDatabase() {
     await db.execute("ALTER TABLE assets ADD COLUMN usage TEXT NOT NULL DEFAULT 'personal'");
   }
 
+  // One-time fix: a bug incorrectly stored EUR values in crypto balance fields
+  // Detect and revert by dividing by current EUR price
+  try {
+    const cryptoAccounts = await db.execute("SELECT id, balance, currency FROM bank_accounts WHERE subtype = 'crypto' AND balance > 100");
+    if (cryptoAccounts.rows.length > 0) {
+      const currencies = [...new Set(cryptoAccounts.rows.map((r: any) => r.currency).filter(Boolean))];
+      const cgMap: Record<string, string> = { BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple', POL: 'matic-network', BNB: 'binancecoin', AVAX: 'avalanche-2' };
+      const ids = currencies.map(c => cgMap[c as string]).filter(Boolean);
+      if (ids.length > 0) {
+        const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=eur`);
+        const prices = await res.json() as Record<string, { eur?: number }>;
+        const eurPrices: Record<string, number> = {};
+        for (const [code, cgId] of Object.entries(cgMap)) {
+          if (prices[cgId]?.eur) eurPrices[code] = prices[cgId].eur;
+        }
+        for (const row of cryptoAccounts.rows as any[]) {
+          const price = eurPrices[row.currency];
+          if (price && row.balance > price * 0.5) {
+            // Balance looks like EUR (e.g. 42829 for BTC) — convert back to native
+            const native = row.balance / price;
+            await db.execute({ sql: 'UPDATE bank_accounts SET balance = ? WHERE id = ?', args: [native, row.id] });
+            console.log(`[db-fix] Reverted crypto balance for account ${row.id}: ${row.balance} → ${native} ${row.currency}`);
+          }
+        }
+      }
+    }
+  } catch (e) {
+    console.warn('[db-fix] Crypto balance fix skipped:', e);
+  }
+
   // Add subtype column to bank_accounts (for investment sub-classification)
   try {
     await db.execute("SELECT subtype FROM bank_accounts LIMIT 1");
