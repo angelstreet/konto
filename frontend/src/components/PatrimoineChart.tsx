@@ -14,6 +14,7 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
   const [range, setRange] = useState<string>('6m');
   const [data, setData] = useState<{ date: string; value: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const initialLoaded = useRef(false);
   const prevShowNet = useRef(showNet);
 
   // Auth — get Clerk token for API calls
@@ -45,7 +46,9 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
     })()
       .then(r => r.json())
       .then(d => {
-        setData(d.history || []);
+        const history = d.history || [];
+        setData(history);
+        if (history.length >= 2) initialLoaded.current = true;
       })
       .finally(() => setLoading(false));
   }, [range, showNet]);
@@ -55,14 +58,16 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
   const change = latestValue - firstValue;
   const changePct = firstValue !== 0 ? (change / Math.abs(firstValue)) * 100 : 0;
 
-  if (!loading && data.length < 2) return null;
+  // Hide only if we never got valid data (initial load returned <2 points)
+  const hasValidData = data.length >= 2;
+  if (!loading && !hasValidData && !initialLoaded.current) return null;
 
   return (
     <div className="bg-surface rounded-xl border border-border p-4">
       <div className="mb-3">
         <div className="flex items-baseline gap-2 flex-wrap">
           <h3 className="text-sm font-medium text-muted tracking-wide whitespace-nowrap">{showNet ? 'Patrimoine net' : 'Patrimoine brut'}</h3>
-          {data.length > 0 && (
+          {hasValidData && (
             <>
               <span className="text-lg font-bold text-accent-400 whitespace-nowrap">{hideAmounts ? <span className="amount-masked">{formatCurrency(latestValue)}</span> : formatCurrency(latestValue)}</span>
               <span className={`text-xs font-medium whitespace-nowrap ${change >= 0 ? 'text-green-400' : 'text-red-400'}`}>
@@ -86,11 +91,11 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
         </div>
       </div>
 
-      {loading ? (
+      {loading && !hasValidData ? (
         <div className="h-48 flex items-center justify-center text-muted text-sm">...</div>
-      ) : (
+      ) : hasValidData ? (
         <ResponsiveContainer width="100%" height={200}>
-          <AreaChart key={range} data={data} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
+          <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 0, left: 5 }}>
             <defs>
               <linearGradient id="patrimoineGradient" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="var(--color-accent-400, #d4a812)" stopOpacity={0.3} />
@@ -130,7 +135,7 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
             />
           </AreaChart>
         </ResponsiveContainer>
-      )}
+      ) : null}
     </div>
   );
 }
