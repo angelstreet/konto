@@ -21,62 +21,27 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
 
 const router = new Hono();
 
-// Map native currency codes to CoinGecko IDs
-const COINGECKO_IDS: Record<string, string> = {
+// ========== EUR PRICE HELPER ==========
+const CRYPTO_TO_COINGECKO: Record<string, string> = {
   BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple',
   POL: 'matic-network', MATIC: 'matic-network', BNB: 'binancecoin',
   AVAX: 'avalanche-2', DOGE: 'dogecoin', ADA: 'cardano', DOT: 'polkadot',
   LINK: 'chainlink', UNI: 'uniswap', AAVE: 'aave', LTC: 'litecoin',
 };
 
-// Stablecoins pegged ~1 USD → use fixed EUR rate
-const STABLECOINS = new Set(['USDT', 'USDC', 'BUSD', 'DAI', 'TUSD', 'USDP', 'FDUSD']);
-
-async function fetchEurPrice(currency: string): Promise<number> {
-  if (currency === 'EUR') return 1;
-  if (STABLECOINS.has(currency)) {
-    // ~1 USD, fetch EUR/USD rate from CoinGecko via tether
-    try {
-      const res = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=tether&vs_currencies=eur');
-      const data = await res.json() as any;
-      return data?.tether?.eur || 0.93;
-    } catch { return 0.93; }
-  }
-  const cgId = COINGECKO_IDS[currency];
-  if (!cgId) return 0;
+// Single CoinGecko call → returns EUR price per currency code
+async function fetchEurPrices(currencies: string[]): Promise<Record<string, number>> {
+  const ids = [...new Set(currencies.map(c => CRYPTO_TO_COINGECKO[c]).filter(Boolean))];
+  if (ids.length === 0) return {};
   try {
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${cgId}&vs_currencies=eur`);
-    const data = await res.json() as any;
-    return data?.[cgId]?.eur || 0;
-  } catch { return 0; }
-}
-
-async function upsertCryptoInvestment(accountId: number | string, currency: string, quantity: number, eurPrice: number) {
-  const valuation = quantity * eurPrice;
-  const isinCode = `CRYPTO:${currency}`;
-  const label = currency;
-  const now = new Date().toISOString();
-
-  const existing = await db.execute({
-    sql: 'SELECT id, unit_price FROM investments WHERE bank_account_id = ? AND isin_code = ?',
-    args: [accountId, isinCode],
-  });
-
-  if (existing.rows.length > 0) {
-    const unitPrice = Number((existing.rows[0] as any).unit_price) || eurPrice;
-    const diff = valuation - (quantity * unitPrice);
-    const diffPercent = unitPrice > 0 ? ((eurPrice / unitPrice) - 1) * 100 : 0;
-    await db.execute({
-      sql: `UPDATE investments SET quantity = ?, unit_value = ?, valuation = ?, diff = ?, diff_percent = ?, currency = 'EUR', last_update = ? WHERE id = ?`,
-      args: [quantity, eurPrice, valuation, diff, diffPercent, now, (existing.rows[0] as any).id],
-    });
-  } else {
-    await db.execute({
-      sql: `INSERT INTO investments (bank_account_id, provider_investment_id, label, isin_code, code_type, quantity, unit_price, unit_value, valuation, diff, diff_percent, portfolio_share, currency, vdate, last_update)
-            VALUES (?, ?, ?, ?, 'CRYPTO', ?, ?, ?, ?, 0, 0, 0, 'EUR', ?, ?)`,
-      args: [accountId, isinCode, label, isinCode, quantity, eurPrice, eurPrice, valuation, now, now],
-    });
-  }
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=eur`);
+    const data = await res.json() as Record<string, { eur?: number }>;
+    const prices: Record<string, number> = {};
+    for (const [code, cgId] of Object.entries(CRYPTO_TO_COINGECKO)) {
+      if (data[cgId]?.eur) prices[code] = data[cgId].eur;
+    }
+    return prices;
+  } catch { return {}; }
 }
 
 // ========== BLOCKCHAIN WALLETS ==========
@@ -136,8 +101,8 @@ export async function fetchBlockchainBalance(network: string, address: string): 
     return { balance: (funded - spent) / 1e8, currency: 'BTC' };
   }
   // EVM chains — all use the same eth_getBalance RPC, different endpoints
-  const evmChains: Record<string, { rpc: string; currency: string; decimals: number; fallbackRpc?: string }> = {
-    ethereum:  { rpc: 'https://eth.llamarpc.com', currency: 'ETH', decimals: 18, fallbackRpc: 'https://ethereum-rpc.publicnode.com' },
+  const evmChains: Record<string, { rpc: string; currency: string; decimals: number }> = {
+    ethereum:  { rpc: 'https://eth.llamarpc.com', currency: 'ETH', decimals: 18 },
     base:      { rpc: 'https://mainnet.base.org', currency: 'ETH', decimals: 18 },
     polygon:   { rpc: 'https://polygon-rpc.com', currency: 'POL', decimals: 18 },
     bnb:       { rpc: 'https://bsc-dataseed.binance.org', currency: 'BNB', decimals: 18 },
@@ -148,28 +113,20 @@ export async function fetchBlockchainBalance(network: string, address: string): 
 
   const chain = evmChains[network];
   if (chain) {
-    const rpcs = [chain.rpc, ...(chain.fallbackRpc ? [chain.fallbackRpc] : [])];
-    for (const rpc of rpcs) {
-      try {
-        const res = await fetch(rpc, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getBalance', params: [address, 'latest'], id: 1 }),
-        });
-        const text = await res.text();
-        const data = JSON.parse(text);
-        if (!data.result || data.error) {
-          console.warn(`[crypto] ${network} RPC error (${rpc}): ${JSON.stringify(data.error || 'no result')}`);
-          continue;
-        }
-        const balance = parseInt(data.result, 16) / Math.pow(10, chain.decimals);
-        return { balance, currency: chain.currency };
-      } catch (e: any) {
-        console.warn(`[crypto] ${network} RPC failed (${rpc}): ${e.message}`);
-        continue;
-      }
+    const res = await fetch(chain.rpc, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getBalance', params: [address, 'latest'], id: 1 }),
+    });
+    const text = await res.text();
+    try {
+      const data = JSON.parse(text);
+      const balance = data.result ? parseInt(data.result, 16) / Math.pow(10, chain.decimals) : 0;
+      return { balance, currency: chain.currency };
+    } catch {
+      console.warn(`[crypto] ${network} RPC returned non-JSON (${res.status}): ${text.slice(0, 100)}`);
+      return { balance: 0, currency: chain.currency };
     }
-    return { balance: -1, currency: chain.currency };
   }
   throw new Error(`Unsupported network: ${network}`);
 }
@@ -368,21 +325,18 @@ router.post('/api/accounts/blockchain', async (c) => {
     console.error(`Blockchain balance fetch failed for ${network}:${body.address}:`, err.message);
   }
 
-  const result = await db.execute({
-    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, balance, type, usage, subtype, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, ?, 'blockchain', ?, ?, 0, 'investment', 'personal', 'crypto', ?, ?, ?, ?)`,
-    args: [userId, body.company_id || null, body.name || `${currency} Wallet`, body.custom_name || null, body.address, network, currency, new Date().toISOString()]
-  });
-  const newId = Number(result.lastInsertRowid);
-
-  // Create investment record with EUR valuation
-  if (balance > 0) {
-    const eurPrice = await fetchEurPrice(currency);
-    if (eurPrice > 0) {
-      await upsertCryptoInvestment(newId, currency, balance, eurPrice);
-    }
+  // Convert native balance to EUR
+  let eurBalance = balance;
+  if (balance > 0 && currency !== 'EUR') {
+    const prices = await fetchEurPrices([currency]);
+    if (prices[currency]) eurBalance = balance * prices[currency];
   }
 
-  const account = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ?', args: [newId] });
+  const result = await db.execute({
+    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, balance, type, usage, subtype, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, ?, 'blockchain', ?, ?, ?, 'investment', 'personal', 'crypto', ?, ?, ?, ?)`,
+    args: [userId, body.company_id || null, body.name || `${currency} Wallet`, body.custom_name || null, eurBalance, body.address, network, currency, new Date().toISOString()]
+  });
+  const account = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ?', args: [Number(result.lastInsertRowid)] });
   return c.json(account.rows[0]);
 });
 
@@ -394,33 +348,23 @@ router.post('/api/accounts/:id/sync-blockchain', async (c) => {
 
   try {
     const { balance, currency } = await fetchBlockchainBalance(account.blockchain_network, account.blockchain_address);
-    const effectiveCurrency = currency || account.currency;
-
-    // Determine effective balance: fetched balance, or fall back to existing investment quantity
-    let effectiveBalance = balance >= 0 ? balance : Number(account.balance || 0);
-    if (effectiveBalance <= 0) {
-      // Account balance was already zeroed by a previous sync — check existing investment
-      const isinCode = `CRYPTO:${effectiveCurrency}`;
-      const existingInv = await db.execute({
-        sql: 'SELECT quantity FROM investments WHERE bank_account_id = ? AND isin_code = ?',
-        args: [id, isinCode],
-      });
-      if (existingInv.rows.length > 0) {
-        effectiveBalance = Number((existingInv.rows[0] as any).quantity) || 0;
+    // balance -1 means the fetch was unavailable (e.g. WASM missing on Vercel) — keep old balance
+    if (balance >= 0) {
+      // Convert native balance to EUR
+      let eurBalance = balance;
+      if (balance > 0 && currency !== 'EUR') {
+        const prices = await fetchEurPrices([currency]);
+        if (prices[currency]) eurBalance = balance * prices[currency];
       }
+      await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [eurBalance, currency, new Date().toISOString(), id] });
+    } else {
+      // RPC unavailable — still update EUR price for existing balance if possible
+      const prices = await fetchEurPrices([account.currency]);
+      if (prices[account.currency] && Number(account.balance) > 0) {
+        // Keep existing balance (already in EUR from last successful sync)
+      }
+      await db.execute({ sql: 'UPDATE bank_accounts SET last_sync = ? WHERE id = ?', args: [new Date().toISOString(), id] });
     }
-
-    // Fetch EUR price and create/update investment record
-    const eurPrice = await fetchEurPrice(effectiveCurrency);
-    if (eurPrice > 0 && effectiveBalance > 0) {
-      await upsertCryptoInvestment(id, effectiveCurrency, effectiveBalance, eurPrice);
-    }
-
-    // Set balance to 0 — EUR valuation is now tracked in the investment record
-    await db.execute({
-      sql: 'UPDATE bank_accounts SET balance = 0, currency = ?, last_sync = ? WHERE id = ?',
-      args: [effectiveCurrency, new Date().toISOString(), id],
-    });
 
     // Fetch and insert on-chain transactions
     let txCount = 0;
@@ -437,7 +381,7 @@ router.post('/api/accounts/:id/sync-blockchain', async (c) => {
       console.error(`Blockchain tx fetch failed for account ${id}:`, txErr.message);
     }
 
-    return c.json({ balance: effectiveBalance, currency: effectiveCurrency, synced: txCount });
+    return c.json({ balance: balance >= 0 ? balance : account.balance, currency, synced: txCount });
   } catch (err: any) {
     return c.json({ error: err.message }, 500);
   }
@@ -564,30 +508,22 @@ router.post('/api/coinbase/sync', async (c) => {
       const accRes = await fetch(`${COINBASE_API}/accounts?limit=100`, { headers: { 'Authorization': `Bearer ${token}` } });
       const accData = await accRes.json() as any;
 
+      // Collect all currencies, fetch EUR prices in one batch call
+      const allCurrencies = (accData.data || []).map((a: any) => a.balance?.currency || a.currency?.code || 'USD');
+      const prices = await fetchEurPrices(allCurrencies);
+
       for (const acc of (accData.data || [])) {
-        const balance = parseFloat(acc.balance?.amount || '0');
+        const nativeBalance = parseFloat(acc.balance?.amount || '0');
         const currency = acc.balance?.currency || acc.currency?.code || 'USD';
+        const eurBalance = prices[currency] ? nativeBalance * prices[currency] : nativeBalance;
         const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
-        let bankAccountId: number;
         if (existing.rows.length > 0) {
-          bankAccountId = existing.rows[0].id as number;
-          await db.execute({ sql: 'UPDATE bank_accounts SET balance = 0, currency = ?, last_sync = ? WHERE id = ?', args: [currency, new Date().toISOString(), bankAccountId] });
-        } else if (balance !== 0) {
-          const insertRes = await db.execute({
-            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', 0, 'investment', 'personal', 'crypto', ?, ?)`,
-            args: [userId, null, acc.id, acc.name || `${currency} Wallet`, currency, new Date().toISOString()]
+          await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [eurBalance, currency, new Date().toISOString(), existing.rows[0].id as number] });
+        } else if (nativeBalance !== 0) {
+          await db.execute({
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
+            args: [userId, null, acc.id, acc.name || `${currency} Wallet`, eurBalance, currency, new Date().toISOString()]
           });
-          bankAccountId = Number(insertRes.lastInsertRowid);
-        } else {
-          totalSynced++;
-          continue;
-        }
-        // Create/update investment record with EUR valuation
-        if (balance > 0) {
-          const eurPrice = await fetchEurPrice(currency);
-          if (eurPrice > 0) {
-            await upsertCryptoInvestment(bankAccountId, currency, balance, eurPrice);
-          }
         }
         totalSynced++;
       }
@@ -694,17 +630,36 @@ router.post('/api/binance/sync', async (c) => {
   });
   
   let totalSynced = 0;
-  const prices = await fetchBinancePrices();
-  
+  const binancePrices = await fetchBinancePrices();
+
   for (const rawConn of connections.rows as any[]) {
     const conn = decryptBinanceConn(rawConn);
     try {
       const account = await fetchBinanceAccount(conn.api_key, conn.api_secret);
       const balances = (account.balances || []).filter((b: any) => parseFloat(b.free) > 0 || parseFloat(b.locked) > 0);
-      
-      for (const bal of balances) {
-        const asset = bal.asset;
-        const amount = parseFloat(bal.free) + parseFloat(bal.locked);
+
+      // Fetch EUR prices in one batch call
+      const assets = balances.map((b: any) => b.asset as string);
+      const eurPrices = await fetchEurPrices(assets);
+
+      for (const balance of balances) {
+        const asset = balance.asset;
+        const amount = parseFloat(balance.free) + parseFloat(balance.locked);
+
+        // Calculate value in EUR (prefer CoinGecko EUR price, fall back to Binance USD→EUR)
+        let eurValue = 0;
+        if (eurPrices[asset]) {
+          eurValue = amount * eurPrices[asset];
+        } else {
+          // Fallback: Binance USD price * rough EUR/USD
+          let usdValue = amount;
+          if (asset !== 'USDT' && asset !== 'BUSD' && asset !== 'USDC') {
+            const priceSymbol = `${asset}USDT`;
+            const price = binancePrices[priceSymbol] || binancePrices[`${asset}BUSD`] || (binancePrices[`${asset}BTC`] || 0) * (binancePrices['BTCUSDT'] || 0);
+            usdValue = amount * price;
+          }
+          eurValue = usdValue * 0.93;
+        }
 
         // Check if account already exists
         const accountId = `binance-${conn.id}-${asset}`;
@@ -713,27 +668,16 @@ router.post('/api/binance/sync', async (c) => {
           args: [accountId, userId]
         });
 
-        let bankAccountId: number;
         if (existing.rows.length > 0) {
-          bankAccountId = existing.rows[0].id as number;
           await db.execute({
-            sql: `UPDATE bank_accounts SET balance = 0, last_sync = ? WHERE id = ?`,
-            args: [new Date().toISOString(), bankAccountId]
+            sql: `UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?`,
+            args: [eurValue, asset, new Date().toISOString(), existing.rows[0].id]
           });
         } else {
-          const insertRes = await db.execute({
-            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'binance', ?, ?, ?, 0, 'investment', 'personal', 'crypto', ?, ?)`,
-            args: [userId, null, accountId, `${asset} Wallet`, conn.account_name || 'Binance', asset, new Date().toISOString()]
+          await db.execute({
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'binance', ?, ?, ?, ?, 'investment', 'personal', 'crypto', ?, ?)`,
+            args: [userId, null, accountId, `${asset} Wallet`, conn.account_name || 'Binance', eurValue, asset, new Date().toISOString()]
           });
-          bankAccountId = Number(insertRes.lastInsertRowid);
-        }
-
-        // Create/update investment record with EUR valuation
-        if (amount > 0) {
-          const eurPrice = await fetchEurPrice(asset);
-          if (eurPrice > 0) {
-            await upsertCryptoInvestment(bankAccountId, asset, amount, eurPrice);
-          }
         }
         totalSynced++;
       }
