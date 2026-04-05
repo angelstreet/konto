@@ -50,7 +50,6 @@ export async function fetchBlockchainBalance(network: string, address: string): 
       }
       const node = bip32.fromBase58(address);
       let totalBalance = 0;
-      // Scan receiving (m/0/i) and change (m/1/i) addresses
       for (const chain of [0, 1]) {
         let emptyCount = 0;
         for (let i = 0; emptyCount < 5 && i < 50; i++) {
