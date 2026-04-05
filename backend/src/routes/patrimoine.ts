@@ -303,9 +303,11 @@ router.get('/api/dashboard/history', async (c) => {
 
   const fromDate = new Date(Date.now() - daysBack * 86400000).toISOString().split('T')[0];
 
+  const isNet = c.req.query('net') === '1';
   let result;
   if (category === 'all') {
-    result = await db.execute({ sql: "SELECT date, SUM(total_value) as value FROM patrimoine_snapshots WHERE user_id = ? AND date >= ? AND category != 'total' GROUP BY date ORDER BY date", args: [userId, fromDate] });
+    const excludeClause = isNet ? "AND category != 'total'" : "AND category NOT IN ('total', 'loan')";
+    result = await db.execute({ sql: `SELECT date, SUM(total_value) as value FROM patrimoine_snapshots WHERE user_id = ? AND date >= ? ${excludeClause} GROUP BY date ORDER BY date`, args: [userId, fromDate] });
   } else {
     result = await db.execute({ sql: 'SELECT date, total_value as value FROM patrimoine_snapshots WHERE user_id = ? AND date >= ? AND category = ? ORDER BY date', args: [userId, fromDate, category] });
   }
