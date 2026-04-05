@@ -2,6 +2,7 @@ import { API } from '../../config';
 import { useAuthFetch } from '../../useApi';
 import { useEffect, useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { ChevronDown } from 'lucide-react';
 
 type AccountRow = {
   id: number;
@@ -81,6 +82,7 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
   const [accounts, setAccounts] = useState<AccountRow[]>([]);
   const [investments, setInvestments] = useState<InvestmentRow[]>([]);
   const [txs, setTxs] = useState<TxRow[]>([]);
+  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)');
@@ -143,15 +145,20 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
   }, [accounts]);
 
   const grouped = useMemo(() => {
-    const byAcc = new Map<number, { account: AccountRow; positions: InvestmentRow[]; total: number; perf: number }>();
-    for (const a of accounts) byAcc.set(a.id, { account: a, positions: [], total: Math.max(0, Number(a.balance || 0)), perf: 0 });
+    const byAcc = new Map<number, { account: AccountRow; positions: InvestmentRow[]; total: number; perf: number; invTotal: number }>();
+    for (const a of accounts) byAcc.set(a.id, { account: a, positions: [], total: 0, perf: 0, invTotal: 0 });
 
     for (const inv of investments) {
       const row = byAcc.get(inv.bank_account_id);
       if (!row) continue;
       row.positions.push(inv);
-      row.total += Number(inv.valuation || 0);
+      row.invTotal += Number(inv.valuation || 0);
       row.perf += Number(inv.diff || 0);
+    }
+
+    // Use investment total when positions exist (avoids double-counting with account balance)
+    for (const row of byAcc.values()) {
+      row.total = row.positions.length > 0 ? row.invTotal : Math.max(0, Number(row.account.balance || 0));
     }
 
     return Array.from(byAcc.values()).sort((a, b) => b.total - a.total);
@@ -297,16 +304,26 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
 
               {tab === 'accounts' ? (
                 <div className="space-y-3">
-                  {grouped.map((g) => (
+                  {grouped.map((g) => {
+                    const isCollapsed = collapsed.has(g.account.id);
+                    const toggleCollapse = () => setCollapsed(prev => {
+                      const next = new Set(prev);
+                      if (next.has(g.account.id)) next.delete(g.account.id); else next.add(g.account.id);
+                      return next;
+                    });
+                    return (
                     <div key={g.account.id} className="bg-surface border border-border rounded-xl overflow-hidden">
-                      <div className="flex flex-wrap items-start justify-between gap-2 px-4 py-3 border-b border-border/50">
-                        <div className="font-medium pr-2">{g.account.custom_name || g.account.name}</div>
-                        <div className="text-right">
+                      <button onClick={toggleCollapse} className="w-full flex items-center justify-between gap-2 px-4 py-3 hover:bg-surface-hover transition-colors">
+                        <div className="flex items-center gap-2 min-w-0">
+                          <ChevronDown size={16} className={`text-muted flex-shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                          <div className="font-medium text-left truncate">{g.account.custom_name || g.account.name}</div>
+                        </div>
+                        <div className="text-right flex-shrink-0">
                           <div className="font-semibold">{fmtCurrency(g.total)}</div>
                           <div className={`text-xs ${g.perf >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{g.perf >= 0 ? '+' : ''}{fmtCurrency(g.perf)}</div>
                         </div>
-                      </div>
-                      {g.positions.length > 0 && (
+                      </button>
+                      {!isCollapsed && g.positions.length > 0 && (
                         <>
                           <div className="overflow-x-auto hidden md:block">
                             <table className="w-full min-w-[760px] text-sm">
@@ -358,7 +375,8 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
                         </>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="grid grid-cols-1 xl:grid-cols-[1fr_360px] gap-4">
