@@ -80,9 +80,9 @@ export async function fetchBlockchainBalance(network: string, address: string): 
   }
   // EVM chains — all use the same eth_getBalance RPC, different endpoints
   const evmChains: Record<string, { rpc: string; currency: string; decimals: number }> = {
-    ethereum:  { rpc: 'https://eth.llamarpc.com', currency: 'ETH', decimals: 18 },
+    ethereum:  { rpc: 'https://ethereum-rpc.publicnode.com', currency: 'ETH', decimals: 18 },
     base:      { rpc: 'https://mainnet.base.org', currency: 'ETH', decimals: 18 },
-    polygon:   { rpc: 'https://polygon-rpc.com', currency: 'POL', decimals: 18 },
+    polygon:   { rpc: 'https://polygon-bor-rpc.publicnode.com', currency: 'POL', decimals: 18 },
     bnb:       { rpc: 'https://bsc-dataseed.binance.org', currency: 'BNB', decimals: 18 },
     avalanche: { rpc: 'https://api.avax.network/ext/bc/C/rpc', currency: 'AVAX', decimals: 18 },
     arbitrum:  { rpc: 'https://arb1.arbitrum.io/rpc', currency: 'ETH', decimals: 18 },
