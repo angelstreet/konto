@@ -136,8 +136,8 @@ export async function fetchBlockchainBalance(network: string, address: string): 
     return { balance: (funded - spent) / 1e8, currency: 'BTC' };
   }
   // EVM chains — all use the same eth_getBalance RPC, different endpoints
-  const evmChains: Record<string, { rpc: string; currency: string; decimals: number }> = {
-    ethereum:  { rpc: 'https://eth.llamarpc.com', currency: 'ETH', decimals: 18 },
+  const evmChains: Record<string, { rpc: string; currency: string; decimals: number; fallbackRpc?: string }> = {
+    ethereum:  { rpc: 'https://eth.llamarpc.com', currency: 'ETH', decimals: 18, fallbackRpc: 'https://ethereum-rpc.publicnode.com' },
     base:      { rpc: 'https://mainnet.base.org', currency: 'ETH', decimals: 18 },
     polygon:   { rpc: 'https://polygon-rpc.com', currency: 'POL', decimals: 18 },
     bnb:       { rpc: 'https://bsc-dataseed.binance.org', currency: 'BNB', decimals: 18 },
@@ -148,20 +148,28 @@ export async function fetchBlockchainBalance(network: string, address: string): 
 
   const chain = evmChains[network];
   if (chain) {
-    const res = await fetch(chain.rpc, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getBalance', params: [address, 'latest'], id: 1 }),
-    });
-    const text = await res.text();
-    try {
-      const data = JSON.parse(text);
-      const balance = data.result ? parseInt(data.result, 16) / Math.pow(10, chain.decimals) : 0;
-      return { balance, currency: chain.currency };
-    } catch {
-      console.warn(`[crypto] ${network} RPC returned non-JSON (${res.status}): ${text.slice(0, 100)}`);
-      return { balance: 0, currency: chain.currency };
+    const rpcs = [chain.rpc, ...(chain.fallbackRpc ? [chain.fallbackRpc] : [])];
+    for (const rpc of rpcs) {
+      try {
+        const res = await fetch(rpc, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ jsonrpc: '2.0', method: 'eth_getBalance', params: [address, 'latest'], id: 1 }),
+        });
+        const text = await res.text();
+        const data = JSON.parse(text);
+        if (!data.result || data.error) {
+          console.warn(`[crypto] ${network} RPC error (${rpc}): ${JSON.stringify(data.error || 'no result')}`);
+          continue;
+        }
+        const balance = parseInt(data.result, 16) / Math.pow(10, chain.decimals);
+        return { balance, currency: chain.currency };
+      } catch (e: any) {
+        console.warn(`[crypto] ${network} RPC failed (${rpc}): ${e.message}`);
+        continue;
+      }
     }
+    return { balance: -1, currency: chain.currency };
   }
   throw new Error(`Unsupported network: ${network}`);
 }
@@ -386,8 +394,21 @@ router.post('/api/accounts/:id/sync-blockchain', async (c) => {
 
   try {
     const { balance, currency } = await fetchBlockchainBalance(account.blockchain_network, account.blockchain_address);
-    const effectiveBalance = balance >= 0 ? balance : Number(account.balance || 0);
     const effectiveCurrency = currency || account.currency;
+
+    // Determine effective balance: fetched balance, or fall back to existing investment quantity
+    let effectiveBalance = balance >= 0 ? balance : Number(account.balance || 0);
+    if (effectiveBalance <= 0) {
+      // Account balance was already zeroed by a previous sync — check existing investment
+      const isinCode = `CRYPTO:${effectiveCurrency}`;
+      const existingInv = await db.execute({
+        sql: 'SELECT quantity FROM investments WHERE bank_account_id = ? AND isin_code = ?',
+        args: [id, isinCode],
+      });
+      if (existingInv.rows.length > 0) {
+        effectiveBalance = Number((existingInv.rows[0] as any).quantity) || 0;
+      }
+    }
 
     // Fetch EUR price and create/update investment record
     const eurPrice = await fetchEurPrice(effectiveCurrency);
