@@ -220,7 +220,7 @@ export default function Import() {
     };
   }, [csvRows]);
 
-  const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+  const fmt = (n: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
 
   return (
     <div>

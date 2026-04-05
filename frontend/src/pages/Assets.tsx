@@ -42,7 +42,7 @@ interface Asset {
 
 interface BankAccount { id: number; name: string; custom_name: string | null; type: string; balance: number; }
 
-const fmt = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+const fmt = (n: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
 const fmtCompact = (n: number) => {
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace('.0', '')}M€`;
   if (Math.abs(n) >= 1_000) return `${Math.round(n / 1_000)}k€`;
@@ -555,8 +555,8 @@ export default function Assets() {
             ))}
           </div>
 
-          {/* Revenues (mainly for real estate) */}
-          {(form.type === 'real_estate' || form.revenues.length > 0) && (
+          {/* Revenues — hidden for long-term rentals where rent is captured via monthly_rent */}
+          {(form.type === 'real_estate' || form.revenues.length > 0) && form.property_usage !== 'rented_long' && (
             <div className="mt-4">
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs text-muted uppercase tracking-wide font-medium">{t('monthly_revenues')}</span>
@@ -772,8 +772,8 @@ export default function Assets() {
                       </div>
                     )}
 
-                    {/* Revenues */}
-                    {a.revenues.length > 0 && (
+                    {/* Revenues — show a.revenues entries, plus monthly_rent for rented_long */}
+                    {(a.revenues.length > 0 || (a.property_usage === 'rented_long' && a.monthly_rent)) && (
                       <div className="mt-3">
                         <p className="text-[10px] text-muted uppercase mb-1">{t('monthly_revenues')} ({f(a.monthly_revenues)}/mois)</p>
                         <div className="space-y-1">
@@ -783,6 +783,12 @@ export default function Assets() {
                               <span className="text-green-400">{f(r.amount)}{r.frequency === 'yearly' ? '/an' : '/mois'}</span>
                             </div>
                           ))}
+                          {a.property_usage === 'rented_long' && a.monthly_rent && (
+                            <div className="flex justify-between text-xs">
+                              <span className="text-muted">Loyer mensuel</span>
+                              <span className="text-green-400">{f(Number(a.monthly_rent))}/mois</span>
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}

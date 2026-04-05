@@ -27,7 +27,7 @@ interface AnalyticsData {
 
 function fmt(n: number) {
   const v = Number.isFinite(Number(n)) ? Number(n) : 0;
-  return v.toLocaleString('fr-FR', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+  return v.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
 }
 
 function monthLabel(period: string) {

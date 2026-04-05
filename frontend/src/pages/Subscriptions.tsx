@@ -45,7 +45,7 @@ const MOCK_DATA: SubscriptionsData = {
 type SortKey = 'amount' | 'category' | 'date';
 
 function formatAmount(n: number): string {
-  return n.toLocaleString('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
 function formatDateShort(dateStr: string): string {

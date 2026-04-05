@@ -19,7 +19,7 @@ function formatEur(v: number, compact = false): string {
   if (compact && Math.abs(v) >= 1_000) {
     return Math.round(v / 1_000) + 'k€';
   }
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 }
 
 function buildProjection(startBalance: number, monthlyContrib: number, annualRate: number, durationYears: number) {

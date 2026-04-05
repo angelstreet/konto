@@ -24,7 +24,7 @@ interface IncomeEntry {
 }
 
 function fmt(v: number, currency = 'EUR') {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(v);
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency, maximumFractionDigits: 0 }).format(v);
 }
 
 function fmtCHF(v: number) { return fmt(v, 'CHF'); }
@@ -114,7 +114,7 @@ export default function Income() {
   // Quick position rows (world + countries)
   const positionRows = useMemo(() => {
     if (!benchmarkDb || entriesForYear.length === 0) return null;
-    const compact = (n: number) => new Intl.NumberFormat('fr-FR', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
+    const compact = (n: number) => new Intl.NumberFormat('de-DE', { notation: 'compact', maximumFractionDigits: 1 }).format(n);
 
     // Aggregate by year overall and per country
     const byYearTotal: Record<number, { gross: number; net: number }> = {};
@@ -1139,7 +1139,7 @@ function PassiveIncomeSection({ year }: { year: number }) {
   }, [isPastYear]);
   const { data, loading } = useApi<PassiveIncomeData>(`${API}/analysis/passive-income?usage=personal&year=${year}`);
 
-  const fmt = (v: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+  const fmt = (v: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 
   const typeIcon = (type: string) => type === 'rental' ? '🏠' : type === 'dividend' ? '📈' : '💰';
 

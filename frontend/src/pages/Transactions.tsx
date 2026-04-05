@@ -263,7 +263,7 @@ export default function Transactions() {
     setPage(0);
   };
 
-  const fmtCur = (n: number) => new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+  const fmtCur = (n: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
   const fmtPct = (p: number) => `${(p * 100).toFixed(1)}%`;
 
   const formatDate = (d: string) => {
@@ -278,9 +278,9 @@ export default function Transactions() {
     let formatted: string;
     if (currency && cryptoCurrencies.has(currency)) {
       const decimals = currency === 'BTC' ? 8 : 6;
-      formatted = `${new Intl.NumberFormat('fr-FR', { minimumFractionDigits: 2, maximumFractionDigits: decimals }).format(n)} ${currency}`;
+      formatted = `${new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: decimals }).format(n)} ${currency}`;
     } else {
-      formatted = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+      formatted = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
     }
     if (hideAmounts) return <span className="amount-masked">{formatted}</span>;
     return formatted;

@@ -69,7 +69,7 @@ export default function BilanPro() {
   };
 
   const fmt = (n: number) =>
-    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+    new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
 
   const { data: proData, loading: proLoading } = useApi<ProBilanData>(`${API}/bilan-pro/${year}`);
 

@@ -8,15 +8,15 @@ import { useAuthFetch } from '../useApi';
 interface Rate { duration: number; best_rate: number; avg_rate: number; updated_at: string }
 
 function formatCurrency(v: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(v);
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(v);
 }
 
 function formatCurrency0(v: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 }
 
 function formatMobile(v: number) {
-  return new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 0 }).format(Math.round(v));
+  return new Intl.NumberFormat('de-DE', { maximumFractionDigits: 0 }).format(Math.round(v));
 }
 
 export default function CreditSimulator() {

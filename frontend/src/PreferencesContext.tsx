@@ -118,7 +118,7 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   const formatCurrency = useCallback((amount: number, fromCurrency?: string) => {
     const displayCur = prefs?.display_currency || 'EUR';
     const converted = convertToDisplay(amount, fromCurrency);
-    return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: displayCur }).format(converted);
+    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: displayCur }).format(converted);
   }, [prefs?.display_currency, convertToDisplay]);
 
   return (

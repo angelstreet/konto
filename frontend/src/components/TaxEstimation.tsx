@@ -15,7 +15,7 @@ interface TaxResult {
 }
 
 function fmt(v: number, currency = 'EUR') {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency, maximumFractionDigits: 0 }).format(v);
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency, maximumFractionDigits: 0 }).format(v);
 }
 function fmtCHF(v: number) { return fmt(v, 'CHF'); }
 

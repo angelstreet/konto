@@ -3,6 +3,12 @@
   "installCommand": "npm install",
   "buildCommand": "cd frontend && npm run build",
   "outputDirectory": "frontend/dist",
+  "crons": [
+    {
+      "path": "/api/cron/refresh-stale-connections",
+      "schedule": "0 6 * * *"
+    }
+  ],
   "rewrites": [
     { "source": "/konto/api/(.*)", "destination": "/api" },
     { "source": "/api/(.*)", "destination": "/api" },

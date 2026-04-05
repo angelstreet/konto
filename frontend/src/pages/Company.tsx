@@ -314,7 +314,7 @@ export default function CompanyPage() {
   };
 
   const formatBalance = (n: number) =>
-    new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' }).format(n);
+    new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
 
   const legalForms = ['SARL', 'SAS', 'SASU', 'EURL', 'SA', 'SCI', 'Auto-entrepreneur', 'EI', 'Autre'];
 
@@ -480,7 +480,7 @@ export default function CompanyPage() {
                       { label: 'Numéro TVA', value: info.tva_number, mono: true },
                       { label: 'Numéro RCS', value: info.rcs },
                       { label: 'Forme juridique', value: info.legal_form || sc.legal_form },
-                      { label: 'Capital social', value: info.capital_social ? `${new Intl.NumberFormat('fr-FR').format(info.capital_social)} €` : null, accent: true },
+                      { label: 'Capital social', value: info.capital_social ? `${new Intl.NumberFormat('de-DE').format(info.capital_social)} €` : null, accent: true },
                       { label: 'Date de création', value: info.date_creation || sc.date_creation },
                       { label: 'Adresse', value: info.address || sc.address, full: true },
                       { label: 'Code postal', value: info.postal_code || sc.code_postal },
@@ -512,13 +512,13 @@ export default function CompanyPage() {
                       <div>
                         <p className="text-[10px] text-muted uppercase tracking-wide">CA ({selectedCompanyInfo.finances.year})</p>
                         <p className="text-accent-400 font-semibold">
-                          {selectedCompanyInfo.finances.ca ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(selectedCompanyInfo.finances.ca) : '—'}
+                          {selectedCompanyInfo.finances.ca ? new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(selectedCompanyInfo.finances.ca) : '—'}
                         </p>
                       </div>
                       <div>
                         <p className="text-[10px] text-muted uppercase tracking-wide">Résultat net ({selectedCompanyInfo.finances.year})</p>
                         <p className={selectedCompanyInfo.finances.resultat_net >= 0 ? 'text-green-400 font-semibold' : 'text-red-400 font-semibold'}>
-                        {selectedCompanyInfo.finances.resultat_net != null ? new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(selectedCompanyInfo.finances.resultat_net) : '—'}
+                        {selectedCompanyInfo.finances.resultat_net != null ? new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(selectedCompanyInfo.finances.resultat_net) : '—'}
                       </p>
                     </div>
                     </div>
@@ -657,7 +657,7 @@ export default function CompanyPage() {
                             { label: 'TVA', value: viewingCache[c.id].tva_number, mono: true },
                             { label: 'RCS', value: viewingCache[c.id].rcs },
                             { label: t('legal_form'), value: viewingCache[c.id].legal_form || c.legal_form },
-                            { label: t('capital'), value: viewingCache[c.id].capital_social ? `${new Intl.NumberFormat('fr-FR').format(viewingCache[c.id].capital_social)} €` : null, accent: true },
+                            { label: t('capital'), value: viewingCache[c.id].capital_social ? `${new Intl.NumberFormat('de-DE').format(viewingCache[c.id].capital_social)} €` : null, accent: true },
                             { label: 'Date', value: viewingCache[c.id].date_creation },
                             { label: t('address'), value: viewingCache[c.id].address || c.address, full: true },
                             { label: 'Code NAF', value: viewingCache[c.id].naf_code || c.naf_code },
