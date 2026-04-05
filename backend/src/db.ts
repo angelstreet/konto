@@ -441,6 +441,13 @@ export async function migrateDatabase() {
     await db.execute("ALTER TABLE assets ADD COLUMN usage TEXT NOT NULL DEFAULT 'personal'");
   }
 
+  // Add balance_native column to bank_accounts (stores native crypto quantity, e.g. 0.73 BTC)
+  try {
+    await db.execute("SELECT balance_native FROM bank_accounts LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE bank_accounts ADD COLUMN balance_native REAL");
+  }
+
   // Add subtype column to bank_accounts (for investment sub-classification)
   try {
     await db.execute("SELECT subtype FROM bank_accounts LIMIT 1");

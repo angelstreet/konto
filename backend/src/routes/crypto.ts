@@ -333,8 +333,8 @@ router.post('/api/accounts/blockchain', async (c) => {
   }
 
   const result = await db.execute({
-    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, balance, type, usage, subtype, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, ?, 'blockchain', ?, ?, ?, 'investment', 'personal', 'crypto', ?, ?, ?, ?)`,
-    args: [userId, body.company_id || null, body.name || `${currency} Wallet`, body.custom_name || null, eurBalance, body.address, network, currency, new Date().toISOString()]
+    sql: `INSERT INTO bank_accounts (user_id, company_id, provider, name, custom_name, balance, balance_native, type, usage, subtype, blockchain_address, blockchain_network, currency, last_sync) VALUES (?, ?, 'blockchain', ?, ?, ?, ?, 'investment', 'personal', 'crypto', ?, ?, ?, ?)`,
+    args: [userId, body.company_id || null, body.name || `${currency} Wallet`, body.custom_name || null, eurBalance, balance, body.address, network, currency, new Date().toISOString()]
   });
   const account = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE id = ?', args: [Number(result.lastInsertRowid)] });
   return c.json(account.rows[0]);
@@ -348,23 +348,22 @@ router.post('/api/accounts/:id/sync-blockchain', async (c) => {
 
   try {
     const { balance, currency } = await fetchBlockchainBalance(account.blockchain_network, account.blockchain_address);
-    // balance -1 means the fetch was unavailable (e.g. WASM missing on Vercel) — keep old balance
-    if (balance >= 0) {
-      // Convert native balance to EUR
-      let eurBalance = balance;
-      if (balance > 0 && currency !== 'EUR') {
-        const prices = await fetchEurPrices([currency]);
-        if (prices[currency]) eurBalance = balance * prices[currency];
-      }
-      await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [eurBalance, currency, new Date().toISOString(), id] });
-    } else {
-      // RPC unavailable — still update EUR price for existing balance if possible
-      const prices = await fetchEurPrices([account.currency]);
-      if (prices[account.currency] && Number(account.balance) > 0) {
-        // Keep existing balance (already in EUR from last successful sync)
-      }
-      await db.execute({ sql: 'UPDATE bank_accounts SET last_sync = ? WHERE id = ?', args: [new Date().toISOString(), id] });
+
+    // Use fetched balance if available, otherwise fall back to stored native balance
+    const nativeBalance = balance >= 0 ? balance : Number(account.balance_native || account.balance || 0);
+    const cur = currency || account.currency;
+
+    // Convert to EUR
+    let eurBalance = nativeBalance;
+    if (nativeBalance > 0 && cur !== 'EUR') {
+      const prices = await fetchEurPrices([cur]);
+      if (prices[cur]) eurBalance = nativeBalance * prices[cur];
     }
+
+    await db.execute({
+      sql: 'UPDATE bank_accounts SET balance = ?, balance_native = ?, currency = ?, last_sync = ? WHERE id = ?',
+      args: [eurBalance, nativeBalance, cur, new Date().toISOString(), id],
+    });
 
     // Fetch and insert on-chain transactions
     let txCount = 0;
@@ -518,11 +517,11 @@ router.post('/api/coinbase/sync', async (c) => {
         const eurBalance = prices[currency] ? nativeBalance * prices[currency] : nativeBalance;
         const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
         if (existing.rows.length > 0) {
-          await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [eurBalance, currency, new Date().toISOString(), existing.rows[0].id as number] });
+          await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, balance_native = ?, currency = ?, last_sync = ? WHERE id = ?', args: [eurBalance, nativeBalance, currency, new Date().toISOString(), existing.rows[0].id as number] });
         } else if (nativeBalance !== 0) {
           await db.execute({
-            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
-            args: [userId, null, acc.id, acc.name || `${currency} Wallet`, eurBalance, currency, new Date().toISOString()]
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, balance_native, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, ?, 'investment', 'personal', 'crypto', ?, ?)`,
+            args: [userId, null, acc.id, acc.name || `${currency} Wallet`, eurBalance, nativeBalance, currency, new Date().toISOString()]
           });
         }
         totalSynced++;
@@ -670,13 +669,13 @@ router.post('/api/binance/sync', async (c) => {
 
         if (existing.rows.length > 0) {
           await db.execute({
-            sql: `UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?`,
-            args: [eurValue, asset, new Date().toISOString(), existing.rows[0].id]
+            sql: `UPDATE bank_accounts SET balance = ?, balance_native = ?, currency = ?, last_sync = ? WHERE id = ?`,
+            args: [eurValue, amount, asset, new Date().toISOString(), existing.rows[0].id]
           });
         } else {
           await db.execute({
-            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'binance', ?, ?, ?, ?, 'investment', 'personal', 'crypto', ?, ?)`,
-            args: [userId, null, accountId, `${asset} Wallet`, conn.account_name || 'Binance', eurValue, asset, new Date().toISOString()]
+            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, balance_native, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'binance', ?, ?, ?, ?, ?, 'investment', 'personal', 'crypto', ?, ?)`,
+            args: [userId, null, accountId, `${asset} Wallet`, conn.account_name || 'Binance', eurValue, amount, asset, new Date().toISOString()]
           });
         }
         totalSynced++;
