@@ -87,6 +87,7 @@ const EMPTY_FORM: LoanForm = {
 };
 
 function parseNum(value: string): number | undefined {
+  if (value === '' || value === null || value === undefined) return undefined;
   const v = Number(value);
   return Number.isFinite(v) ? v : undefined;
 }

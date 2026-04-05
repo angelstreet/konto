@@ -716,46 +716,46 @@ router.patch('/api/loans/:loanId', async (c) => {
     });
   }
 
-  const existingDetailsRes = await db.execute({
-    sql: 'SELECT * FROM loan_details WHERE user_id = ? AND bank_account_id = ? LIMIT 1',
-    args: [userId, loanId],
-  });
-  const existing: any = existingDetailsRes.rows[0] || {};
+  // Build loan_details partial update — only touch fields that were sent
+  const detailUpdates: string[] = [];
+  const detailArgs: any[] = [];
+  if (body.loan_type !== undefined) { detailUpdates.push('loan_type = ?'); detailArgs.push(d(body.loan_type) || 'amortizing'); }
+  if (body.principal_amount !== undefined) { detailUpdates.push('principal_amount = ?'); detailArgs.push(n(body.principal_amount)); }
+  if (body.start_date !== undefined) { detailUpdates.push('start_date = ?'); detailArgs.push(d(body.start_date)); }
+  if (body.end_date !== undefined) { detailUpdates.push('end_date = ?'); detailArgs.push(d(body.end_date)); }
+  if (body.duration_months !== undefined) { detailUpdates.push('duration_months = ?'); detailArgs.push(n(body.duration_months)); }
+  if (body.installments_paid !== undefined) { detailUpdates.push('installments_paid = ?'); detailArgs.push(n(body.installments_paid)); }
+  if (body.interest_rate !== undefined) { detailUpdates.push('interest_rate = ?'); detailArgs.push(n(body.interest_rate)); }
+  if (body.monthly_payment !== undefined) { detailUpdates.push('monthly_payment = ?'); detailArgs.push(n(body.monthly_payment)); }
+  if (body.insurance_monthly !== undefined) { detailUpdates.push('insurance_monthly = ?'); detailArgs.push(n(body.insurance_monthly) ?? 0); }
+  if (body.fees_total !== undefined) { detailUpdates.push('fees_total = ?'); detailArgs.push(n(body.fees_total) ?? 0); }
+  if (body.source !== undefined) { detailUpdates.push('source = ?'); detailArgs.push(d(body.source) || 'manual'); }
 
-  await db.execute({
-    sql: `INSERT INTO loan_details
-          (user_id, bank_account_id, loan_type, principal_amount, start_date, end_date, duration_months,
-           installments_paid, interest_rate, monthly_payment, insurance_monthly, fees_total, source, updated_at)
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-          ON CONFLICT(bank_account_id) DO UPDATE SET
-            loan_type = excluded.loan_type,
-            principal_amount = excluded.principal_amount,
-            start_date = excluded.start_date,
-            end_date = excluded.end_date,
-            duration_months = excluded.duration_months,
-            installments_paid = excluded.installments_paid,
-            interest_rate = excluded.interest_rate,
-            monthly_payment = excluded.monthly_payment,
-            insurance_monthly = excluded.insurance_monthly,
-            fees_total = excluded.fees_total,
-            source = excluded.source,
-            updated_at = datetime('now')`,
-    args: [
-      userId,
-      loanId,
-      body.loan_type !== undefined ? (d(body.loan_type) || 'amortizing') : (existing.loan_type || 'amortizing'),
-      body.principal_amount !== undefined ? n(body.principal_amount) : n(existing.principal_amount),
-      body.start_date !== undefined ? d(body.start_date) : d(existing.start_date),
-      body.end_date !== undefined ? d(body.end_date) : d(existing.end_date),
-      body.duration_months !== undefined ? n(body.duration_months) : n(existing.duration_months),
-      body.installments_paid !== undefined ? n(body.installments_paid) : n(existing.installments_paid),
-      body.interest_rate !== undefined ? n(body.interest_rate) : n(existing.interest_rate),
-      body.monthly_payment !== undefined ? n(body.monthly_payment) : n(existing.monthly_payment),
-      body.insurance_monthly !== undefined ? (n(body.insurance_monthly) ?? 0) : (n(existing.insurance_monthly) ?? 0),
-      body.fees_total !== undefined ? (n(body.fees_total) ?? 0) : (n(existing.fees_total) ?? 0),
-      body.source !== undefined ? (d(body.source) || 'manual') : (existing.source || 'manual'),
-    ],
-  });
+  if (detailUpdates.length > 0) {
+    // Try UPDATE first; if row doesn't exist, INSERT
+    detailUpdates.push("updated_at = datetime('now')");
+    detailArgs.push(loanId, userId);
+    const res = await db.execute({
+      sql: `UPDATE loan_details SET ${detailUpdates.join(', ')} WHERE bank_account_id = ? AND user_id = ?`,
+      args: detailArgs,
+    });
+    if (res.rowsAffected === 0) {
+      await db.execute({
+        sql: `INSERT INTO loan_details
+              (user_id, bank_account_id, loan_type, principal_amount, start_date, end_date, duration_months,
+               installments_paid, interest_rate, monthly_payment, insurance_monthly, fees_total, source, updated_at)
+              VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+        args: [
+          userId, loanId,
+          body.loan_type !== undefined ? (d(body.loan_type) || 'amortizing') : 'amortizing',
+          n(body.principal_amount), d(body.start_date), d(body.end_date),
+          n(body.duration_months), n(body.installments_paid), n(body.interest_rate),
+          n(body.monthly_payment), n(body.insurance_monthly) ?? 0, n(body.fees_total) ?? 0,
+          'manual',
+        ],
+      });
+    }
+  }
 
   return c.json({ ok: true });
 });
