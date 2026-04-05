@@ -17,6 +17,7 @@ interface DashboardAccount {
   name: string;
   balance: number;
   type: string;
+  subtype: string | null;
   currency: string;
 }
 
@@ -86,7 +87,11 @@ export default function Dashboard() {
   const accountsByType = data?.financial?.accountsByType || {};
   const checking = (accountsByType.checking || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
   const savings = (accountsByType.savings || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
-  const investments = (accountsByType.investment || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
+  const investmentAccounts = accountsByType.investment || [];
+  const cryptoAccounts = investmentAccounts.filter(a => a.subtype === 'crypto');
+  const stockAccounts = investmentAccounts.filter(a => a.subtype !== 'crypto');
+  const investments = stockAccounts.reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
+  const crypto = cryptoAccounts.reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
   const loans = (accountsByType.loan || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
   
   const immoAssets = data ? data.patrimoine.assets.filter(a => a.type === 'real_estate') : [];
@@ -113,6 +118,7 @@ export default function Dashboard() {
     if (checking > 0) distData.push({ key: 'checking', value: checking });
     if (savings > 0) distData.push({ key: 'savings', value: savings });
     if (investments > 0) distData.push({ key: 'investment', value: investments });
+    if (crypto > 0) distData.push({ key: 'crypto', value: crypto });
     for (const asset of data.patrimoine.assets) {
       const val = showNet ? asset.currentValue + asset.loanBalance : asset.currentValue;
       distData.push({ key: asset.type || 'other', value: val });

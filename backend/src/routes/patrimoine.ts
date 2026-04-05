@@ -1029,7 +1029,7 @@ router.get('/api/dashboard', async (c) => {
   for (const a of accounts) {
     const type = a.type || 'checking';
     if (!accountsByType[type]) accountsByType[type] = [];
-    accountsByType[type].push({ id: a.id, name: a.custom_name || a.name, balance: a.balance || 0, type, currency: a.currency || 'EUR' });
+    accountsByType[type].push({ id: a.id, name: a.custom_name || a.name, balance: a.balance || 0, type, subtype: a.subtype || null, currency: a.currency || 'EUR' });
   }
 
   const brutBalance = [...accountsByType.checking, ...accountsByType.savings, ...accountsByType.investment]
