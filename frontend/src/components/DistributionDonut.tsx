@@ -100,6 +100,7 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
                   dataKey="value"
                   nameKey="key"
                   stroke="none"
+                  isAnimationActive={false}
                 >
                   {positiveData.map((entry) => (
                     <Cell key={entry.key} fill={COLORS[entry.key] || '#6b7280'} />
@@ -150,6 +151,7 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
                 data={treemapData}
                 dataKey="size"
                 aspectRatio={4 / 3}
+                isAnimationActive={false}
                 content={<TreemapCell posSum={posSum} hideAmounts={hideAmounts} />}
               >
                 <Tooltip

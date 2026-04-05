@@ -15,6 +15,7 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
   const [data, setData] = useState<{ date: string; value: number }[]>([]);
   const [loading, setLoading] = useState(true);
   const hasAnimated = useRef(false);
+  const prevShowNet = useRef(showNet);
 
   // Auth — get Clerk token for API calls
   let getToken: (() => Promise<string | null>) | undefined;
@@ -34,7 +35,12 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
   }, [range]);
 
   useEffect(() => {
-    setLoading(true);
+    // Only show loading spinner on initial load or range change, not brut/net toggle
+    const isNetToggle = prevShowNet.current !== showNet;
+    prevShowNet.current = showNet;
+    if (!isNetToggle) setLoading(true);
+    // Skip animation on brut/net toggle
+    if (isNetToggle) hasAnimated.current = true;
     const params = new URLSearchParams({ range, category: 'all' });
     if (showNet) params.set('net', '1');
     (async () => {
