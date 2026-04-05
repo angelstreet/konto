@@ -1,13 +1,6 @@
 import { Hono } from 'hono';
 import db from '../db.js';
 import { getUserId } from '../shared.js';
-import { writeFileSync, unlinkSync } from 'fs';
-import { spawn } from 'child_process';
-import nodePath from 'path';
-import nodeOs from 'os';
-import { fileURLToPath } from 'url';
-
-const __dirnameFile = nodePath.dirname(fileURLToPath(import.meta.url));
 
 const router = new Hono();
 
@@ -783,6 +776,7 @@ router.delete('/api/loans/:loanId', async (c) => {
 });
 
 // Enrich loan from PDF - upload and parse amortization schedule
+// Parsing is inlined (no child process spawn) so it works on Vercel serverless
 router.post('/api/loans/:loanId/enrich', async (c) => {
   const userId = await getUserId(c);
   const loanId = Number(c.req.param('loanId'));
@@ -792,65 +786,164 @@ router.post('/api/loans/:loanId/enrich', async (c) => {
   const file = formData.get('file') as File;
   if (!file) return c.json({ error: 'file is required' }, 400);
 
-  // Save uploaded file
-  const tmpDir = nodeOs.tmpdir();
-  const tmpPath = nodePath.join(tmpDir, `loan-${Date.now()}.pdf`);
-  const buffer = await file.arrayBuffer();
-  writeFileSync(tmpPath, Buffer.from(buffer));
+  try {
+    const buffer = await file.arrayBuffer();
+    const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
-  // Run parser
-  // In dev __dirname = src/routes, in prod = dist/routes; scripts/ always at backend root
-  const parserPath = nodePath.join(__dirnameFile, '..', '..', 'scripts', 'parse-loan-pdf.cjs');
-  const result = await new Promise<any>((resolve) => {
-    const child = spawn('node', [parserPath, tmpPath], { cwd: nodePath.dirname(parserPath) });
-    let stdout = '', stderr = '';
-    child.stdout.on('data', (d: any) => stdout += d);
-    child.stderr.on('data', (d: any) => stderr += d);
-    child.on('close', async (code: any) => {
-      try { unlinkSync(tmpPath); } catch {}
-      
-      if (code !== 0 || !stdout.trim()) {
-        resolve({ error: 'Failed to parse PDF', detail: stderr });
-        return;
-      }
-      
+    const pdf = await getDocument({ data: new Uint8Array(buffer) }).promise;
+
+    async function getText(pageNum: number) {
       try {
-        const jsonLine = stdout.trim().split('\n').find((l: string) => l.trim().startsWith('{'));
-        if (!jsonLine) throw new Error('No JSON in output');
-        const data = JSON.parse(jsonLine);
-        
-        // Update loan details
-        const updates: string[] = [];
-        const args: any[] = [];
-        if (data.originalAmount) { updates.push('principal_amount = ?'); args.push(data.originalAmount); }
-        if (data.interestRate) { updates.push('interest_rate = ?'); args.push(data.interestRate); }
-        if (data.startDate) { updates.push('start_date = ?'); args.push(data.startDate); }
-        if (data.endDate) { updates.push('end_date = ?'); args.push(data.endDate); }
-        if (data.startDate && data.endDate) {
-          const months = Math.round((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30.4375));
-          updates.push('duration_months = ?'); args.push(months);
-        }
-        if (data.monthlyPayment) { updates.push('monthly_payment = ?'); args.push(data.monthlyPayment); }
-        if (data.insuranceMonthly) { updates.push('insurance_monthly = ?'); args.push(data.insuranceMonthly); }
-        if (data.installmentsPaid != null) { updates.push('installments_paid = ?'); args.push(data.installmentsPaid); }
-        
-        if (updates.length > 0) {
-          args.push(loanId, userId);
-          await db.execute({
-            sql: `UPDATE loan_details SET ${updates.join(', ')}, updated_at = datetime('now') WHERE bank_account_id = ? AND user_id = ?`,
-            args,
-          });
-        }
-        
-        resolve({ ok: true, data });
-      } catch (e) {
-        resolve({ error: 'Failed to parse JSON', detail: stdout });
-      }
-    });
-  });
+        const page = await pdf.getPage(pageNum);
+        const tc = await page.getTextContent();
+        return (tc.items as any[]).map((i: any) => i.str).join(' ');
+      } catch { return ''; }
+    }
 
-  if (result.error) return c.json({ error: result.error, detail: result.detail }, 500);
-  return c.json(result);
+    let allText = '';
+    let scheduleText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const pageText = await getText(i);
+      scheduleText += ' ' + pageText;
+      if (i <= 3) allText += ' ' + pageText;
+    }
+
+    // Extract credit number
+    const creditMatch = allText.match(/cr[é]dit\s*n[°]?\s*(\d+\s+\d+\s+\d+)/i)
+      || allText.match(/n[°]?\s*(\d{2,}\s+\d{2,}\s+\d+)/);
+    const creditNumber = creditMatch ? creditMatch[1].replace(/\s+/g, ' ').trim() : null;
+
+    // Extract bank name
+    const bankMatch = allText.match(/(CIC|Lyonnaise de Banque|Banque Populaire|Credit Agricole|Societe Generale|BNP|Paribas|LCL|Boursorama|Fortuneo)/i);
+    const bank = bankMatch ? bankMatch[1] : null;
+
+    // Extract original amount
+    let originalAmount: number | null = null;
+    const creditIdx = allText.indexOf('Crédit');
+    if (creditIdx >= 0) {
+      const after = allText.slice(creditIdx, creditIdx + 150);
+      const match = after.match(/(\d{6})/);
+      if (match) { const val = parseInt(match[1]); if (val > 100000) originalAmount = val; }
+    }
+    if (!originalAmount) {
+      const first = allText.slice(0, 3000);
+      const nums = first.match(/\b(\d{6})\b/g);
+      if (nums) {
+        const valid = nums.map(n => parseInt(n)).filter(n => n > 100000 && n < 1000000);
+        if (valid.length) originalAmount = valid[0];
+      }
+    }
+
+    // Extract current balance
+    const balanceMatch = allText.match(/Encours[^\d]*([\d\s]+,\d{2})\s+EUR/i);
+    let currentBalance: number | null = null;
+    if (balanceMatch) currentBalance = parseFloat(balanceMatch[1].replace(/\s/g, '').replace(',', '.'));
+
+    // Extract interest rate
+    const rateMatch = allText.match(/Taux\s+fixe\s+actuel[^\d]*([\d]+,?\d*)\s*%/i);
+    let interestRate: number | null = null;
+    if (rateMatch) interestRate = parseFloat(rateMatch[1].replace(',', '.'));
+
+    // Extract start date
+    const firstDateMatch = allText.match(/(\d{2})\/(\d{2})\/(\d{4})/);
+    let startDate: string | null = null;
+    if (firstDateMatch) startDate = `${firstDateMatch[3]}-${firstDateMatch[2]}-${firstDateMatch[1]}`;
+
+    // Extract monthly payment
+    let monthlyPayment: number | null = null;
+    let monthlyPaymentStr: string | null = null;
+    const allPaymentCandidates = scheduleText.match(/\b\d{3,4},\d{2}\b/g) || [];
+    if (allPaymentCandidates.length) {
+      const freq: Record<string, number> = {};
+      for (const v of allPaymentCandidates) {
+        const n = parseFloat(v.replace(',', '.'));
+        if (n > 200 && n < 5000) freq[v] = (freq[v] || 0) + 1;
+      }
+      const sorted = Object.entries(freq).sort((a, b) => b[1] - a[1]);
+      const best = sorted.find(([v]) => parseFloat(v.replace(',', '.')) > 300);
+      if (best) {
+        monthlyPayment = parseFloat(best[0].replace(',', '.'));
+        monthlyPaymentStr = best[0];
+      }
+    }
+
+    // Extract insurance
+    let insuranceMonthly: number | null = null;
+    if (monthlyPayment && monthlyPaymentStr) {
+      const escapedTotal = monthlyPaymentStr.replace(',', '\\,');
+      const insRe = new RegExp(`(\\d{1,3},\\d{2})\\s+${escapedTotal}`, 'g');
+      const insMatches = [...scheduleText.matchAll(insRe)];
+      if (insMatches.length > 0) {
+        const val = parseFloat(insMatches[0][1].replace(',', '.'));
+        if (val > 5 && val < 200) insuranceMonthly = val;
+      }
+    }
+    if (!insuranceMonthly) {
+      const smallDecimals = scheduleText.match(/\b(\d{1,3},\d{2})\b/g);
+      if (smallDecimals) {
+        const freq: Record<string, number> = {};
+        for (const v of smallDecimals) { freq[v] = (freq[v] || 0) + 1; }
+        const candidates = Object.entries(freq)
+          .filter(([v, ct]) => ct >= 3 && parseFloat(v.replace(',', '.')) > 5 && parseFloat(v.replace(',', '.')) < 200)
+          .sort((a, b) => b[1] - a[1]);
+        if (candidates.length) insuranceMonthly = parseFloat(candidates[0][0].replace(',', '.'));
+      }
+    }
+
+    // Count installments paid
+    let installmentsPaid: number | null = null;
+    const schedParts = scheduleText.split(/[EÉ]ch[eé]ances?\s+[àa]\s+venir/i);
+    const pastSection = schedParts.length > 1 ? schedParts[0] : null;
+    if (pastSection) {
+      const paidRows = pastSection.match(/\d{2}\/\d{2}\/\d{4}\s+[EÉ]ch[eé]ance\b(?!\s+accessoire)(?!\s+singulier)/gi);
+      installmentsPaid = paidRows ? paidRows.length : 0;
+    } else {
+      installmentsPaid = 0;
+    }
+
+    // Extract end date
+    const futureSection = schedParts[1] || scheduleText;
+    const futureDates = futureSection.match(/\d{2}\/\d{2}\/\d{4}/g);
+    let endDate: string | null = null;
+    if (futureDates && futureDates.length > 0) {
+      const startYear = startDate ? parseInt(startDate.slice(0, 4)) : 2020;
+      const maxYear = startYear + 30;
+      const valid = futureDates
+        .map(d => { const m = d.match(/(\d{2})\/(\d{2})\/(\d{4})/); return m ? { iso: `${m[3]}-${m[2]}-${m[1]}`, year: parseInt(m[3]) } : null; })
+        .filter((d): d is { iso: string; year: number } => d != null && d.year >= startYear && d.year <= maxYear);
+      if (valid.length) endDate = valid[valid.length - 1].iso;
+    }
+
+    const data = { creditNumber, bank, originalAmount, currentBalance, interestRate, startDate, endDate, monthlyPayment, insuranceMonthly, installmentsPaid };
+
+    // Update loan details
+    const updates: string[] = [];
+    const args: any[] = [];
+    if (data.originalAmount) { updates.push('principal_amount = ?'); args.push(data.originalAmount); }
+    if (data.interestRate) { updates.push('interest_rate = ?'); args.push(data.interestRate); }
+    if (data.startDate) { updates.push('start_date = ?'); args.push(data.startDate); }
+    if (data.endDate) { updates.push('end_date = ?'); args.push(data.endDate); }
+    if (data.startDate && data.endDate) {
+      const months = Math.round((new Date(data.endDate).getTime() - new Date(data.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30.4375));
+      updates.push('duration_months = ?'); args.push(months);
+    }
+    if (data.monthlyPayment) { updates.push('monthly_payment = ?'); args.push(data.monthlyPayment); }
+    if (data.insuranceMonthly) { updates.push('insurance_monthly = ?'); args.push(data.insuranceMonthly); }
+    if (data.installmentsPaid != null) { updates.push('installments_paid = ?'); args.push(data.installmentsPaid); }
+
+    if (updates.length > 0) {
+      args.push(loanId, userId);
+      await db.execute({
+        sql: `UPDATE loan_details SET ${updates.join(', ')}, updated_at = datetime('now') WHERE bank_account_id = ? AND user_id = ?`,
+        args,
+      });
+    }
+
+    return c.json({ ok: true, data });
+  } catch (e: any) {
+    console.error('[loan-enrich] PDF parse error:', e);
+    return c.json({ error: 'Failed to parse PDF', detail: e.message }, 500);
+  }
 });
 
 export default router;

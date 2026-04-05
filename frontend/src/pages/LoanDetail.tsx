@@ -89,10 +89,15 @@ export default function LoanDetail() {
 
   const { data, loading, refetch } = useApi<LoanDetailResponse>(`${API}/loans/${loanId}`);
 
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccess, setUploadSuccess] = useState(false);
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
+    setUploadError(null);
+    setUploadSuccess(false);
     try {
       const formData = new FormData();
       formData.append('file', file);
@@ -102,12 +107,19 @@ export default function LoanDetail() {
         body: formData,
       });
       if (res.ok) {
+        setUploadSuccess(true);
         refetch();
+        setTimeout(() => setUploadSuccess(false), 4000);
+      } else {
+        const body = await res.json().catch(() => null);
+        setUploadError(body?.error || `Erreur ${res.status}`);
       }
     } catch (err) {
       console.error(err);
+      setUploadError('Erreur réseau');
     } finally {
       setUploading(false);
+      if (e.target) e.target.value = '';
     }
   };
 
@@ -139,6 +151,8 @@ export default function LoanDetail() {
           </button>
         </div>
       </div>
+      {uploadError && <div className="text-sm text-red-500 mb-2">{uploadError}</div>}
+      {uploadSuccess && <div className="text-sm text-green-500 mb-2">PDF importé avec succès</div>}
 
       <div className="text-sm font-semibold mb-2">{t('loan_tabs_summary') || 'Synthèse'}</div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
