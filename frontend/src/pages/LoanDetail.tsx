@@ -3,10 +3,11 @@ import { useState, useRef } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip } from 'recharts';
-import { ArrowLeft, GraduationCap, Upload, ChevronDown } from 'lucide-react';
-import { useApi } from '../useApi';
+import { ArrowLeft, GraduationCap, Upload, ChevronDown, Loader2 } from 'lucide-react';
+import { useApi, useAuthFetch } from '../useApi';
 import { usePreferences } from '../PreferencesContext';
 import { useAmountVisibility } from '../AmountVisibilityContext';
+import AlertDialog from '../components/AlertDialog';
 
 type LoanDetailResponse = {
   loan: {
@@ -86,37 +87,32 @@ export default function LoanDetail() {
   const [expandedAssetId, setExpandedAssetId] = useState<number | null>(null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef<HTMLInputElement>(null);
+  const authFetch = useAuthFetch();
+  const [alertDialog, setAlertDialog] = useState<{open: boolean; title: string; message: string; variant: 'success' | 'error' | 'info'}>({open: false, title: '', message: '', variant: 'info'});
 
   const { data, loading, refetch } = useApi<LoanDetailResponse>(`${API}/loans/${loanId}`);
-
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const [uploadSuccess, setUploadSuccess] = useState(false);
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploading(true);
-    setUploadError(null);
-    setUploadSuccess(false);
     try {
       const formData = new FormData();
       formData.append('file', file);
-      const res = await fetch(`${API}/loans/${loanId}/enrich`, {
+      const res = await authFetch(`${API}/loans/${loanId}/enrich`, {
         method: 'POST',
-        headers: { 'Authorization': `Bearer ${localStorage.getItem('token')}` },
         body: formData,
       });
       if (res.ok) {
-        setUploadSuccess(true);
+        setAlertDialog({ open: true, title: t('success') || 'Succès', message: t('loan_pdf_success') || 'PDF importé avec succès', variant: 'success' });
         refetch();
-        setTimeout(() => setUploadSuccess(false), 4000);
       } else {
         const body = await res.json().catch(() => null);
-        setUploadError(body?.error || `Erreur ${res.status}`);
+        setAlertDialog({ open: true, title: t('error') || 'Erreur', message: body?.error || `Erreur ${res.status}`, variant: 'error' });
       }
     } catch (err) {
       console.error(err);
-      setUploadError('Erreur réseau');
+      setAlertDialog({ open: true, title: t('error') || 'Erreur', message: t('network_error') || 'Erreur réseau', variant: 'error' });
     } finally {
       setUploading(false);
       if (e.target) e.target.value = '';
@@ -141,18 +137,16 @@ export default function LoanDetail() {
         </div>
         <div>
           <input type="file" ref={fileRef} onChange={handleFileUpload} accept=".pdf" className="hidden" />
-          <button 
-            onClick={() => fileRef.current?.click()} 
+          <button
+            onClick={() => fileRef.current?.click()}
             disabled={uploading}
-            className="px-3 py-1.5 text-sm bg-surface border border-border rounded-lg hover:bg-surface-2 flex items-center gap-2"
+            className="px-3 py-1.5 text-sm bg-surface border border-border rounded-lg hover:bg-surface-2 flex items-center gap-2 disabled:opacity-60"
           >
-            <Upload size={14} />
-            {uploading ? '...' : 'Import PDF'}
+            {uploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+            {uploading ? t('uploading') || 'Import...' : 'Import PDF'}
           </button>
         </div>
       </div>
-      {uploadError && <div className="text-sm text-red-500 mb-2">{uploadError}</div>}
-      {uploadSuccess && <div className="text-sm text-green-500 mb-2">PDF importé avec succès</div>}
 
       <div className="text-sm font-semibold mb-2">{t('loan_tabs_summary') || 'Synthèse'}</div>
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
@@ -380,6 +374,13 @@ export default function LoanDetail() {
           </div>
         </>
       )}
+      <AlertDialog
+        open={alertDialog.open}
+        title={alertDialog.title}
+        message={alertDialog.message}
+        variant={alertDialog.variant}
+        onClose={() => setAlertDialog(prev => ({ ...prev, open: false }))}
+      />
     </div>
   );
 }
