@@ -18,11 +18,15 @@ type LoanRow = {
   name: string;
   provider: string | null;
   remaining: number;
+  principal_amount: number | null;
   monthly_payment: number | null;
   interest_rate: number | null;
   repaid_pct: number | null;
   start_date: string | null;
   end_date: string | null;
+  duration_months: number | null;
+  installments_paid: number | null;
+  insurance_monthly: number;
   monthly_breakdown: {
     capital: number | null;
     interest: number | null;
@@ -151,15 +155,15 @@ export default function LoansDashboard() {
       name: loan.name,
       provider_name: loan.provider || '',
       remaining: String(Math.round(loan.remaining * 100) / 100),
-      principal_amount: '',
+      principal_amount: loan.principal_amount != null ? String(loan.principal_amount) : '',
       monthly_payment: loan.monthly_payment != null ? String(loan.monthly_payment) : '',
       interest_rate: loan.interest_rate != null ? String(loan.interest_rate) : '',
-      insurance_monthly: String(loan.monthly_breakdown.insurance || ''),
+      insurance_monthly: String(loan.insurance_monthly || loan.monthly_breakdown.insurance || ''),
       fees_total: '',
       start_date: loan.start_date || '',
       end_date: loan.end_date || '',
-      duration_months: '',
-      installments_paid: '',
+      duration_months: loan.duration_months != null ? String(loan.duration_months) : '',
+      installments_paid: loan.installments_paid != null ? String(loan.installments_paid) : '',
       usage: loan.usage || 'personal',
     });
     setShowModal(true);
