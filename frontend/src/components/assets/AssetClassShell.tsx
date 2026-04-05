@@ -53,7 +53,7 @@ const RANGES: { key: RangeKey; days: number | null }[] = [
 ];
 
 function fmtCurrency(v: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v || 0);
+  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v || 0);
 }
 
 function shortDate(d: string) {
@@ -233,13 +233,15 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
         )}
       </div>
 
-      <div className="bg-surface rounded-xl border border-border p-3 sm:p-4 text-center">
-        <p className="text-xs text-muted tracking-wider mb-1">Valeur totale</p>
-        <p className="text-2xl sm:text-3xl font-bold text-accent-400">{fmtCurrency(totalValue)}</p>
-      </div>
-
       {loading && <div className="text-sm text-muted py-8 text-center">Loading…</div>}
       {error && <div className="text-sm text-red-400 py-3">{error}</div>}
+
+      {!loading && !error && hasData && (
+        <div className="bg-surface rounded-xl border border-border p-3 sm:p-4 text-center">
+          <p className="text-xs text-muted tracking-wider mb-1">Valeur totale</p>
+          <p className="text-2xl sm:text-3xl font-bold text-accent-400">{fmtCurrency(totalValue)}</p>
+        </div>
+      )}
 
       {!loading && !error && (
         <>
@@ -322,7 +324,7 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
                                 {g.positions.map((p) => (
                                   <tr key={p.id} className="border-b border-border/30">
                                     <td className="px-4 py-2">{p.label}</td>
-                                    <td className="px-4 py-2 text-right">{(p.quantity || 0).toLocaleString('fr-FR', { maximumFractionDigits: 6 })}</td>
+                                    <td className="px-4 py-2 text-right">{(p.quantity || 0).toLocaleString('de-DE', { maximumFractionDigits: 6 })}</td>
                                     <td className="px-4 py-2 text-right">{fmtCurrency(Number(p.unit_price || 0))}</td>
                                     <td className="px-4 py-2 text-right">{fmtCurrency(Number(p.unit_value || 0))}</td>
                                     <td className="px-4 py-2 text-right">{fmtCurrency(Number(p.valuation || 0))}</td>
@@ -344,7 +346,7 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
                                 </div>
                                 <div className="grid grid-cols-2 gap-x-2 gap-y-1 mt-2 text-xs">
                                   <div className="text-muted">Qté</div>
-                                  <div className="text-right">{(p.quantity || 0).toLocaleString('fr-FR', { maximumFractionDigits: 6 })}</div>
+                                  <div className="text-right">{(p.quantity || 0).toLocaleString('de-DE', { maximumFractionDigits: 6 })}</div>
                                   <div className="text-muted">Valeur</div>
                                   <div className="text-right">{fmtCurrency(Number(p.valuation || 0))}</div>
                                   <div className="text-muted">PRU / Actuel</div>
