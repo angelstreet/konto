@@ -788,6 +788,24 @@ router.post('/api/loans/:loanId/enrich', async (c) => {
 
   try {
     const buffer = await file.arrayBuffer();
+
+    // pdfjs-dist v5 uses DOMMatrix internally — polyfill for Node.js/serverless
+    if (typeof globalThis.DOMMatrix === 'undefined') {
+      globalThis.DOMMatrix = class DOMMatrix {
+        a=1; b=0; c=0; d=1; e=0; f=0;
+        constructor(init?: any) {
+          if (Array.isArray(init) && init.length >= 6) {
+            [this.a, this.b, this.c, this.d, this.e, this.f] = init;
+          }
+        }
+        isIdentity = true;
+        multiplySelf() { return this; }
+        translateSelf() { return this; }
+        scaleSelf() { return this; }
+        toFloat64Array() { return new Float64Array([this.a, this.b, this.c, this.d, this.e, this.f]); }
+      } as any;
+    }
+
     const { getDocument } = await import('pdfjs-dist/legacy/build/pdf.mjs');
 
     const pdf = await getDocument({ data: new Uint8Array(buffer) }).promise;
