@@ -227,7 +227,7 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
           const bal = Math.max(0, Number(a.balance || 0));
           const cur = a.currency || 'EUR';
           const eurPrice = cryptoPrices[cur];
-          g.total = eurPrice ? bal * eurPrice : bal;
+          g.total = eurPrice ? bal * eurPrice : (cur === 'EUR' ? bal : 0);
         }
       }
     }

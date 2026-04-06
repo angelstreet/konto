@@ -824,6 +824,13 @@ export async function migrateDatabase() {
       await db.execute(`ALTER TABLE fiscal_data ADD COLUMN ${col}`);
     }
   }
+
+  // Generic key-value cache table (survives Vercel cold starts)
+  await db.execute(`CREATE TABLE IF NOT EXISTS kv_cache (
+    key TEXT PRIMARY KEY,
+    data TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+  )`);
 }
 
 // Find or create user by Clerk ID. On first login, migrates existing user_id=1 data.
