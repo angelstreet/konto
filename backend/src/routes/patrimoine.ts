@@ -1040,12 +1040,40 @@ router.get('/api/properties/roi', async (c) => {
     args: [userId],
   });
 
-  for (const asset of assetsRes.rows as any[]) {
+  // Fetch manual costs & revenues for all long-term assets
+  const longTermAssets = assetsRes.rows as any[];
+  const assetIds = longTermAssets.map((a: any) => a.id);
+  let manualCostsByAsset: Record<number, { label: string; amount: number; frequency: string }[]> = {};
+  let manualRevsByAsset: Record<number, { label: string; amount: number; frequency: string }[]> = {};
+  if (assetIds.length > 0) {
+    const placeholders = assetIds.map(() => '?').join(',');
+    const costsRes = await db.execute({ sql: `SELECT asset_id, label, amount, frequency FROM asset_costs WHERE asset_id IN (${placeholders})`, args: assetIds });
+    for (const r of costsRes.rows as any[]) {
+      (manualCostsByAsset[r.asset_id] ||= []).push(r);
+    }
+    const revsRes = await db.execute({ sql: `SELECT asset_id, label, amount, frequency FROM asset_revenues WHERE asset_id IN (${placeholders})`, args: assetIds });
+    for (const r of revsRes.rows as any[]) {
+      (manualRevsByAsset[r.asset_id] ||= []).push(r);
+    }
+  }
+
+  const toMonthly = (amount: number, freq: string) => freq === 'yearly' ? amount / 12 : freq === 'one_time' ? 0 : amount;
+
+  for (const asset of longTermAssets) {
     const rent = asset.monthly_rent || 0;
-    if (rent <= 0) continue;
-    const revenue = rent * monthsParam;
+    const manualRevs = manualRevsByAsset[asset.id] || [];
+    const extraRevMonthly = manualRevs.reduce((s: number, r: any) => s + toMonthly(r.amount, r.frequency), 0);
+    const totalMonthlyRev = rent + extraRevMonthly;
+    if (totalMonthlyRev <= 0) continue;
+
+    const revenue = totalMonthlyRev * monthsParam;
     const loanMonthly = (asset.loan_monthly || 0) + (asset.loan_insurance || 0);
-    const loanCosts = loanMonthly * monthsParam;
+
+    // Manual charges → monthly total
+    const manualCosts = manualCostsByAsset[asset.id] || [];
+    const chargesMonthly = manualCosts.reduce((s: number, c: any) => s + toMonthly(c.amount, c.frequency), 0);
+    const totalMonthlyCost = loanMonthly + chargesMonthly;
+    const totalCostsAsset = totalMonthlyCost * monthsParam;
 
     // Build monthly revenue/costs
     const revenueByMonth: Record<string, number> = {};
@@ -1053,27 +1081,38 @@ router.get('/api/properties/roi', async (c) => {
     for (let i = 0; i < monthsParam; i++) {
       const d = new Date(fromDate.getFullYear(), fromDate.getMonth() + i, 1);
       const m = d.toISOString().substring(0, 7);
-      revenueByMonth[m] = rent;
-      if (loanMonthly > 0) costsByMonth[m] = loanMonthly;
+      revenueByMonth[m] = totalMonthlyRev;
+      costsByMonth[m] = totalMonthlyCost;
     }
 
-    const net = revenue - loanCosts;
+    // Build costs breakdown
+    const costsBreakdown: { category: string; amount: number; items: { label: string; amount: number; date: string }[] }[] = [];
+    if (loanMonthly > 0) {
+      costsBreakdown.push({ category: 'Prêt immobilier', amount: Math.round(loanMonthly * monthsParam * 100) / 100, items: [{ label: `Mensualité (${Math.round(loanMonthly)}€/m)`, amount: Math.round(loanMonthly * monthsParam * 100) / 100, date: fromStr }] });
+    }
+    for (const c of manualCosts) {
+      const monthlyAmt = toMonthly(c.amount, c.frequency);
+      const periodAmt = monthlyAmt * monthsParam;
+      costsBreakdown.push({ category: c.label, amount: Math.round(periodAmt * 100) / 100, items: [{ label: `${c.label} (${Math.round(monthlyAmt)}€/m)`, amount: Math.round(periodAmt * 100) / 100, date: fromStr }] });
+    }
+
+    const net = revenue - totalCostsAsset;
     properties.push({
-      id: -asset.id, // negative to avoid collision with Smoobu IDs
+      id: -asset.id,
       name: `${asset.name}${asset.tenant_name ? ` (${asset.tenant_name})` : ''}`,
       revenue: Math.round(revenue * 100) / 100,
-      costs: Math.round(loanCosts * 100) / 100,
+      costs: Math.round(totalCostsAsset * 100) / 100,
       net: Math.round(net * 100) / 100,
-      monthlyRevenue: rent,
-      monthlyCosts: Math.round(loanMonthly * 100) / 100,
-      monthlyNet: Math.round((rent - loanMonthly) * 100) / 100,
-      occupancyRate: 100, // long-term = always occupied
+      monthlyRevenue: Math.round(totalMonthlyRev * 100) / 100,
+      monthlyCosts: Math.round(totalMonthlyCost * 100) / 100,
+      monthlyNet: Math.round((totalMonthlyRev - totalMonthlyCost) * 100) / 100,
+      occupancyRate: 100,
       nights: monthsParam * 30,
       bookings: monthsParam,
       revenueByMonth,
       costsByMonth,
       matchedCosts: [],
-      costsBreakdown: loanCosts > 0 ? [{ category: 'Prêt immobilier', amount: Math.round(loanCosts * 100) / 100, items: [{ label: `Mensualité prêt (${Math.round(loanMonthly)}€/m)`, amount: Math.round(loanCosts * 100) / 100, date: fromStr }] }] : [],
+      costsBreakdown,
     });
   }
 
