@@ -475,7 +475,20 @@ router.get('/api/report/patrimoine', async (c) => {
     if (items.length) sections.push({ title: 'Immobilier', items, total: items.reduce((s, i) => s + i.value, 0) });
   }
   if (wantedCategories.includes('crypto')) {
-    const items = accounts.filter(a => a.provider === 'blockchain' || a.provider === 'coinbase' || a.provider === 'binance').map(a => ({ name: a.custom_name || a.name, value: a.balance || 0 }));
+    const eurPricesCrypto = await getCryptoEurPrices();
+    const FIAT = new Set(['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'JPY', 'XOF']);
+    const items = accounts
+      .filter(a => a.provider === 'blockchain' || a.provider === 'coinbase' || a.provider === 'binance')
+      .map(a => {
+        const cur = a.currency || 'EUR';
+        let value: number;
+        if (a.balance_native != null && a.balance_native > 0) value = a.balance_native;
+        else if (FIAT.has(cur)) value = a.balance || 0;
+        else if (eurPricesCrypto[cur]) value = (a.balance || 0) * eurPricesCrypto[cur];
+        else value = 0;
+        return { name: a.custom_name || a.name, value };
+      })
+      .filter(i => i.value > 0.01);
     if (items.length) sections.push({ title: 'Crypto', items, total: items.reduce((s, i) => s + i.value, 0) });
   }
   if (wantedCategories.includes('stocks')) {
@@ -1004,7 +1017,49 @@ router.get('/api/properties/roi', async (c) => {
   });
 });
 
+// ========== VISUAL REPORT PDF ==========
 
+router.post('/api/export/visual-report', async (c) => {
+  const userId = await getUserId(c);
+  const body = await c.req.json<{ pdf: string }>();
+  if (!body.pdf) return c.json({ error: 'pdf is required' }, 400);
+
+  const pdfBuffer = Buffer.from(body.pdf, 'base64');
+
+  // Delete old reports for this user, keep only the new one
+  await db.execute({ sql: 'DELETE FROM visual_reports WHERE user_id = ?', args: [userId] });
+  await db.execute({
+    sql: 'INSERT INTO visual_reports (user_id, pdf_data) VALUES (?, ?)',
+    args: [userId, pdfBuffer],
+  });
+
+  return c.json({ ok: true });
+});
+
+router.get('/api/export/visual-report', async (c) => {
+  const userId = await getUserId(c);
+  const result = await db.execute({
+    sql: 'SELECT pdf_data, created_at FROM visual_reports WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    args: [userId],
+  });
+  if (result.rows.length === 0) return c.json({ error: 'No report found' }, 404);
+
+  const row = result.rows[0] as any;
+  const pdfData = row.pdf_data;
+
+  c.header('Content-Type', 'application/pdf');
+  c.header('Content-Disposition', `inline; filename="konto-rapport-${row.created_at?.split(' ')[0] || 'latest'}.pdf"`);
+  return c.body(pdfData);
+});
+
+router.get('/api/export/visual-report/check', async (c) => {
+  const userId = await getUserId(c);
+  const result = await db.execute({
+    sql: 'SELECT created_at FROM visual_reports WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+    args: [userId],
+  });
+  return c.json({ exists: result.rows.length > 0, created_at: result.rows[0]?.created_at || null });
+});
 
 export default router;
 
