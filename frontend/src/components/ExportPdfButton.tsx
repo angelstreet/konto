@@ -13,7 +13,7 @@ function showOverlay(p: CaptureProgress) {
   if (!el) {
     el = document.createElement('div');
     el.id = 'pdf-export-overlay';
-    el.className = 'fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center';
+    el.className = 'fixed inset-0 z-[9999] bg-black/95 flex flex-col items-center justify-center';
     document.body.appendChild(el);
   }
   el.innerHTML = `
