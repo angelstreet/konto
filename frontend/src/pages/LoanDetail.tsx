@@ -149,7 +149,7 @@ export default function LoanDetail() {
       </div>
 
       <div className="text-sm font-semibold mb-2">{t('loan_tabs_summary') || 'Synthèse'}</div>
-      <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-3">
         <div className="bg-surface rounded-xl border border-border p-4">
           <div className="text-xs text-muted uppercase">{t('loan_remaining_principal') || 'Restant dû'}</div>
           <div className="text-3xl mt-2 text-accent-400 font-semibold">{fc(data.loan.remaining)}</div>
@@ -160,7 +160,11 @@ export default function LoanDetail() {
         </div>
         <div className="bg-surface rounded-xl border border-border p-4">
           <div className="text-xs text-muted uppercase">Taux</div>
-          <div className="text-3xl mt-2">{data.loan.interest_rate}%</div>
+          <div className="text-3xl mt-2">{data.loan.interest_rate != null ? `${data.loan.interest_rate}%` : '-'}</div>
+        </div>
+        <div className="bg-surface rounded-xl border border-border p-4">
+          <div className="text-xs text-muted uppercase">{t('loan_insurance') || 'Assurance'}</div>
+          <div className="text-3xl mt-2">{data.monthly_breakdown.insurance ? fc(data.monthly_breakdown.insurance) : '-'}</div>
         </div>
       </div>
 
@@ -199,7 +203,6 @@ export default function LoanDetail() {
             <div className="mt-3 space-y-1 text-sm">
               <div className="flex justify-between"><span className="text-muted">{t('loan_installments_paid') || 'Échéances payées'}</span><span>{data.loan.installments_paid ?? '-'}</span></div>
               <div className="flex justify-between"><span className="text-muted">{t('loan_installments_left') || 'Échéances restantes'}</span><span>{data.loan.installments_left ?? '-'}</span></div>
-              <div className="flex justify-between"><span className="text-muted">{t('loan_end_date') || 'Date de fin'}</span><span>{data.loan.end_date || '-'}</span></div>
             </div>
           </div>
 
