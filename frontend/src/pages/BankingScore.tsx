@@ -343,10 +343,10 @@ export default function BankingScore() {
   const privateGaps = useMemo(() => {
     if (!focusBank) return [] as string[];
     const gaps: string[] = [];
-    if (focusBank.riskRatio > 0.35) gaps.push('Debt service ratio is high for this bank relationship.');
-    if (focusBank.netFlow < 0) gaps.push('Net monthly flow is negative on this bank perimeter.');
-    if (focusBank.assets < focusBank.loans * 0.7) gaps.push('Asset coverage is weak compared to outstanding loans.');
-    if (gaps.length === 0) gaps.push('No major weaknesses detected on current data window.');
+    if (focusBank.riskRatio > 0.35) gaps.push('Le taux d\'endettement est élevé pour cette relation bancaire.');
+    if (focusBank.netFlow < 0) gaps.push('Le flux mensuel net est négatif sur ce périmètre bancaire.');
+    if (focusBank.assets < focusBank.loans * 0.7) gaps.push('La couverture des actifs est faible par rapport aux emprunts en cours.');
+    if (gaps.length === 0) gaps.push('Aucune faiblesse majeure détectée sur la période analysée.');
     return gaps;
   }, [focusBank]);
 
@@ -354,9 +354,9 @@ export default function BankingScore() {
     if (!focusBank) return [] as string[];
     const actions: string[] = [];
     const moveTarget = Math.max(10_000, Math.round(focusBank.loans * 0.2 / 1000) * 1000);
-    actions.push(`Move around ${fmtCompact(moveTarget)} in stable savings to ${focusBank.bank} before application.`);
-    actions.push('Concentrate salary inflow and recurring expenses on the target bank for 3-6 months.');
-    actions.push('Ask for phased drawdown: part now, part after flow stabilization, to improve approval odds.');
+    actions.push(`Transférer environ ${fmtCompact(moveTarget)} d'épargne stable vers ${focusBank.bank} avant la demande.`);
+    actions.push('Concentrer le salaire et les dépenses récurrentes sur la banque cible pendant 3 à 6 mois.');
+    actions.push('Demander un déblocage progressif : une partie maintenant, le reste après stabilisation des flux.');
     return actions;
   }, [focusBank]);
 
@@ -369,17 +369,17 @@ export default function BankingScore() {
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap flex items-center gap-2">
             <Landmark size={20} />
-            Banking Score
+            Score Bancaire
           </h1>
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
-          <label className="hidden md:block text-xs text-muted">Bank</label>
+          <label className="hidden md:block text-xs text-muted">Banque</label>
           <select
             value={selectedBank}
             onChange={(e) => setSelectedBank(e.target.value)}
             className="w-full md:w-auto bg-surface border border-border rounded-lg text-xs text-white px-2.5 py-1.5 min-h-[36px]"
           >
-            <option value="All">All banks</option>
+            <option value="All">Toutes les banques</option>
             {metrics.map((m) => (
               <option key={m.bank} value={m.bank}>{m.bank}</option>
             ))}
@@ -395,37 +395,37 @@ export default function BankingScore() {
           <div className="bg-surface border border-border rounded-xl p-4">
             <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="rounded-lg bg-background border border-border p-3">
-                <div className="text-xs text-muted">Global Score</div>
+                <div className="text-xs text-muted">Score global</div>
                 <div className="text-lg font-semibold text-accent-400">{global.score}/100</div>
               </div>
               <div className="rounded-lg bg-background border border-border p-3">
-                <div className="text-xs text-muted">Income (90d)</div>
+                <div className="text-xs text-muted">Revenus reçus (90j)</div>
                 <div className="text-lg font-semibold">{fmtCurrency(global.incomeIn)}</div>
                 <div className={`text-[11px] mt-1 ${global.incomeDeltaPct === null ? 'text-muted' : global.incomeDeltaPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {global.incomeDeltaPct === null ? 'No previous period' : `${global.incomeDeltaPct >= 0 ? '+' : ''}${Math.round(global.incomeDeltaPct)}% vs prev 90d`}
+                  {global.incomeDeltaPct === null ? 'Pas de période précédente' : `${global.incomeDeltaPct >= 0 ? '+' : ''}${Math.round(global.incomeDeltaPct)}% vs 90j préc.`}
                 </div>
               </div>
               <div className="rounded-lg bg-background border border-border p-3">
-                <div className="text-xs text-muted">Charges (90d)</div>
+                <div className="text-xs text-muted">Dépenses (90j)</div>
                 <div className="text-lg font-semibold">{fmtCurrency(global.chargesOut)}</div>
                 <div className={`text-[11px] mt-1 ${global.chargesDeltaPct === null ? 'text-muted' : global.chargesDeltaPct <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {global.chargesDeltaPct === null ? 'No previous period' : `${global.chargesDeltaPct >= 0 ? '+' : ''}${Math.round(global.chargesDeltaPct)}% vs prev 90d`}
+                  {global.chargesDeltaPct === null ? 'Pas de période précédente' : `${global.chargesDeltaPct >= 0 ? '+' : ''}${Math.round(global.chargesDeltaPct)}% vs 90j préc.`}
                 </div>
               </div>
               <div className="rounded-lg bg-background border border-border p-3">
-                <div className="text-xs text-muted">Capacity estimate</div>
+                <div className="text-xs text-muted">Capacité d'emprunt</div>
                 <div className="text-lg font-semibold text-emerald-400">{fmtCurrency(global.capacity)}</div>
               </div>
             </div>
             <div className="mt-3 text-xs text-muted">
-              Assets: {fmtCurrency(global.assets)} • Loans: {fmtCurrency(global.loans)} • Debt service / income (90d): {ratioPct(global.debtRatio)}
-              {global.debtService === 0 && global.loans > 0 ? ' • No loan payment detected in the last 90 days' : ''}
+              Actifs: {fmtCurrency(global.assets)} • Emprunts: {fmtCurrency(global.loans)} • Taux d'endettement (90j): {ratioPct(global.debtRatio)}
+              {global.debtService === 0 && global.loans > 0 ? ' • Aucune mensualité détectée sur les 90 derniers jours' : ''}
             </div>
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             <div className="bg-surface border border-border rounded-xl p-4">
-              <div className="text-sm font-medium mb-3">Loans Distribution per Bank</div>
+              <div className="text-sm font-medium mb-3">Répartition des emprunts par banque</div>
               <div className="h-56">
                 {pieData.length > 0 ? (
                   <ResponsiveContainer width="100%" height={220}>
@@ -452,7 +452,7 @@ export default function BankingScore() {
                     </PieChart>
                   </ResponsiveContainer>
                 ) : (
-                  <div className="h-[220px] flex items-center justify-center text-sm text-muted">No loan balance found in selected banks.</div>
+                  <div className="h-[220px] flex items-center justify-center text-sm text-muted">Aucun emprunt trouvé pour les banques sélectionnées.</div>
                 )}
               </div>
               {pieData.length > 0 && (
@@ -471,7 +471,7 @@ export default function BankingScore() {
             </div>
 
             <div className="bg-surface border border-border rounded-xl p-4">
-              <div className="text-sm font-medium mb-3">Income + Charges per Bank (stacked, 90d)</div>
+              <div className="text-sm font-medium mb-3">Revenus + Dépenses par banque (90j)</div>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={stackedData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
@@ -484,8 +484,8 @@ export default function BankingScore() {
                       contentStyle={{ backgroundColor: '#1f1f1f', border: '1px solid #3a3a3a', borderRadius: 8, color: '#e5e5e5' }}
                       itemStyle={{ color: '#e5e5e5' }}
                     />
-                    <Bar dataKey="incomeIn" name="Income" stackId="flow" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="chargesOut" name="Charges" stackId="flow" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="incomeIn" name="Revenus" stackId="flow" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="chargesOut" name="Dépenses" stackId="flow" fill="#ef4444" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -493,17 +493,17 @@ export default function BankingScore() {
           </div>
 
           <div className="bg-surface border border-border rounded-xl p-4 overflow-x-auto">
-            <div className="text-sm font-medium mb-3">Bank Data</div>
+            <div className="text-sm font-medium mb-3">Données par banque</div>
             <table className="w-full min-w-[760px] text-sm">
               <thead className="text-xs text-muted border-b border-border">
                 <tr>
-                  <th className="text-left py-2">Bank</th>
-                  <th className="text-right py-2">Assets</th>
-                  <th className="text-right py-2">Loans</th>
-                  <th className="text-right py-2">Income</th>
-                  <th className="text-right py-2">Charges</th>
-                  <th className="text-right py-2">Net flow</th>
-                  <th className="text-right py-2">Debt ratio</th>
+                  <th className="text-left py-2">Banque</th>
+                  <th className="text-right py-2">Actifs</th>
+                  <th className="text-right py-2">Emprunts</th>
+                  <th className="text-right py-2">Revenus</th>
+                  <th className="text-right py-2">Dépenses</th>
+                  <th className="text-right py-2">Flux net</th>
+                  <th className="text-right py-2">Endettement</th>
                   <th className="text-right py-2">Score</th>
                 </tr>
               </thead>
@@ -526,7 +526,7 @@ export default function BankingScore() {
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
             <div className="bg-surface border border-border rounded-xl p-4">
-              <div className="text-sm font-medium mb-3">Private Gaps</div>
+              <div className="text-sm font-medium mb-3">Points faibles</div>
               <div className="space-y-2">
                 {privateGaps.map((g, i) => (
                   <div key={i} className="text-sm text-muted">• {g}</div>
@@ -535,7 +535,7 @@ export default function BankingScore() {
             </div>
 
             <div className="bg-surface border border-border rounded-xl p-4">
-              <div className="text-sm font-medium mb-3">Win-Win Actions</div>
+              <div className="text-sm font-medium mb-3">Actions recommandées</div>
               <div className="space-y-2">
                 {advice.map((a, i) => (
                   <div key={i} className="text-sm text-muted">• {a}</div>
@@ -544,15 +544,15 @@ export default function BankingScore() {
             </div>
 
             <div className="bg-surface border border-border rounded-xl p-4">
-              <div className="text-sm font-medium mb-2">Negotiation Plan</div>
+              <div className="text-sm font-medium mb-2">Plan de négociation</div>
               {focusBank ? (
                 <>
-                  <div className="text-sm text-white mb-2">Target: <span className="text-accent-400">{focusBank.bank}</span></div>
-                  <div className="text-sm text-muted">Suggested ask: {fmtCurrency(focusBank.lowLoan)} - {fmtCurrency(focusBank.highLoan)}</div>
-                  <div className="text-xs text-muted mt-2 flex items-center gap-1.5"><TrendingUp size={13} /> Keep relationship long-term: transfer stable assets + recurring flows before asking.</div>
+                  <div className="text-sm text-white mb-2">Cible : <span className="text-accent-400">{focusBank.bank}</span></div>
+                  <div className="text-sm text-muted">Montant suggéré : {fmtCurrency(focusBank.lowLoan)} - {fmtCurrency(focusBank.highLoan)}</div>
+                  <div className="text-xs text-muted mt-2 flex items-center gap-1.5"><TrendingUp size={13} /> Consolidez la relation : transférez épargne stable + flux récurrents avant de demander.</div>
                 </>
               ) : (
-                <div className="text-sm text-muted">No bank data available yet.</div>
+                <div className="text-sm text-muted">Aucune donnée bancaire disponible.</div>
               )}
             </div>
           </div>
