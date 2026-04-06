@@ -1,3 +1,5 @@
+import { createHmac } from 'node:crypto';
+
 // Lazy-load Bitcoin modules (contain WASM that breaks Vercel serverless)
 let bip32: any = null;
 let bitcoin: any = null;
@@ -668,9 +670,8 @@ router.delete('/api/binance/disconnect', async (c) => {
 // ========== COINBASE API KEY (Read-Only) ==========
 
 function createCoinbaseSignature(timestamp: string, method: string, path: string, body: string, secret: string): string {
-  const crypto = require('crypto');
   const message = timestamp + method + path + body;
-  return crypto.createHmac('sha256', secret).update(message).digest('hex');
+  return createHmac('sha256', secret).update(message).digest('hex');
 }
 
 async function fetchCoinbaseWithApiKey(apiKey: string, apiSecret: string, path: string) {

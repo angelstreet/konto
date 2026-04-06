@@ -79,7 +79,7 @@ function normalizeOrigin(value: string): string {
 const allowedOriginsRaw = process.env.ALLOWED_ORIGINS || process.env.CORS_ORIGINS;
 const ALLOWED_ORIGINS = (allowedOriginsRaw
   ? allowedOriginsRaw.split(',')
-  : ['http://localhost:5003', 'http://localhost:5173', 'https://65.108.14.251:8080', 'https://konto.angelstreet.io'])
+  : ['http://localhost:5003', 'http://localhost:5173', 'https://65.108.14.251:8080', 'https://konto.angelstreet.io', 'https://konto-dev.angelstreet.io'])
   .map(normalizeOrigin)
   .filter(Boolean);
 
@@ -289,6 +289,64 @@ app.use('/api/*', geoBlockMiddleware);
 // Logs every /api/* request to audit_log table (runs after auth so userId is available)
 app.use('/api/*', auditLogMiddleware);
 
+// --- Per-user in-memory GET cache (60s TTL) ---
+// Caches read-only endpoints per user+URL to avoid repeated DB hits on page loads.
+const _apiCache = new Map<string, { body: string; ts: number }>();
+const API_CACHE_TTL = 60_000; // 60 seconds
+const CACHED_PREFIXES = [
+  '/api/bank/accounts', '/api/bank/connections', '/api/companies',
+  '/api/dashboard', '/api/investments', '/api/transactions',
+  '/api/trends', '/api/analytics', '/api/budget',
+  '/api/loans', '/api/properties', '/api/assets',
+];
+
+// Cleanup expired entries every 2 minutes
+if (!process.env.VERCEL) {
+  setInterval(() => {
+    const now = Date.now();
+    for (const [k, v] of _apiCache) {
+      if (now - v.ts > API_CACHE_TTL) _apiCache.delete(k);
+    }
+  }, 120_000);
+}
+
+app.use('/api/*', async (c, next) => {
+  // Only cache GET requests
+  if (c.req.method !== 'GET') {
+    // Invalidate cache for this user on any write operation
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(c.req.method)) {
+      const uid = (c as any).clerkUserId || (c as any).apiKeyUserId || 'anon';
+      for (const [k] of _apiCache) {
+        if (k.startsWith(uid + ':')) _apiCache.delete(k);
+      }
+    }
+    return next();
+  }
+
+  const path = c.req.path;
+  if (!CACHED_PREFIXES.some(p => path === p || path.startsWith(p + '/'))) return next();
+
+  const uid = (c as any).clerkUserId || (c as any).apiKeyUserId || 'anon';
+  const cacheKey = uid + ':' + c.req.url;
+  const cached = _apiCache.get(cacheKey);
+
+  if (cached && Date.now() - cached.ts < API_CACHE_TTL) {
+    c.header('X-Cache', 'HIT');
+    c.header('Content-Type', 'application/json');
+    return c.body(cached.body);
+  }
+
+  await next();
+
+  // Cache successful JSON responses
+  if (c.res.status === 200) {
+    const cloned = c.res.clone();
+    cloned.text().then(body => {
+      _apiCache.set(cacheKey, { body, ts: Date.now() });
+    }).catch(() => {});
+    c.header('X-Cache', 'MISS');
+  }
+});
 
 // --- Health ---
 app.get('/api/health', (c) => c.json({ status: 'ok', timestamp: new Date().toISOString() }));
