@@ -104,6 +104,7 @@ export default function Accounts() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editName, setEditName] = useState('');
   const [editBalance, setEditBalance] = useState('');
+  const [editType, setEditType] = useState('');
   const { hideAmounts: allBalancesHidden, toggleHideAmounts: toggleAllBalancesHidden } = useAmountVisibility();
   const [confirmAction, setConfirmAction] = useState<{ message: string; onConfirm: () => void } | null>(null);
   const [filterBank, setFilterBank] = useState('');
@@ -287,13 +288,14 @@ export default function Accounts() {
     setEditingId(acc.id);
     setEditName(acc.custom_name || acc.name);
     setEditBalance(String(acc.balance || 0));
+    setEditType(acc.type || 'checking');
   };
 
   const saveEdit = async (id: number) => {
     const acc = (accounts || []).find(a => a.id === id);
     const isManual = acc?.provider === 'manual';
-    const patch: Partial<BankAccount> = { custom_name: editName };
-    const body: Record<string, unknown> = { custom_name: editName };
+    const patch: Partial<BankAccount> = { custom_name: editName, type: editType };
+    const body: Record<string, unknown> = { custom_name: editName, type: editType };
     if (isManual) {
       const bal = parseFloat(editBalance) || 0;
       patch.balance = bal;
@@ -1198,7 +1200,12 @@ export default function Accounts() {
 
             const providerLabel: Record<string, string> = { coinbase: '🪙 Coinbase', binance: '🟡 Binance' };
 
-            const groupCards = Object.entries(grouped).map(([provider, accs]) => {
+            const groupCards = Object.entries(grouped).map(([provider, rawAccs]) => {
+              // Filter zero-balance wallets and sort by value descending
+              const accs = rawAccs
+                .filter(a => (a.balance || 0) !== 0)
+                .sort((a, b) => convertToDisplay(Math.abs(b.balance || 0), b.currency || 'EUR') - convertToDisplay(Math.abs(a.balance || 0), a.currency || 'EUR'));
+              if (accs.length === 0) return null;
               const expanded = expandedGroups.has(provider);
               const total = accs.reduce((s, a) => s + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0);
               return (
@@ -1267,6 +1274,16 @@ export default function Accounts() {
                           onKeyDown={e => e.key === 'Enter' && saveEdit(acc.id)}
                           placeholder={t('account_name')}
                         />
+                        <select
+                          value={editType}
+                          onChange={e => setEditType(e.target.value)}
+                          className="bg-black/30 border border-border rounded px-2 py-1 text-sm w-28"
+                        >
+                          <option value="checking">{t('account_type_checking')}</option>
+                          <option value="savings">{t('account_type_savings')}</option>
+                          <option value="investment">{t('account_type_investment')}</option>
+                          <option value="loan">{t('account_type_loan')}</option>
+                        </select>
                         {acc.provider === 'manual' && (
                           <input
                             type="number"
@@ -1444,7 +1461,7 @@ export default function Accounts() {
             );
             });
 
-            return [...groupCards, ...accountCards];
+            return [...groupCards.filter(Boolean), ...accountCards];
           })()}
         </div>
       )}
