@@ -290,7 +290,7 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
             6M
           </div>
         ) : (
-          <div className="w-full sm:w-auto max-w-full rounded-lg bg-surface border border-border p-1 overflow-x-auto">
+          <div className="sm:w-auto max-w-full rounded-lg bg-surface border border-border p-1 overflow-x-auto flex-shrink-0">
             <div className="flex items-center gap-1 min-w-max">
               {RANGES.map((r) => (
                 <button
