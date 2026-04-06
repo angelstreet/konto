@@ -288,14 +288,13 @@ export default function LoansDashboard() {
           {(mobileTab === 'loans' || window.innerWidth >= 768) && (
             <>
               <div className="bg-surface rounded-xl border border-border p-4 mb-3">
-                <p className="text-xs text-muted">{data.date}</p>
                 <p className="text-3xl font-semibold text-accent-400">{fc(totalOutstanding)}</p>
               </div>
 
               <div className="grid grid-cols-1 xl:grid-cols-5 gap-3 mb-3">
                 <div className="xl:col-span-3 bg-surface rounded-xl border border-border p-3">
                   <div className="text-sm text-muted mb-2">{t('loan_remaining_timeline') || 'Évolution du capital restant dû'}</div>
-                  <div className="h-64">
+                  <div className="h-[206px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <AreaChart data={data.timeline}>
                         <XAxis dataKey="year" tick={{ fill: '#8d9099', fontSize: 11 }} />
@@ -324,7 +323,7 @@ export default function LoansDashboard() {
                       {providers.map((p) => <option key={p} value={p}>{p}</option>)}
                     </select>
                   </div>
-                  <div className="h-64">
+                  <div className="h-[206px]">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
                         <Pie
@@ -363,10 +362,7 @@ export default function LoansDashboard() {
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3 mb-4">
                 <div className="bg-surface rounded-xl border border-border p-4">
                   <div className="text-xs text-muted uppercase">{t('loan_monthly') || 'Mensualité'}</div>
-                  <div className="text-3xl mt-1 mb-2">{fc(summary.monthlyTotal)}</div>
-                  <div className="text-xs text-muted">{t('loan_capital') || 'Capital'}: {fc(summary.monthlyCapital)}</div>
-                  <div className="text-xs text-muted">{t('loan_interest') || 'Intérêts'}: {fc(summary.monthlyInterest)}</div>
-                  <div className="text-xs text-muted">{t('loan_insurance') || 'Assurance'}: {fc(summary.monthlyInsurance)}</div>
+                  <div className="text-3xl mt-3">{fc(summary.monthlyTotal)}</div>
                 </div>
                 <div className="bg-surface rounded-xl border border-border p-4">
                   <div className="text-xs text-muted uppercase">{t('loan_avg_duration') || 'Durée moyenne'}</div>
