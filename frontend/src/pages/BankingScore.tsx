@@ -179,6 +179,8 @@ export default function BankingScore() {
   const [error, setError] = useState<string | null>(null);
   const [metrics, setMetrics] = useState<BankMetric[]>([]);
   const [selectedBank, setSelectedBank] = useState('All');
+  const [realMonthlyIncome, setRealMonthlyIncome] = useState(0);
+  const [realMonthlyDebt, setRealMonthlyDebt] = useState(0);
 
   useEffect(() => {
     let mounted = true;
@@ -186,15 +188,36 @@ export default function BankingScore() {
       setLoading(true);
       setError(null);
       try {
-        const [accountsRes, txRes] = await Promise.all([
+        const [accountsRes, txRes, incomeRes, loansRes] = await Promise.all([
           authFetch(`${API}/bank/accounts`),
           authFetch(`${API}/transactions?limit=5000&offset=0`),
+          authFetch(`${API}/income`).catch(() => null),
+          authFetch(`${API}/loans`).catch(() => null),
         ]);
         const accountsJson = await accountsRes.json();
         const txJson = await txRes.json();
 
         if (!accountsRes.ok) throw new Error(accountsJson?.error || 'Failed to load bank accounts');
         if (!txRes.ok) throw new Error(txJson?.error || 'Failed to load transactions');
+
+        // Monthly income from income_entries (actual salary/revenue)
+        let monthlyIncome = 0;
+        if (incomeRes?.ok) {
+          const incomeData = await incomeRes.json();
+          const entries = Array.isArray(incomeData) ? incomeData : (incomeData?.entries || []);
+          if (entries.length > 0) {
+            const maxYear = Math.max(...entries.map((e: any) => e.year));
+            const latest = entries.filter((e: any) => e.year === maxYear);
+            monthlyIncome = latest.reduce((s: number, e: any) => s + ((e.net_annual || e.gross_annual || 0) / 12), 0);
+          }
+        }
+
+        // Monthly loan payments from loans API
+        let monthlyLoanPayments = 0;
+        if (loansRes?.ok) {
+          const loansData = await loansRes.json();
+          monthlyLoanPayments = loansData?.summary?.monthly_total || 0;
+        }
 
         const accounts = (accountsJson as AccountRow[]).filter(a => !a.hidden);
         const txs = ((txJson?.transactions || []) as TxRow[]);
@@ -301,6 +324,8 @@ export default function BankingScore() {
 
         if (!mounted) return;
         setMetrics(enriched);
+        setRealMonthlyIncome(Math.round(monthlyIncome));
+        setRealMonthlyDebt(Math.round(monthlyLoanPayments));
       } catch (e: any) {
         if (mounted) setError(e?.message || 'Failed to load banking score');
       } finally {
@@ -420,17 +445,14 @@ export default function BankingScore() {
                 <div className="text-lg font-semibold text-accent-400">{global.score}/100</div>
               </div>
               <div className="rounded-lg bg-background border border-border p-3">
-                <div className="text-xs text-muted">Revenus reçus (90j)</div>
-                <div className="text-lg font-semibold">{fmtCurrency(global.incomeIn)}</div>
-                <div className={`text-[11px] mt-1 ${global.incomeDeltaPct === null ? 'text-muted' : global.incomeDeltaPct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {global.incomeDeltaPct === null ? 'Pas de période précédente' : `${global.incomeDeltaPct >= 0 ? '+' : ''}${Math.round(global.incomeDeltaPct)}% vs 90j préc.`}
-                </div>
+                <div className="text-xs text-muted">Revenus nets /mois</div>
+                <div className="text-lg font-semibold">{fmtCurrency(realMonthlyIncome)}</div>
               </div>
               <div className="rounded-lg bg-background border border-border p-3">
-                <div className="text-xs text-muted">Dépenses (90j)</div>
-                <div className="text-lg font-semibold">{fmtCurrency(global.chargesOut)}</div>
-                <div className={`text-[11px] mt-1 ${global.chargesDeltaPct === null ? 'text-muted' : global.chargesDeltaPct <= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {global.chargesDeltaPct === null ? 'Pas de période précédente' : `${global.chargesDeltaPct >= 0 ? '+' : ''}${Math.round(global.chargesDeltaPct)}% vs 90j préc.`}
+                <div className="text-xs text-muted">Mensualités crédit</div>
+                <div className="text-lg font-semibold">{fmtCurrency(realMonthlyDebt)}</div>
+                <div className="text-[11px] mt-1 text-muted">
+                  Endettement: {realMonthlyIncome > 0 ? Math.round((realMonthlyDebt / realMonthlyIncome) * 100) : 0}%
                 </div>
               </div>
               <div className="rounded-lg bg-background border border-border p-3">
@@ -439,8 +461,7 @@ export default function BankingScore() {
               </div>
             </div>
             <div className="mt-3 text-xs text-muted">
-              Actifs: {fmtCurrency(global.assets)} • Emprunts: {fmtCurrency(global.loans)} • Taux d'endettement (90j): {ratioPct(global.debtRatio)}
-              {global.debtService === 0 && global.loans > 0 ? ' • Aucune mensualité détectée sur les 90 derniers jours' : ''}
+              Actifs: {fmtCurrency(global.assets)} • Emprunts: {fmtCurrency(global.loans)}
             </div>
           </div>
 
@@ -492,7 +513,7 @@ export default function BankingScore() {
             </div>
 
             <div className="bg-surface border border-border rounded-xl p-4">
-              <div className="text-sm font-medium mb-3">Revenus + Dépenses par banque (90j)</div>
+              <div className="text-sm font-medium mb-3">Flux entrants + sortants par banque (90j)</div>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={stackedData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
@@ -505,8 +526,8 @@ export default function BankingScore() {
                       contentStyle={{ backgroundColor: '#1f1f1f', border: '1px solid #3a3a3a', borderRadius: 8, color: '#e5e5e5' }}
                       itemStyle={{ color: '#e5e5e5' }}
                     />
-                    <Bar dataKey="incomeIn" name="Revenus" stackId="flow" fill="#22c55e" radius={[4, 4, 0, 0]} />
-                    <Bar dataKey="chargesOut" name="Dépenses" stackId="flow" fill="#ef4444" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="incomeIn" name="Flux entrants" stackId="flow" fill="#22c55e" radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="chargesOut" name="Flux sortants" stackId="flow" fill="#ef4444" radius={[4, 4, 0, 0]} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>
@@ -521,8 +542,8 @@ export default function BankingScore() {
                   <th className="text-left py-2">Banque</th>
                   <th className="text-right py-2">Actifs</th>
                   <th className="text-right py-2">Emprunts</th>
-                  <th className="text-right py-2">Revenus</th>
-                  <th className="text-right py-2">Dépenses</th>
+                  <th className="text-right py-2">Flux entrants</th>
+                  <th className="text-right py-2">Flux sortants</th>
                   <th className="text-right py-2">Flux net</th>
                   <th className="text-right py-2">Endettement</th>
                   <th className="text-right py-2">Score</th>
