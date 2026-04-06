@@ -66,3 +66,4 @@ test-*.js
 !frontend/public/*.png
 AGENTS.md
 backup.sh
+.env.prod
