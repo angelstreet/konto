@@ -1206,15 +1206,15 @@ router.get('/api/dashboard', async (c) => {
     if (!accountsByType[type]) accountsByType[type] = [];
     const cur = a.currency || 'EUR';
     let balanceEur: number;
-    if (a.balance_native != null && a.balance_native > 0) {
-      // Use Coinbase portfolio EUR value when available
-      balanceEur = a.balance_native;
-    } else if (FIAT_CURRENCIES.has(cur)) {
+    if (FIAT_CURRENCIES.has(cur)) {
       balanceEur = a.balance || 0;
     } else if (eurPrices[cur]) {
+      // Fresh price available — always use it (same as crypto page)
       balanceEur = (a.balance || 0) * eurPrices[cur];
+    } else if (a.balance_native != null && a.balance_native > 0) {
+      // No fresh price — fall back to last stored EUR value
+      balanceEur = a.balance_native;
     } else {
-      // Unknown crypto without price data — don't count as EUR
       balanceEur = 0;
     }
     accountsByType[type].push({ id: a.id, name: a.custom_name || a.name, balance: balanceEur, type, subtype: a.subtype || null, currency: 'EUR' });
