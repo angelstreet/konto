@@ -181,6 +181,7 @@ export default function BankingScore() {
   const [selectedBank, setSelectedBank] = useState('All');
   const [realMonthlyIncome, setRealMonthlyIncome] = useState(0);
   const [realMonthlyDebt, setRealMonthlyDebt] = useState(0);
+  const refYear = new Date().getFullYear() - 1;
 
   useEffect(() => {
     let mounted = true;
@@ -222,12 +223,13 @@ export default function BankingScore() {
         const accounts = (accountsJson as AccountRow[]).filter(a => !a.hidden);
         const txs = ((txJson?.transactions || []) as TxRow[]);
 
-        const now = Date.now();
-        const lookbackDays = 90;
-        const lookbackMs = lookbackDays * 24 * 60 * 60 * 1000;
+        // Use previous full year (e.g. 2025 if we're in 2026)
+        const referenceYear = new Date().getFullYear() - 1;
+        const yearStart = new Date(referenceYear, 0, 1).getTime();
+        const yearEnd = new Date(referenceYear + 1, 0, 1).getTime();
         const recentTx = txs.filter(t => {
           const d = new Date(t.date).getTime();
-          return !Number.isNaN(d) && (now - d) <= lookbackMs;
+          return !Number.isNaN(d) && d >= yearStart && d < yearEnd;
         });
 
         const accountMap = new Map<number, AccountRow>();
@@ -290,9 +292,11 @@ export default function BankingScore() {
           else m.chargesOut += Math.abs(amt);
         }
 
+        // Previous year (e.g. 2024) for comparison
+        const prevYearStart = new Date(referenceYear - 1, 0, 1).getTime();
         const prevTx = txs.filter(t => {
           const d = new Date(t.date).getTime();
-          return !Number.isNaN(d) && (now - d) > lookbackMs && (now - d) <= (lookbackMs * 2);
+          return !Number.isNaN(d) && d >= prevYearStart && d < yearStart;
         });
 
         for (const t of prevTx) {
@@ -307,7 +311,7 @@ export default function BankingScore() {
           else m.prevChargesOut += Math.abs(amt);
         }
 
-        const monthFactor = lookbackDays / 30;
+        const monthFactor = 12;
         const enriched: BankMetric[] = Array.from(byBank.values()).map((m) => {
           m.netFlow = m.incomeIn - m.chargesOut;
           m.riskRatio = m.debtService / Math.max(1, m.incomeIn);
@@ -415,7 +419,7 @@ export default function BankingScore() {
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap flex items-center gap-2">
             <Landmark size={20} />
-            Score Bancaire
+            Score Bancaire <span className="text-sm text-muted font-normal">{refYear}</span>
           </h1>
         </div>
         <div className="flex items-center gap-2 w-full md:w-auto">
@@ -513,7 +517,7 @@ export default function BankingScore() {
             </div>
 
             <div className="bg-surface border border-border rounded-xl p-4">
-              <div className="text-sm font-medium mb-3">Flux entrants + sortants par banque (90j)</div>
+              <div className="text-sm font-medium mb-3">Flux entrants + sortants par banque ({refYear})</div>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height={220}>
                   <BarChart data={stackedData} margin={{ top: 8, right: 8, left: 0, bottom: 8 }}>
