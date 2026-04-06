@@ -5,7 +5,7 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI,
          classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
-         calcInvestmentDiff, calcInvDiff, getCryptoEurPrices } from '../shared.js';
+         calcInvestmentDiff, calcInvDiff, getCryptoEurPrices, updateCryptoBalanceNative } from '../shared.js';
 import { estimatePropertyPrice } from '../services/propertyEstimation.js';
 
 const router = new Hono();
@@ -1196,6 +1196,8 @@ router.get('/api/dashboard', async (c) => {
 
   // Convert crypto balances to EUR for the dashboard (cached 5min)
   const eurPrices = await getCryptoEurPrices();
+  // Persist EUR values to DB so cold starts always have a valid amount
+  updateCryptoBalanceNative(userId, eurPrices);
 
   const FIAT_CURRENCIES = new Set(['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'JPY', 'XOF']);
   const accountsByType: Record<string, any[]> = { checking: [], savings: [], investment: [], loan: [] };

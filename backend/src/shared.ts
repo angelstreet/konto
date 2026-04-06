@@ -356,3 +356,25 @@ export async function getCryptoEurPrices(): Promise<Record<string, number>> {
     return _cryptoPriceCache?.prices || {};
   }
 }
+
+/** Update balance_native (EUR) for all crypto accounts that have a known price */
+export async function updateCryptoBalanceNative(userId: number, prices: Record<string, number>) {
+  if (Object.keys(prices).length === 0) return;
+  try {
+    const res = await db.execute({
+      sql: "SELECT id, balance, currency FROM bank_accounts WHERE user_id = ? AND subtype = 'crypto' AND balance_native IS NULL OR (subtype = 'crypto' AND user_id = ?)",
+      args: [userId, userId],
+    });
+    for (const row of res.rows as any[]) {
+      const cur = row.currency || '';
+      const eurPrice = prices[cur];
+      if (eurPrice && row.balance) {
+        const eurValue = Math.round(row.balance * eurPrice * 100) / 100;
+        await db.execute({
+          sql: "UPDATE bank_accounts SET balance_native = ? WHERE id = ?",
+          args: [eurValue, row.id],
+        });
+      }
+    }
+  } catch {}
+}

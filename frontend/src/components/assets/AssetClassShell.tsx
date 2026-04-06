@@ -261,10 +261,17 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
           g.total = invTotal;
         } else {
           const a = g.accounts[0];
-          const bal = Math.max(0, Number(a.balance || 0));
-          const cur = a.currency || 'EUR';
-          const eurPrice = cryptoPrices[cur];
-          g.total = eurPrice ? bal * eurPrice : bal;
+          if (a.balance_native && a.balance_native > 0) {
+            // Use pre-computed EUR value from DB (always up to date)
+            const cur = a.currency || 'EUR';
+            const eurPrice = cryptoPrices[cur];
+            g.total = eurPrice ? Math.max(0, Number(a.balance || 0)) * eurPrice : a.balance_native;
+          } else {
+            const bal = Math.max(0, Number(a.balance || 0));
+            const cur = a.currency || 'EUR';
+            const eurPrice = cryptoPrices[cur];
+            g.total = eurPrice ? bal * eurPrice : bal;
+          }
         }
       }
     }
