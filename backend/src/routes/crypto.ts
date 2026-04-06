@@ -665,6 +665,82 @@ router.delete('/api/binance/disconnect', async (c) => {
   return c.json({ success: true });
 });
 
+// ========== COINBASE API KEY (Read-Only) ==========
 
+function createCoinbaseSignature(timestamp: string, method: string, path: string, body: string, secret: string): string {
+  const crypto = require('crypto');
+  const message = timestamp + method + path + body;
+  return crypto.createHmac('sha256', secret).update(message).digest('hex');
+}
+
+async function fetchCoinbaseWithApiKey(apiKey: string, apiSecret: string, path: string) {
+  const timestamp = Math.floor(Date.now() / 1000).toString();
+  const signature = createCoinbaseSignature(timestamp, 'GET', path, '', apiSecret);
+  const res = await fetch(`https://api.coinbase.com${path}`, {
+    headers: {
+      'CB-ACCESS-KEY': apiKey,
+      'CB-ACCESS-SIGN': signature,
+      'CB-ACCESS-TIMESTAMP': timestamp,
+      'CB-VERSION': '2024-01-01',
+      'Content-Type': 'application/json',
+    },
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ errors: [{ message: `HTTP ${res.status}` }] })) as any;
+    throw new Error(err.errors?.[0]?.message || `Coinbase API error: ${res.status}`);
+  }
+  return res.json();
+}
+
+// POST /api/coinbase/connect-apikey — save read-only API key
+router.post('/api/coinbase/connect-apikey', async (c) => {
+  const userId = await getUserId(c);
+  const body = await c.req.json<any>();
+
+  if (!body.apiKey || !body.apiSecret) {
+    return c.json({ error: 'API key and secret are required' }, 400);
+  }
+
+  // Validate by fetching user
+  try {
+    await fetchCoinbaseWithApiKey(body.apiKey, body.apiSecret, '/v2/user');
+  } catch (e: any) {
+    return c.json({ error: `Invalid API keys: ${e.message}` }, 400);
+  }
+
+  // Deactivate existing connections
+  await db.execute({
+    sql: "UPDATE coinbase_connections SET status = 'inactive' WHERE user_id = ? AND status = 'active'",
+    args: [userId],
+  });
+
+  // Save — reuse coinbase_connections table: api_key in access_token, api_secret in refresh_token
+  await db.execute({
+    sql: `INSERT INTO coinbase_connections (user_id, access_token, refresh_token, status) VALUES (?, ?, ?, 'active')`,
+    args: [userId, encrypt(body.apiKey), encrypt(body.apiSecret)],
+  });
+
+  // Sync accounts immediately
+  try {
+    const accData = await fetchCoinbaseWithApiKey(body.apiKey, body.apiSecret, '/v2/accounts?limit=100') as any;
+    const accounts = (accData.data || []).filter((a: any) => parseFloat(a.balance?.amount || '0') !== 0);
+    for (const acc of accounts) {
+      const balance = parseFloat(acc.balance?.amount || '0');
+      const currency = acc.balance?.currency || acc.currency?.code || 'USD';
+      const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
+      if (existing.rows.length === 0) {
+        await db.execute({
+          sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
+          args: [userId, null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()],
+        });
+      } else {
+        await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, last_sync = ? WHERE id = ?', args: [balance, new Date().toISOString(), (existing.rows[0] as any).id] });
+      }
+    }
+    return c.json({ success: true, synced: accounts.length });
+  } catch (e: any) {
+    return c.json({ success: true, synced: 0, warning: e.message });
+  }
+});
 
 export default router;

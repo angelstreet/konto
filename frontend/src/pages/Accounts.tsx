@@ -82,7 +82,7 @@ interface BankConnection {
   created_at: string;
 }
 
-type AddMode = null | 'choose' | 'manual' | 'blockchain' | 'metamask-scanning' | 'binance';
+type AddMode = null | 'choose' | 'manual' | 'blockchain' | 'metamask-scanning' | 'binance' | 'coinbase-apikey';
 
 export default function Accounts() {
   const { t, i18n } = useTranslation();
@@ -118,6 +118,8 @@ export default function Accounts() {
   const [blockchainForm, setBlockchainForm] = useState({ address: '', network: 'bitcoin', name: '' });
   const [binanceForm, setBinanceForm] = useState({ apiKey: '', apiSecret: '', accountName: 'Binance' });
   const [binanceLoading, setBinanceLoading] = useState(false);
+  const [coinbaseKeyForm, setCoinbaseKeyForm] = useState({ apiKey: '', apiSecret: '' });
+  const [coinbaseKeyLoading, setCoinbaseKeyLoading] = useState(false);
   const [addLoading, setAddLoading] = useState(false);
 
   // Balance update state
@@ -171,15 +173,7 @@ export default function Accounts() {
     window.open(`${API}/bank/webview?url=${encodeURIComponent(url)}`, '_blank');
   };
 
-  const connectCoinbase = async () => {
-    const res = await authFetch(`${API}/coinbase/connect-url`);
-    const data = await res.json();
-    if (data.error) {
-      alert(data.error);
-      return;
-    }
-    window.location.href = data.url;
-  };
+
 
   const [syncingId, setSyncingId] = useState<number | null>(null);
 
@@ -246,6 +240,24 @@ export default function Accounts() {
     } finally {
       setBinanceLoading(false);
     }
+  };
+
+  const connectCoinbaseApiKey = async () => {
+    if (!coinbaseKeyForm.apiKey || !coinbaseKeyForm.apiSecret) return;
+    setCoinbaseKeyLoading(true);
+    try {
+      const res = await authFetch(`${API}/coinbase/connect-apikey`, {
+        method: 'POST',
+        body: JSON.stringify({ apiKey: coinbaseKeyForm.apiKey, apiSecret: coinbaseKeyForm.apiSecret }),
+      });
+      const data = await res.json();
+      if (data.error) { alert(data.error); return; }
+      alert(`Coinbase connected! ${data.synced || 0} wallet(s) synced.`);
+      setAddMode(null);
+      setCoinbaseKeyForm({ apiKey: '', apiSecret: '' });
+      refetchAll();
+    } catch { alert('Failed to connect Coinbase.'); }
+    finally { setCoinbaseKeyLoading(false); }
   };
 
   const toggleHidden = async (acc: BankAccount) => {
@@ -685,11 +697,11 @@ export default function Accounts() {
                           <p className="text-xs text-muted">{t('add_blockchain_desc')}</p>
                         </div>
                       </button>
-                      <button onClick={connectCoinbase} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
+                      <button onClick={() => setAddMode('coinbase-apikey')} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
                         <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center"><CircleDollarSign size={20} className="text-blue-400" /></div>
                         <div>
                           <p className="font-medium">{t('add_coinbase')}</p>
-                          <p className="text-xs text-muted">OAuth2 — {t('add_blockchain_desc')}</p>
+                          <p className="text-xs text-muted">Read-only API key</p>
                         </div>
                       </button>
                       <button onClick={() => setAddMode('binance')} className="w-full flex items-center gap-4 p-4 rounded-xl bg-white/5 hover:bg-white/10 transition-colors text-left">
@@ -902,6 +914,49 @@ export default function Accounts() {
                     className="flex-1 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black disabled:opacity-50"
                   >
                     {binanceLoading ? '...' : t('create')}
+                  </button>
+                </div>
+              </>
+            )}
+
+            {addMode === 'coinbase-apikey' && (
+              <>
+                <h2 className="text-lg font-semibold mb-2">Connect Coinbase</h2>
+                <div className="space-y-3">
+                  <div className="p-3 bg-blue-500/10 border border-blue-500/20 rounded-lg">
+                    <p className="text-xs text-blue-400">
+                      Use read-only API keys. Create keys at: <a href="https://www.coinbase.com/settings/api" target="_blank" rel="noopener" className="underline">Coinbase API Settings</a>
+                    </p>
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted mb-1 block">API Key *</label>
+                    <input
+                      value={coinbaseKeyForm.apiKey}
+                      onChange={e => setCoinbaseKeyForm(f => ({ ...f, apiKey: e.target.value }))}
+                      className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm font-mono text-xs"
+                      placeholder="Enter your Coinbase API Key"
+                      autoFocus
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-muted mb-1 block">API Secret *</label>
+                    <input
+                      type="password"
+                      value={coinbaseKeyForm.apiSecret}
+                      onChange={e => setCoinbaseKeyForm(f => ({ ...f, apiSecret: e.target.value }))}
+                      className="w-full bg-black/30 border border-border rounded-lg px-3 py-2 text-sm font-mono text-xs"
+                      placeholder="Enter your Coinbase API Secret"
+                    />
+                  </div>
+                </div>
+                <div className="flex gap-3 mt-5">
+                  <button onClick={() => setAddMode('choose')} className="flex-1 py-2 rounded-lg text-sm border border-border text-muted hover:text-white">{t('cancel')}</button>
+                  <button
+                    onClick={connectCoinbaseApiKey}
+                    disabled={!coinbaseKeyForm.apiKey.trim() || !coinbaseKeyForm.apiSecret.trim() || coinbaseKeyLoading}
+                    className="flex-1 py-2 rounded-lg text-sm font-medium bg-accent-500 text-black disabled:opacity-50"
+                  >
+                    {coinbaseKeyLoading ? '...' : t('create')}
                   </button>
                 </div>
               </>
