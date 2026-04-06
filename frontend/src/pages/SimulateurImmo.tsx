@@ -37,6 +37,8 @@ export default function SimulateurImmo() {
   // --- Auto-loaded situation ---
   const [persoIncome, setPersoIncome] = useState(0);
   const [proIncome, setProIncome] = useState(0);
+  const [persoRentalIncome, setPersoRentalIncome] = useState(0);
+  const [proRentalIncome, setProRentalIncome] = useState(0);
   const [persoDebt, setPersoDebt] = useState(0);
   const [proDebt, setProDebt] = useState(0);
   const [loaded, setLoaded] = useState(false);
@@ -78,7 +80,8 @@ export default function SimulateurImmo() {
       authFetch(`${API}/loans?usage=personal`).then(r => r.json()).catch(() => null),
       authFetch(`${API}/loans?usage=professional`).then(r => r.json()).catch(() => null),
       authFetch(`${API}/rates/current`).then(r => r.json()).catch(() => null),
-    ]).then(([incomeData, persoLoans, proLoans, ratesData]) => {
+      authFetch(`${API}/assets?type=real_estate`).then(r => r.json()).catch(() => []),
+    ]).then(([incomeData, persoLoans, proLoans, ratesData, assetsData]) => {
       // Income: latest year, split by company_id
       const entries: IncomeEntry[] = Array.isArray(incomeData) ? incomeData : (incomeData?.entries || []);
       if (entries.length > 0) {
@@ -100,6 +103,14 @@ export default function SimulateurImmo() {
         const match = (ratesData.rates as Rate[]).find(r => r.duration === 20);
         if (match) setInterestRate(match.avg_rate);
       }
+
+      // Rental income from existing real estate assets
+      const assets: any[] = Array.isArray(assetsData) ? assetsData : (assetsData?.assets || []);
+      const rentedAssets = assets.filter((a: any) => a.monthly_rent > 0);
+      const persoRent = rentedAssets.filter((a: any) => a.usage !== 'professional').reduce((s: number, a: any) => s + (a.monthly_rent || 0), 0);
+      const proRent = rentedAssets.filter((a: any) => a.usage === 'professional').reduce((s: number, a: any) => s + (a.monthly_rent || 0), 0);
+      setPersoRentalIncome(Math.round(persoRent));
+      setProRentalIncome(Math.round(proRent));
 
       // Fetch savings for banker's view
       authFetch(`${API}/dashboard`).then(r => r.json()).then(d => {
@@ -189,7 +200,7 @@ export default function SimulateurImmo() {
   );
 
   const cashflow = effectiveRent - totalMonthlyPayment - totalMonthlyCharges;
-  const totalIncome = persoIncome + proIncome;
+  const totalIncome = persoIncome + proIncome + persoRentalIncome + proRentalIncome;
   const totalDebt = persoDebt + proDebt;
   const currentDebtRatio = totalIncome > 0 ? (totalDebt / totalIncome) * 100 : 0;
   const newDebtRatio = totalIncome > 0 ? ((totalDebt + totalMonthlyPayment) / totalIncome) * 100 : 0;
@@ -249,6 +260,8 @@ export default function SimulateurImmo() {
 <table>
   <tr><td>Revenus mensuels personnels</td><td>${fmt(persoIncome)}</td></tr>
   <tr><td>Revenus mensuels professionnels</td><td>${fmt(proIncome)}</td></tr>
+  <tr><td>Revenus locatifs personnels</td><td>${fmt(persoRentalIncome)}</td></tr>
+  <tr><td>Revenus locatifs professionnels</td><td>${fmt(proRentalIncome)}</td></tr>
   <tr><td><strong>Total revenus mensuels</strong></td><td><strong>${fmt(totalIncome)}</strong></td></tr>
   <tr><td>Charges mensuelles personnelles</td><td>${fmt(persoDebt)}</td></tr>
   <tr><td>Charges mensuelles professionnelles</td><td>${fmt(proDebt)}</td></tr>
@@ -367,6 +380,16 @@ ${rentEstimate ? `<p style="font-size:12px;color:#888">Loyer estimé: ${fmt(rent
           <div>
             <label className="text-xs text-muted block mb-1">{t('immo_pro_income')}</label>
             <input type="number" value={proIncome} onChange={e => setProIncome(+e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-muted block mb-1">Revenus locatifs perso</label>
+            <input type="number" value={persoRentalIncome} onChange={e => setPersoRentalIncome(+e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-muted block mb-1">Revenus locatifs pro</label>
+            <input type="number" value={proRentalIncome} onChange={e => setProRentalIncome(+e.target.value)}
               className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
           <div>
