@@ -758,20 +758,27 @@ router.post('/api/coinbase/connect-apikey', async (c) => {
   try {
     const accData = await fetchCoinbaseWithApiKey(body.apiKey, body.apiSecret, '/v2/accounts?limit=100') as any;
     const accounts = (accData.data || []).filter((a: any) => parseFloat(a.balance?.amount || '0') !== 0);
+    const syncedAccounts: any[] = [];
     for (const acc of accounts) {
       const balance = parseFloat(acc.balance?.amount || '0');
       const currency = acc.balance?.currency || acc.currency?.code || 'USD';
+      const name = acc.name || `${currency} Wallet`;
+      const now = new Date().toISOString();
       const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
+      let dbId: number;
       if (existing.rows.length === 0) {
-        await db.execute({
+        const ins = await db.execute({
           sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
-          args: [userId, null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()],
+          args: [userId, null, acc.id, name, balance, currency, now],
         });
+        dbId = Number(ins.lastInsertRowid);
       } else {
-        await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, last_sync = ? WHERE id = ?', args: [balance, new Date().toISOString(), (existing.rows[0] as any).id] });
+        dbId = (existing.rows[0] as any).id;
+        await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, last_sync = ? WHERE id = ?', args: [balance, now, dbId] });
       }
+      syncedAccounts.push({ id: dbId, name, bank_name: 'Coinbase', balance, currency, type: 'investment', subtype: 'crypto', provider: 'coinbase', usage: 'personal', last_sync: now });
     }
-    return c.json({ success: true, synced: accounts.length });
+    return c.json({ success: true, synced: syncedAccounts.length, accounts: syncedAccounts });
   } catch (e: any) {
     return c.json({ success: true, synced: 0, warning: e.message });
   }

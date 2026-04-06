@@ -252,10 +252,21 @@ export default function Accounts() {
       });
       const data = await res.json();
       if (data.error) { alert(data.error); return; }
-      alert(`Coinbase connected! ${data.synced || 0} wallet(s) synced.`);
+      // Merge synced accounts into local state without full page refetch
+      if (data.accounts?.length && accounts) {
+        const existingIds = new Set(accounts.map(a => a.id));
+        const newAccs = data.accounts.filter((a: any) => !existingIds.has(a.id));
+        const updatedAccs = data.accounts.filter((a: any) => existingIds.has(a.id));
+        setAccounts([
+          ...accounts.map(a => {
+            const upd = updatedAccs.find((u: any) => u.id === a.id);
+            return upd ? { ...a, ...upd } : a;
+          }),
+          ...newAccs,
+        ]);
+      }
       setAddMode(null);
       setCoinbaseKeyForm({ apiKey: '', apiSecret: '' });
-      refetchAll();
     } catch { alert('Failed to connect Coinbase.'); }
     finally { setCoinbaseKeyLoading(false); }
   };
