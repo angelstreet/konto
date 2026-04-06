@@ -449,55 +449,103 @@ router.get('/api/coinbase-callback', async (c) => {
 router.post('/api/coinbase/sync', async (c) => {
   const userId = await getUserId(c);
   const connections = await db.execute({ sql: "SELECT * FROM coinbase_connections WHERE status = 'active' AND user_id = ?", args: [userId] });
-  let totalSynced = 0;
+  if (connections.rows.length === 0) return c.json({ error: 'No active Coinbase connection' }, 400);
 
-  for (const rawConn of connections.rows as any[]) {
-    const conn = decryptCoinbaseConn(rawConn);
-    let token = conn.access_token;
+  const conn = decryptCoinbaseConn(connections.rows[0] as any);
+  const apiKey = conn.access_token;
+  const apiSecret = conn.refresh_token;
 
-    if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
-      try {
-        const refreshRes = await fetch('https://api.coinbase.com/oauth/token', {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: conn.refresh_token, client_id: COINBASE_CLIENT_ID, client_secret: COINBASE_CLIENT_SECRET }),
-        });
-        const refreshData = await refreshRes.json() as any;
-        if (refreshRes.ok) {
-          token = refreshData.access_token;
-          await db.execute({
-            sql: 'UPDATE coinbase_connections SET access_token = ?, refresh_token = ?, expires_at = ? WHERE id = ?',
-            args: [encrypt(refreshData.access_token), encrypt(refreshData.refresh_token || conn.refresh_token), refreshData.expires_in ? new Date(Date.now() + refreshData.expires_in * 1000).toISOString() : null, conn.id]
-          });
+  // CDP API key sync (access_token = apiKey, refresh_token = PEM secret)
+  if (isCdpKey(apiKey, apiSecret)) {
+    // Fetch portfolio breakdown for EUR fiat values
+    let fiatByAsset: Record<string, number> = {};
+    let portfolioTotal = 0;
+    try {
+      const userRes = await fetchCoinbaseWithApiKey(apiKey, apiSecret, '/v2/user') as any;
+      const portfolioId = userRes.data?.id;
+      if (portfolioId) {
+        const breakdown = await fetchCoinbaseWithApiKey(apiKey, apiSecret, `/api/v3/brokerage/portfolios/${portfolioId}?currency=EUR`) as any;
+        portfolioTotal = parseFloat(breakdown.breakdown?.portfolio_balances?.total_balance?.value || '0');
+        for (const pos of breakdown.breakdown?.spot_positions || []) {
+          fiatByAsset[pos.asset] = pos.total_balance_fiat || 0;
         }
-      } catch (e) {
-        console.error('Coinbase token refresh failed:', e);
-        continue;
       }
+    } catch { /* optional */ }
+
+    // Paginate all accounts
+    let allAccounts: any[] = [];
+    let nextPath: string | null = '/v2/accounts?limit=100';
+    while (nextPath) {
+      const page = await fetchCoinbaseWithApiKey(apiKey, apiSecret, nextPath) as any;
+      allAccounts.push(...(page.data || []));
+      nextPath = page.pagination?.next_uri || null;
     }
 
-    try {
-      const accRes = await fetch(`${COINBASE_API}/accounts?limit=100`, { headers: { 'Authorization': `Bearer ${token}` } });
-      const accData = await accRes.json() as any;
-
-      for (const acc of (accData.data || [])) {
-        const balance = parseFloat(acc.balance?.amount || '0');
-        const currency = acc.balance?.currency || acc.currency?.code || 'USD';
-        const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
-        if (existing.rows.length > 0) {
-          await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), existing.rows[0].id as number] });
-        } else if (balance !== 0) {
-          await db.execute({
-            sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
-            args: [userId, null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()]
-          });
-        }
-        totalSynced++;
+    const syncedAccounts: any[] = [];
+    for (const acc of allAccounts) {
+      const balance = parseFloat(acc.balance?.amount || '0');
+      if (balance === 0) continue;
+      const currency = acc.balance?.currency || acc.currency?.code || 'USD';
+      const balanceNative = fiatByAsset[currency] || null;
+      const rawName = acc.name || currency;
+      const name = rawName.replace(/\s*Wallet$/i, '').replace(/^Portefeuille en\s*/i, '').replace(/\s*staké$/i, '').trim() || currency;
+      const now = new Date().toISOString();
+      const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
+      let dbId: number;
+      if (existing.rows.length === 0) {
+        const ins = await db.execute({
+          sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync, balance_native) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?, ?)`,
+          args: [userId, null, acc.id, name, balance, currency, now, balanceNative],
+        });
+        dbId = Number(ins.lastInsertRowid);
+      } else {
+        dbId = (existing.rows[0] as any).id;
+        await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, last_sync = ?, balance_native = ?, name = ? WHERE id = ?', args: [balance, now, balanceNative, name, dbId] });
       }
-    } catch (e: any) {
-      console.error('Coinbase sync failed:', e.message);
+      syncedAccounts.push({ id: dbId, name, bank_name: 'Coinbase', balance, currency, balance_native: balanceNative, type: 'investment', subtype: 'crypto', provider: 'coinbase', usage: 'personal', last_sync: now });
+    }
+    return c.json({ success: true, synced: syncedAccounts.length, accounts: syncedAccounts, total_eur: portfolioTotal });
+  }
+
+  // Legacy OAuth token sync
+  let token = apiKey;
+  if (conn.expires_at && new Date(conn.expires_at) < new Date()) {
+    try {
+      const refreshRes = await fetch('https://api.coinbase.com/oauth/token', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ grant_type: 'refresh_token', refresh_token: apiSecret, client_id: COINBASE_CLIENT_ID, client_secret: COINBASE_CLIENT_SECRET }),
+      });
+      const refreshData = await refreshRes.json() as any;
+      if (refreshRes.ok) {
+        token = refreshData.access_token;
+        await db.execute({
+          sql: 'UPDATE coinbase_connections SET access_token = ?, refresh_token = ?, expires_at = ? WHERE id = ?',
+          args: [encrypt(refreshData.access_token), encrypt(refreshData.refresh_token || apiSecret), refreshData.expires_in ? new Date(Date.now() + refreshData.expires_in * 1000).toISOString() : null, conn.id]
+        });
+      }
+    } catch (e) {
+      console.error('Coinbase token refresh failed:', e);
+      return c.json({ error: 'Token refresh failed' }, 500);
     }
   }
 
+  const accRes = await fetch(`${COINBASE_API}/accounts?limit=100`, { headers: { 'Authorization': `Bearer ${token}` } });
+  const accData = await accRes.json() as any;
+  let totalSynced = 0;
+  for (const acc of (accData.data || [])) {
+    const balance = parseFloat(acc.balance?.amount || '0');
+    const currency = acc.balance?.currency || acc.currency?.code || 'USD';
+    const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
+    if (existing.rows.length > 0) {
+      await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), existing.rows[0].id as number] });
+    } else if (balance !== 0) {
+      await db.execute({
+        sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
+        args: [userId, null, acc.id, acc.name || `${currency} Wallet`, balance, currency, new Date().toISOString()]
+      });
+    }
+    totalSynced++;
+  }
   return c.json({ synced: totalSynced });
 });
 
@@ -507,8 +555,7 @@ const BINANCE_API = 'https://api.binance.com';
 
 // Helper to create Binance signature
 function createBinanceSignature(queryString: string, apiSecret: string): string {
-  const crypto = require('crypto');
-  return crypto.createHmac('sha256', apiSecret).update(queryString).digest('hex');
+  return createHmac('sha256', apiSecret).update(queryString).digest('hex');
 }
 
 // Get Binance account info using read-only API

@@ -118,6 +118,7 @@ export default function Accounts() {
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [overflowMenuId, setOverflowMenuId] = useState<number | null>(null);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [syncingGroup, setSyncingGroup] = useState<string | null>(null);
 
   // Add account state
   const [addMode, setAddMode] = useState<AddMode>(null);
@@ -1204,6 +1205,31 @@ export default function Accounts() {
             });
 
             const providerLabel: Record<string, string> = { coinbase: '🪙 Coinbase', binance: '🟡 Binance' };
+            const syncProviderEndpoint: Record<string, string> = { coinbase: `${API}/coinbase/sync`, binance: `${API}/binance/sync` };
+
+            const syncProviderGroup = async (provider: string, e: React.MouseEvent) => {
+              e.stopPropagation();
+              setSyncingGroup(provider);
+              try {
+                const res = await authFetch(syncProviderEndpoint[provider], { method: 'POST' });
+                const data = await res.json();
+                if (data.accounts?.length && accounts) {
+                  const existingIds = new Set(accounts.map(a => a.id));
+                  const newAccs = data.accounts.filter((a: any) => !existingIds.has(a.id));
+                  const updatedAccs = data.accounts.filter((a: any) => existingIds.has(a.id));
+                  setAccounts([
+                    ...accounts.map(a => {
+                      const upd = updatedAccs.find((u: any) => u.id === a.id);
+                      return upd ? { ...a, ...upd } : a;
+                    }),
+                    ...newAccs,
+                  ]);
+                } else {
+                  refetchAll();
+                }
+              } catch { /* ignore */ }
+              finally { setSyncingGroup(null); }
+            };
 
             const groupCards = Object.entries(grouped).map(([provider, rawAccs]) => {
               // Filter near-zero wallets, sort by EUR fiat value descending
@@ -1224,11 +1250,21 @@ export default function Accounts() {
                       <span className="font-medium text-sm sm:text-base">{providerLabel[provider] || provider}</span>
                       <span className="text-xs text-muted">{accs.length} token{accs.length > 1 ? 's' : ''}</span>
                     </div>
-                    {totalEur > 0 && (
-                      <span className="text-sm sm:text-base font-semibold text-accent-400">
-                        {allBalancesHidden ? <span className="amount-masked">{formatBalance(totalEur)}</span> : formatBalance(totalEur)}
-                      </span>
-                    )}
+                    <div className="flex items-center gap-2">
+                      {totalEur > 0 && (
+                        <span className="text-sm sm:text-base font-semibold text-accent-400">
+                          {allBalancesHidden ? <span className="amount-masked">{formatBalance(totalEur)}</span> : formatBalance(totalEur)}
+                        </span>
+                      )}
+                      <button
+                        onClick={(e) => syncProviderGroup(provider, e)}
+                        disabled={syncingGroup === provider}
+                        className="text-muted hover:text-white transition-colors p-1 disabled:opacity-50"
+                        title="Sync"
+                      >
+                        <RefreshCw size={14} className={syncingGroup === provider ? 'animate-spin' : ''} />
+                      </button>
+                    </div>
                   </button>
                   {expanded && (
                     <div className="border-t border-border divide-y divide-border">
