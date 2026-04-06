@@ -8,6 +8,7 @@ import { useNavigate } from 'react-router-dom';
 
 import EyeToggle from '../components/EyeToggle';
 import ConfirmDialog from '../components/ConfirmDialog';
+import AssetMap from '../components/AssetMap';
 import ScopeSelect from '../components/ScopeSelect';
 import { usePreferences } from '../PreferencesContext';
 import { useAmountVisibility } from '../AmountVisibilityContext';
@@ -853,6 +854,12 @@ export default function Assets() {
               </div>
             ))}
           </div>
+        </div>
+      )}
+
+      {filter === 'real_estate' && assetList.some(a => a.latitude && a.longitude) && (
+        <div className="mt-4">
+          <AssetMap assets={assetList} />
         </div>
       )}
 
