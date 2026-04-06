@@ -389,18 +389,16 @@ export default function LoansDashboard() {
                       <tr key={loan.loan_id} className="border-b border-border/70 hover:bg-surface-hover">
                         <td className="px-4 py-3 cursor-pointer" onClick={() => navigate(`/loans/${loan.loan_id}`)}>
                           <div>{loan.name}</div>
-                          {providerLabel(loan) ? <div className="text-xs text-muted">{providerLabel(loan)}</div> : null}
-                          <div className="text-xs text-muted">
-                            {formatLoanDate(loan.start_date) !== '-' || formatLoanDate(loan.end_date) !== '-' ? (
-                              <>
-                                Début {formatLoanDate(loan.start_date)} · Fin {formatLoanDate(loan.end_date)}
-                                {loan.start_date && loan.end_date ? (() => {
-                                  const years = (new Date(loan.end_date).getTime() - new Date(loan.start_date).getTime()) / (1000 * 60 * 60 * 24 * 365.25);
-                                  return years > 0 ? ` · ${Math.round(years)} ans` : null;
-                                })() : null}
-                              </>
-                            ) : null}
-                          </div>
+                          {(() => {
+                            const parts: string[] = [];
+                            if (providerLabel(loan)) parts.push(providerLabel(loan));
+                            if (loan.end_date) parts.push(`Fin ${formatLoanDate(loan.end_date)}`);
+                            if (loan.start_date && loan.end_date) {
+                              const years = (new Date(loan.end_date).getTime() - new Date(loan.start_date).getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+                              if (years > 0) parts.push(`${Math.round(years)} ans`);
+                            }
+                            return parts.length > 0 ? <div className="text-xs text-muted">{parts.join(' · ')}</div> : null;
+                          })()}
                         </td>
                         <td className="px-4 py-3 text-right">{loan.repaid_pct != null ? `${Math.round(loan.repaid_pct)} %` : '-'}</td>
                         <td className="px-4 py-3 text-right">{loan.interest_rate != null ? `${loan.interest_rate} %` : '-'}</td>
@@ -424,7 +422,16 @@ export default function LoansDashboard() {
                   <div key={loan.loan_id} className="bg-surface rounded-xl border border-border p-3">
                     <button className="w-full text-left" onClick={() => navigate(`/loans/${loan.loan_id}`)}>
                       <div className="font-medium truncate">{loan.name}</div>
-                      {providerLabel(loan) ? <div className="text-xs text-muted mb-2">{providerLabel(loan)}</div> : null}
+                      {(() => {
+                        const parts: string[] = [];
+                        if (providerLabel(loan)) parts.push(providerLabel(loan));
+                        if (loan.end_date) parts.push(`Fin ${formatLoanDate(loan.end_date)}`);
+                        if (loan.start_date && loan.end_date) {
+                          const years = (new Date(loan.end_date).getTime() - new Date(loan.start_date).getTime()) / (1000 * 60 * 60 * 24 * 365.25);
+                          if (years > 0) parts.push(`${Math.round(years)} ans`);
+                        }
+                        return parts.length > 0 ? <div className="text-xs text-muted mb-2">{parts.join(' · ')}</div> : null;
+                      })()}
                       <div className="text-2xl font-semibold text-accent-400 mb-1">{fc(loan.remaining)}</div>
                       <div className="text-xs text-muted mb-1">{loan.repaid_pct != null ? `${t('loan_repaid_sentence') || 'Vous avez remboursé'} ${Math.round(loan.repaid_pct)} %` : (t('loan_no_data') || 'Pas de données')}</div>
                       <div className="h-1.5 bg-background rounded-full overflow-hidden">
