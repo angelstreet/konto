@@ -59,7 +59,7 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
       const lastFetch = cacheTimes.get(url);
       if (lastFetch && Date.now() - lastFetch < CACHE_TTL && cache.has(url)) return;
     }
-    if (!cache.has(url)) setLoading(true);
+    if (!cache.has(url) && !force) setLoading(true);
     getAuthHeaders(getTokenRef.current)
       .then(headers => fetch(url, { headers }))
       .then(r => { if (!r.ok) throw new Error(`API ${r.status}`); return r.json(); })

@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AreaChart, Area, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from 'recharts';
 import { Plus, Download, GraduationCap, Pencil, Trash2 } from 'lucide-react';
-import { useApi, useAuthFetch, invalidateApi } from '../useApi';
+import { useApi, useAuthFetch } from '../useApi';
 import { useFilter } from '../FilterContext';
 import { usePreferences } from '../PreferencesContext';
 import { useAmountVisibility } from '../AmountVisibilityContext';
@@ -201,8 +201,7 @@ export default function LoansDashboard() {
         method,
         body: JSON.stringify(payload),
       });
-      invalidateApi(dataUrl);
-      await refetch();
+      refetch();
       closeModal();
     } finally {
       setSaving(false);
@@ -212,8 +211,7 @@ export default function LoansDashboard() {
   const onDelete = async (loan: LoanRow) => {
     if (!window.confirm(t('loan_delete_confirm') || 'Supprimer ce prêt ?')) return;
     await authFetch(`${API}/loans/${loan.loan_id}`, { method: 'DELETE' });
-    invalidateApi(dataUrl);
-    await refetch();
+    refetch();
   };
 
   const onExport = async () => {
