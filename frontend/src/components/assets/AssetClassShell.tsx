@@ -13,6 +13,7 @@ type AccountRow = {
   bank_name?: string | null;
   provider?: string | null;
   balance: number;
+  balance_native?: number | null;
   type: string;
   subtype?: string | null;
   hidden?: number;
@@ -86,7 +87,7 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
   const [investments, setInvestments] = useState<InvestmentRow[]>([]);
   const [txs, setTxs] = useState<TxRow[]>([]);
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({});
-  const [collapsed, setCollapsed] = useState<Set<number>>(new Set());
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)');
@@ -162,32 +163,70 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
     return m;
   }, [accounts]);
 
+  // Group coinbase/binance under provider, keep others individual
+  const PROVIDER_GROUP = new Set(['coinbase', 'binance']);
+  const providerLabels: Record<string, string> = { coinbase: 'Coinbase', binance: 'Binance' };
+
+  type GroupRow = { key: string; label: string; isProvider: boolean; accounts: AccountRow[]; positions: InvestmentRow[]; total: number; perf: number };
+
   const grouped = useMemo(() => {
-    const byAcc = new Map<number, { account: AccountRow; positions: InvestmentRow[]; total: number; perf: number; invTotal: number }>();
-    for (const a of accounts) byAcc.set(a.id, { account: a, positions: [], total: 0, perf: 0, invTotal: 0 });
+    const providerGroups = new Map<string, GroupRow>();
+    const individualGroups: GroupRow[] = [];
 
-    for (const inv of investments) {
-      const row = byAcc.get(inv.bank_account_id);
-      if (!row) continue;
-      row.positions.push(inv);
-      row.invTotal += Number(inv.valuation || 0);
-      row.perf += Number(inv.diff || 0);
-    }
-
-    // Use investment total when positions exist (avoids double-counting with account balance)
-    for (const row of byAcc.values()) {
-      if (row.positions.length > 0) {
-        row.total = row.invTotal;
+    // First pass: assign accounts to groups
+    for (const a of accounts) {
+      const prov = a.provider || '';
+      if (PROVIDER_GROUP.has(prov)) {
+        if (!providerGroups.has(prov)) {
+          providerGroups.set(prov, { key: `prov-${prov}`, label: providerLabels[prov] || prov, isProvider: true, accounts: [], positions: [], total: 0, perf: 0 });
+        }
+        providerGroups.get(prov)!.accounts.push(a);
       } else {
-        const bal = Math.max(0, Number(row.account.balance || 0));
-        const cur = row.account.currency || 'EUR';
-        // Convert native crypto balance to EUR (e.g. 0.73 BTC → 0.73 × 84000)
-        const eurPrice = cryptoPrices[cur];
-        row.total = eurPrice ? bal * eurPrice : bal;
+        individualGroups.push({ key: `acc-${a.id}`, label: a.custom_name || a.name, isProvider: false, accounts: [a], positions: [], total: 0, perf: 0 });
       }
     }
 
-    return Array.from(byAcc.values()).sort((a, b) => b.total - a.total);
+    const allGroups = [...providerGroups.values(), ...individualGroups];
+
+    // Assign investments to groups
+    const accToGroup = new Map<number, GroupRow>();
+    for (const g of allGroups) {
+      for (const a of g.accounts) accToGroup.set(a.id, g);
+    }
+    for (const inv of investments) {
+      const g = accToGroup.get(inv.bank_account_id);
+      if (g) {
+        g.positions.push(inv);
+        g.perf += Number(inv.diff || 0);
+      }
+    }
+
+    // Calculate totals
+    for (const g of allGroups) {
+      if (g.isProvider) {
+        // Use balance_native (EUR from Coinbase portfolio) when available
+        g.total = g.accounts.reduce((s, a) => {
+          if (a.balance_native) return s + a.balance_native;
+          const bal = Math.max(0, Number(a.balance || 0));
+          const cur = a.currency || 'EUR';
+          const eurPrice = cryptoPrices[cur];
+          return s + (eurPrice ? bal * eurPrice : 0);
+        }, 0);
+      } else {
+        const invTotal = g.positions.reduce((s, p) => s + Number(p.valuation || 0), 0);
+        if (g.positions.length > 0) {
+          g.total = invTotal;
+        } else {
+          const a = g.accounts[0];
+          const bal = Math.max(0, Number(a.balance || 0));
+          const cur = a.currency || 'EUR';
+          const eurPrice = cryptoPrices[cur];
+          g.total = eurPrice ? bal * eurPrice : bal;
+        }
+      }
+    }
+
+    return allGroups.sort((a, b) => b.total - a.total);
   }, [accounts, investments, cryptoPrices]);
 
   const totalValue = useMemo(() => grouped.reduce((s, g) => s + g.total, 0), [grouped]);
@@ -332,22 +371,64 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
               {tab === 'accounts' ? (
                 <div className="space-y-3">
                   {grouped.map((g) => {
-                    const isCollapsed = collapsed.has(g.account.id);
+                    const collapseKey = g.key;
+                    const isCollapsed = collapsed.has(collapseKey);
                     const toggleCollapse = () => setCollapsed(prev => {
                       const next = new Set(prev);
-                      if (next.has(g.account.id)) next.delete(g.account.id); else next.add(g.account.id);
+                      if (next.has(collapseKey)) next.delete(collapseKey); else next.add(collapseKey);
                       return next;
                     });
+
+                    // Provider group (Coinbase/Binance) — show wallets as rows
+                    if (g.isProvider) {
+                      const wallets = g.accounts
+                        .filter(a => Math.abs(a.balance || 0) >= 0.01)
+                        .sort((a, b) => (b.balance_native || 0) - (a.balance_native || 0));
+                      if (wallets.length === 0) return null;
+                      return (
+                        <div key={g.key} className="bg-surface border border-border rounded-xl overflow-hidden">
+                          <button onClick={toggleCollapse} className="w-full flex items-center justify-between gap-2 px-4 py-3 hover:bg-surface-hover transition-colors">
+                            <div className="flex items-center gap-2 min-w-0">
+                              <ChevronDown size={16} className={`text-muted flex-shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
+                              <div className="font-medium text-left">{g.label}</div>
+                              <span className="text-xs text-muted">{wallets.length} token{wallets.length > 1 ? 's' : ''}</span>
+                            </div>
+                            <div className="font-semibold">{fmtCurrency(g.total)}</div>
+                          </button>
+                          {!isCollapsed && (
+                            <div className="border-t border-border divide-y divide-border/30">
+                              {wallets.map(a => {
+                                const name = (a.custom_name || a.name || '').replace(/\s*Wallet$/i, '').replace(/^Portefeuille en\s*/i, '').replace(/\s*staké$/i, '').trim();
+                                return (
+                                  <div key={a.id} className="px-4 py-2 flex items-center justify-between gap-2 hover:bg-surface-hover/50">
+                                    <div className="flex items-center gap-2 min-w-0">
+                                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 flex-shrink-0">{a.currency}</span>
+                                      <span className="text-sm truncate">{name}</span>
+                                    </div>
+                                    <div className="text-right flex-shrink-0">
+                                      {(a.balance_native ?? 0) > 0 && <span className="text-sm font-medium">{fmtCurrency(a.balance_native!)}</span>}
+                                      <span className="text-[10px] text-muted ml-1">{Number(a.balance || 0).toLocaleString('de-DE', { maximumFractionDigits: 6 })} {a.currency}</span>
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    }
+
+                    // Individual account (blockchain, manual, etc.)
                     return (
-                    <div key={g.account.id} className="bg-surface border border-border rounded-xl overflow-hidden">
+                    <div key={g.key} className="bg-surface border border-border rounded-xl overflow-hidden">
                       <button onClick={toggleCollapse} className="w-full flex items-center justify-between gap-2 px-4 py-3 hover:bg-surface-hover transition-colors">
                         <div className="flex items-center gap-2 min-w-0">
                           <ChevronDown size={16} className={`text-muted flex-shrink-0 transition-transform ${isCollapsed ? '-rotate-90' : ''}`} />
-                          <div className="font-medium text-left truncate">{g.account.custom_name || g.account.name}</div>
+                          <div className="font-medium text-left truncate">{g.label}</div>
                         </div>
                         <div className="text-right flex-shrink-0">
                           <div className="font-semibold">{fmtCurrency(g.total)}</div>
-                          <div className={`text-xs ${g.perf >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{g.perf >= 0 ? '+' : ''}{fmtCurrency(g.perf)}</div>
+                          {g.perf !== 0 && <div className={`text-xs ${g.perf >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>{g.perf >= 0 ? '+' : ''}{fmtCurrency(g.perf)}</div>}
                         </div>
                       </button>
                       {!isCollapsed && g.positions.length > 0 && (

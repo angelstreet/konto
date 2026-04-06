@@ -1028,12 +1028,24 @@ router.get('/api/dashboard', async (c) => {
   // Convert crypto balances to EUR for the dashboard (cached 5min)
   const eurPrices = await getCryptoEurPrices();
 
+  const FIAT_CURRENCIES = new Set(['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'JPY', 'XOF']);
   const accountsByType: Record<string, any[]> = { checking: [], savings: [], investment: [], loan: [] };
   for (const a of accounts) {
     const type = a.type || 'checking';
     if (!accountsByType[type]) accountsByType[type] = [];
     const cur = a.currency || 'EUR';
-    const balanceEur = (cur !== 'EUR' && eurPrices[cur]) ? (a.balance || 0) * eurPrices[cur] : (a.balance || 0);
+    let balanceEur: number;
+    if (a.balance_native != null && a.balance_native > 0) {
+      // Use Coinbase portfolio EUR value when available
+      balanceEur = a.balance_native;
+    } else if (FIAT_CURRENCIES.has(cur)) {
+      balanceEur = a.balance || 0;
+    } else if (eurPrices[cur]) {
+      balanceEur = (a.balance || 0) * eurPrices[cur];
+    } else {
+      // Unknown crypto without price data — don't count as EUR
+      balanceEur = 0;
+    }
     accountsByType[type].push({ id: a.id, name: a.custom_name || a.name, balance: balanceEur, type, subtype: a.subtype || null, currency: 'EUR' });
   }
 
