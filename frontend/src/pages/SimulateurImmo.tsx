@@ -208,8 +208,10 @@ export default function SimulateurImmo() {
   const netYield = totalProject > 0 ? ((monthlyRent * 12 - totalMonthlyCharges * 12) / totalProject) * 100 : 0;
 
   const viability: 'VIABLE' | 'ATTENTION' | 'NON_VIABLE' =
-    (newDebtRatio < 33 && cashflow >= 0) || (grossYield >= 5 && cashflow >= 0) ? 'VIABLE' :
-    newDebtRatio <= 35 || (grossYield >= 5 && cashflow >= -100) ? 'ATTENTION' : 'NON_VIABLE';
+    grossYield >= 5 && cashflow >= 0 ? 'VIABLE' :
+    newDebtRatio < 33 && cashflow >= 0 ? 'VIABLE' :
+    newDebtRatio <= 35 ? 'ATTENTION' : 'NON_VIABLE';
+  const debtWarning = viability === 'VIABLE' && newDebtRatio > 35;
 
   // --- Banker's scoring ---
   const resteAVivre = totalIncome - (totalDebt + totalMonthlyPayment) - totalMonthlyCharges;
@@ -617,6 +619,9 @@ ${rentEstimate ? `<p style="font-size:12px;color:#888">Loyer estimé: ${fmt(rent
         {/* Verdict */}
         <div className={`rounded-xl border p-4 text-center mb-4 ${viabilityBg[viability]}`}>
           <p className={`text-2xl font-bold ${viabilityColor[viability]}`}>{viabilityLabel[viability]}</p>
+          {debtWarning && (
+            <p className="text-xs text-amber-400 mt-1">Attention : taux d'endettement à {pct(newDebtRatio)} (seuil banque : 35%)</p>
+          )}
         </div>
 
         {/* Key metrics */}
