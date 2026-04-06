@@ -378,7 +378,7 @@ export default function LoansDashboard() {
                       <th className="text-left px-4 py-3">{t('label') || 'Nom'}</th>
                       <th className="text-right px-4 py-3">{t('loan_total_repaid') || 'Total remboursé'}</th>
                       <th className="text-right px-4 py-3">{t('interest_rate') || "Taux d'intérêt"}</th>
-                      <th className="text-right px-4 py-3">Assurance</th>
+                      <th className="text-right px-4 py-3">Assurance /m</th>
                       <th className="text-right px-4 py-3">{t('loan_monthly') || 'Mensualité'}</th>
                       <th className="text-right px-4 py-3">{t('loan_remaining_principal') || 'Restant dû'}</th>
                       <th className="text-right px-4 py-3">...</th>
@@ -402,13 +402,7 @@ export default function LoansDashboard() {
                         </td>
                         <td className="px-4 py-3 text-right">{loan.repaid_pct != null ? `${Math.round(loan.repaid_pct)} %` : '-'}</td>
                         <td className="px-4 py-3 text-right">{loan.interest_rate != null ? `${loan.interest_rate} %` : '-'}</td>
-                        <td className="px-4 py-3 text-right">{loan.monthly_breakdown.insurance && loan.remaining ? (() => {
-                          const ins = loan.monthly_breakdown.insurance;
-                          const principal = loan.principal_amount || loan.remaining;
-                          // If value < 5, it's likely already a rate (%), not a monthly € amount
-                          const rate = ins < 5 ? ins : (ins * 12) / principal * 100;
-                          return `${rate.toFixed(2)} %`;
-                        })() : '-'}</td>
+                        <td className="px-4 py-3 text-right">{loan.monthly_breakdown.insurance ? fc(loan.monthly_breakdown.insurance) : '-'}</td>
                         <td className="px-4 py-3 text-right">{loan.monthly_payment != null ? fc(loan.monthly_payment) : '-'}</td>
                         <td className="px-4 py-3 text-right">{fc(loan.remaining)}</td>
                         <td className="px-4 py-3 text-right">
