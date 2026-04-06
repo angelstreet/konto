@@ -348,14 +348,24 @@ router.post('/api/accounts/:id/sync-blockchain', async (c) => {
   }
 });
 
-// ========== CRYPTO PRICES ==========
+// ========== CRYPTO PRICES (cached 5 min) ==========
+const priceCache = new Map<string, { data: any; ts: number }>();
+const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 router.get('/api/crypto/prices', async (c) => {
   const ids = c.req.query('ids') || 'bitcoin,ethereum,solana,ripple,matic-network,binancecoin,avalanche-2';
+  const cached = priceCache.get(ids);
+  if (cached && Date.now() - cached.ts < PRICE_CACHE_TTL) {
+    return c.json(cached.data);
+  }
   try {
     const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=eur,usd&include_24hr_change=true`);
     const data = await res.json();
+    priceCache.set(ids, { data, ts: Date.now() });
     return c.json(data);
   } catch (err: any) {
+    // Return stale cache if available
+    if (cached) return c.json(cached.data);
     return c.json({ error: err.message }, 500);
   }
 });
@@ -754,15 +764,23 @@ router.post('/api/coinbase/connect-apikey', async (c) => {
     args: [userId, encrypt(body.apiKey), encrypt(body.apiSecret)],
   });
 
-  // Sync accounts immediately
+  // Sync accounts immediately (paginate to get all)
   try {
-    const accData = await fetchCoinbaseWithApiKey(body.apiKey, body.apiSecret, '/v2/accounts?limit=100') as any;
-    const accounts = (accData.data || []).filter((a: any) => parseFloat(a.balance?.amount || '0') !== 0);
+    let allCoinbaseAccounts: any[] = [];
+    let nextPath: string | null = '/v2/accounts?limit=100';
+    while (nextPath) {
+      const page = await fetchCoinbaseWithApiKey(body.apiKey, body.apiSecret, nextPath) as any;
+      allCoinbaseAccounts.push(...(page.data || []));
+      nextPath = page.pagination?.next_uri || null;
+    }
+    const accounts = allCoinbaseAccounts.filter((a: any) => parseFloat(a.balance?.amount || '0') !== 0);
     const syncedAccounts: any[] = [];
     for (const acc of accounts) {
       const balance = parseFloat(acc.balance?.amount || '0');
       const currency = acc.balance?.currency || acc.currency?.code || 'USD';
-      const name = acc.name || `${currency} Wallet`;
+      // Clean wallet name: "PEPE Wallet" → "PEPE", "Portefeuille en XRP" → "XRP"
+      const rawName = acc.name || currency;
+      const name = rawName.replace(/\s*Wallet$/i, '').replace(/^Portefeuille en\s*/i, '').replace(/\s*staké$/i, '').trim() || currency;
       const now = new Date().toISOString();
       const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
       let dbId: number;

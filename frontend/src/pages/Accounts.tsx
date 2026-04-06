@@ -1201,13 +1201,12 @@ export default function Accounts() {
             const providerLabel: Record<string, string> = { coinbase: '🪙 Coinbase', binance: '🟡 Binance' };
 
             const groupCards = Object.entries(grouped).map(([provider, rawAccs]) => {
-              // Filter zero-balance wallets and sort by value descending
+              // Filter zero-balance wallets, sort alphabetically by currency
               const accs = rawAccs
                 .filter(a => (a.balance || 0) !== 0)
-                .sort((a, b) => convertToDisplay(Math.abs(b.balance || 0), b.currency || 'EUR') - convertToDisplay(Math.abs(a.balance || 0), a.currency || 'EUR'));
+                .sort((a, b) => (a.currency || '').localeCompare(b.currency || ''));
               if (accs.length === 0) return null;
               const expanded = expandedGroups.has(provider);
-              const total = accs.reduce((s, a) => s + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0);
               return (
                 <div key={`group-${provider}`} className="bg-surface rounded-xl border border-border overflow-hidden">
                   <button
@@ -1217,11 +1216,8 @@ export default function Accounts() {
                     <div className="flex items-center gap-2">
                       {expanded ? <ChevronDown size={16} className="text-muted" /> : <ChevronRight size={16} className="text-muted" />}
                       <span className="font-medium text-sm sm:text-base">{providerLabel[provider] || provider}</span>
-                      <span className="text-xs text-muted">{accs.length} wallet{accs.length > 1 ? 's' : ''}</span>
+                      <span className="text-xs text-muted">{accs.length} token{accs.length > 1 ? 's' : ''}</span>
                     </div>
-                    <span className="text-sm sm:text-base font-semibold text-accent-400">
-                      {allBalancesHidden ? <span className="amount-masked">{formatBalance(total)}</span> : formatBalance(total)}
-                    </span>
                   </button>
                   {expanded && (
                     <div className="border-t border-border divide-y divide-border">
