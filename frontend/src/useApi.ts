@@ -2,7 +2,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 
 const CACHE_KEY = 'konto_api_cache';
+const CACHE_TTL = 30_000; // 30 seconds — skip refetch if data is fresh
 const cache = new Map<string, any>();
+const cacheTimes = new Map<string, number>(); // url → timestamp of last fetch
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 // Restore cache from sessionStorage on load (stale-while-revalidate)
@@ -11,6 +13,7 @@ try {
   if (stored) {
     const entries = JSON.parse(stored) as [string, any][];
     for (const [k, v] of entries) cache.set(k, v);
+    // Restored data is stale — don't set cacheTimes so it will refetch
   }
 } catch {}
 
@@ -49,14 +52,20 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
   const getTokenRef = useRef(getToken);
   getTokenRef.current = getToken;
 
-  const fetchData = useCallback(() => {
+  const fetchData = useCallback((force?: boolean) => {
     if (!url) return;
+    // Skip refetch if data is fresh (within TTL) unless forced
+    if (!force) {
+      const lastFetch = cacheTimes.get(url);
+      if (lastFetch && Date.now() - lastFetch < CACHE_TTL && cache.has(url)) return;
+    }
     if (!cache.has(url)) setLoading(true);
     getAuthHeaders(getTokenRef.current)
       .then(headers => fetch(url, { headers }))
       .then(r => { if (!r.ok) throw new Error(`API ${r.status}`); return r.json(); })
       .then(d => {
         cache.set(url, d);
+        cacheTimes.set(url, Date.now());
         persistCache();
         if (urlRef.current === url) setData(d);
       })
@@ -83,7 +92,7 @@ export function useApi<T>(url: string): { data: T | null; loading: boolean; refe
     setData(d);
   }, [url]);
 
-  return { data, loading, refetch: fetchData, setData: updateData };
+  return { data, loading, refetch: () => fetchData(true), setData: updateData };
 }
 
 /** Authenticated fetch helper for non-hook contexts */
@@ -123,10 +132,12 @@ export function useAuthFetch() {
 
 export function invalidateApi(url: string) {
   cache.delete(url);
+  cacheTimes.delete(url);
   persistCache();
 }
 
 export function invalidateAllApi() {
   cache.clear();
+  cacheTimes.clear();
   persistCache();
 }

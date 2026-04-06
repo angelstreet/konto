@@ -1,5 +1,7 @@
 import { API } from '../../config';
 import { useAuthFetch } from '../../useApi';
+import { useFilter } from '../../FilterContext';
+import ScopeSelect from '../ScopeSelect';
 import { useEffect, useMemo, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { ChevronDown } from 'lucide-react';
@@ -72,6 +74,7 @@ type Props = {
 
 export default function AssetClassShell({ title, accountFilter, emptyHint }: Props) {
   const authFetch = useAuthFetch();
+  const { scope, appendScope } = useFilter();
   const [isMobile, setIsMobile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -100,9 +103,9 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
       setError(null);
       try {
         const [accRes, invRes, txRes, pricesRes] = await Promise.all([
-          authFetch(`${API}/bank/accounts`),
-          authFetch(`${API}/investments`),
-          authFetch(`${API}/transactions?limit=2000&offset=0`),
+          authFetch(appendScope(`${API}/bank/accounts`)),
+          authFetch(appendScope(`${API}/investments`)),
+          authFetch(appendScope(`${API}/transactions?limit=2000&offset=0`)),
           authFetch(`${API}/crypto/prices`).catch(() => null),
         ]);
 
@@ -151,7 +154,7 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
 
     load();
     return () => { mounted = false; };
-  }, [authFetch, accountFilter]);
+  }, [authFetch, accountFilter, scope, appendScope]);
 
   const accountById = useMemo(() => {
     const m = new Map<number, AccountRow>();
@@ -239,8 +242,9 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
   return (
     <div className="space-y-4 max-w-7xl overflow-x-hidden">
       <div className="flex items-center justify-between gap-2 mb-2 min-h-10">
-        <div className="flex items-center gap-1 min-w-0">
+        <div className="flex items-center gap-2 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{title}</h1>
+          <ScopeSelect />
         </div>
         {isMobile ? (
           <div className="px-3 py-1.5 text-xs rounded-md border border-border bg-surface text-muted whitespace-nowrap">
