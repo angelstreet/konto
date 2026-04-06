@@ -686,7 +686,7 @@ export default function Assets() {
                       <button onClick={e => { e.stopPropagation(); startEdit(a); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-white bg-white/5 hover:bg-white/10 transition-colors"><Pencil size={12} /> {t('edit')}</button>
                       <button onClick={e => { e.stopPropagation(); deleteAsset(a.id); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-red-400 bg-white/5 hover:bg-red-500/10 transition-colors"><Trash2 size={12} /> {t('delete')}</button>
                     </div>
-                    {a.purchase_date && <p className="text-xs text-muted mb-2">{t('purchased')} {a.purchase_date}</p>}
+                    {a.purchase_date && <p className="text-xs text-muted mb-2">{t('purchased')} {new Date(a.purchase_date).toLocaleDateString('fr-FR')}</p>}
                     <div className="grid grid-cols-2 gap-3 text-sm">
                       {a.purchase_price != null && (
                         <div>

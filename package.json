@@ -26,6 +26,9 @@
   },
   "type": "module",
   "dependencies": {
-    "hono": "^4.12.2"
+    "@types/leaflet": "^1.9.21",
+    "hono": "^4.12.2",
+    "leaflet": "^1.9.4",
+    "react-leaflet": "^5.0.0"
   }
 }
