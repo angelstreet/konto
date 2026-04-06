@@ -18,7 +18,7 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI,
          classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
-         calcInvestmentDiff, calcInvDiff, formatCurrencyFR, escapeHtml } from '../shared.js';
+         calcInvestmentDiff, calcInvDiff, formatCurrencyFR, escapeHtml, getCryptoEurPrices } from '../shared.js';
 
 
 const router = new Hono();
@@ -348,57 +348,13 @@ router.post('/api/accounts/:id/sync-blockchain', async (c) => {
   }
 });
 
-// ========== CRYPTO PRICES (cached 5 min, DB-backed for Vercel) ==========
-const priceCache = new Map<string, { data: any; ts: number }>();
-const PRICE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-async function getDbPriceCache(ids: string): Promise<{ data: any; ts: number } | null> {
-  try {
-    const row = await db.execute({ sql: "SELECT data, updated_at FROM kv_cache WHERE key = ?", args: [`crypto_prices:${ids}`] });
-    if (row.rows.length === 0) return null;
-    const r = row.rows[0] as any;
-    return { data: JSON.parse(r.data), ts: new Date(r.updated_at).getTime() };
-  } catch { return null; }
-}
-
-async function setDbPriceCache(ids: string, data: any) {
-  try {
-    await db.execute({
-      sql: "INSERT OR REPLACE INTO kv_cache (key, data, updated_at) VALUES (?, ?, ?)",
-      args: [`crypto_prices:${ids}`, JSON.stringify(data), new Date().toISOString()],
-    });
-  } catch {}
-}
+// ========== CRYPTO PRICES — uses shared getCryptoEurPrices() ==========
+// Single source of truth for both /api/crypto/prices and /api/dashboard
+// Returns { BTC: 84000, ETH: 3200, ... } (currency code → EUR price)
 
 router.get('/api/crypto/prices', async (c) => {
-  const ids = c.req.query('ids') || 'bitcoin,ethereum,solana,ripple,matic-network,binancecoin,avalanche-2';
-
-  // Check in-memory cache first (long-running servers)
-  const memCached = priceCache.get(ids);
-  if (memCached && Date.now() - memCached.ts < PRICE_CACHE_TTL) {
-    return c.json(memCached.data);
-  }
-
-  // Check DB cache (survives Vercel cold starts)
-  const dbCached = await getDbPriceCache(ids);
-  if (dbCached && Date.now() - dbCached.ts < PRICE_CACHE_TTL) {
-    priceCache.set(ids, dbCached);
-    return c.json(dbCached.data);
-  }
-
-  try {
-    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=eur,usd&include_24hr_change=true`);
-    if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
-    const data = await res.json();
-    priceCache.set(ids, { data, ts: Date.now() });
-    setDbPriceCache(ids, data);
-    return c.json(data);
-  } catch (err: any) {
-    // Return stale cache (DB or memory) if available
-    if (dbCached) return c.json(dbCached.data);
-    if (memCached) return c.json(memCached.data);
-    return c.json({ error: err.message }, 500);
-  }
+  const prices = await getCryptoEurPrices();
+  return c.json(prices);
 });
 
 

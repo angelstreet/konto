@@ -124,16 +124,11 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
         if (!invRes.ok) throw new Error(invJson?.error || 'Failed loading investments');
         if (!txRes.ok) throw new Error(txJson?.error || 'Failed loading transactions');
 
-        // Build currency→EUR price map from CoinGecko response
-        // Response shape: { bitcoin: { eur: 84000 }, ethereum: { eur: 3200 }, ... }
-        const priceMap: Record<string, number> = {};
+        // Build currency→EUR price map
+        // Response shape: { BTC: 84000, ETH: 3200, ... }
+        let priceMap: Record<string, number> = {};
         if (pricesRes?.ok) {
-          const cgMap: Record<string, string> = { bitcoin: 'BTC', ethereum: 'ETH', solana: 'SOL', ripple: 'XRP', 'matic-network': 'POL', binancecoin: 'BNB', 'avalanche-2': 'AVAX' };
-          const pricesJson = await pricesRes.json();
-          for (const [cgId, data] of Object.entries(pricesJson as Record<string, any>)) {
-            const code = cgMap[cgId];
-            if (code && data?.eur) priceMap[code] = data.eur;
-          }
+          priceMap = await pricesRes.json();
         }
 
         const allAccounts = (accJson as AccountRow[]).filter(a => !a.hidden);
