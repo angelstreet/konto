@@ -32,6 +32,7 @@ interface BankAccount {
   subtype: string | null;
   connection_expired: number;
   sca_required: number;
+  balance_native: number | null;
 }
 
 function getRelativeTime(isoDate: string | null, t: (key: string, opts?: Record<string, unknown>) => string): { text: string; isStale: boolean } {
@@ -1205,12 +1206,13 @@ export default function Accounts() {
             const providerLabel: Record<string, string> = { coinbase: '🪙 Coinbase', binance: '🟡 Binance' };
 
             const groupCards = Object.entries(grouped).map(([provider, rawAccs]) => {
-              // Filter zero-balance wallets, sort alphabetically by currency
+              // Filter near-zero wallets, sort by EUR fiat value descending
               const accs = rawAccs
                 .filter(a => Math.abs(a.balance || 0) >= 0.01)
-                .sort((a, b) => (a.currency || '').localeCompare(b.currency || ''));
+                .sort((a, b) => (b.balance_native || 0) - (a.balance_native || 0));
               if (accs.length === 0) return null;
               const expanded = expandedGroups.has(provider);
+              const totalEur = accs.reduce((s, a) => s + (a.balance_native || 0), 0);
               return (
                 <div key={`group-${provider}`} className="bg-surface rounded-xl border border-border overflow-hidden">
                   <button
@@ -1222,6 +1224,11 @@ export default function Accounts() {
                       <span className="font-medium text-sm sm:text-base">{providerLabel[provider] || provider}</span>
                       <span className="text-xs text-muted">{accs.length} token{accs.length > 1 ? 's' : ''}</span>
                     </div>
+                    {totalEur > 0 && (
+                      <span className="text-sm sm:text-base font-semibold text-accent-400">
+                        {allBalancesHidden ? <span className="amount-masked">{formatBalance(totalEur)}</span> : formatBalance(totalEur)}
+                      </span>
+                    )}
                   </button>
                   {expanded && (
                     <div className="border-t border-border divide-y divide-border">
@@ -1235,9 +1242,16 @@ export default function Accounts() {
                               <span className="text-sm truncate">{cleanCryptoName(acc.custom_name || acc.name)}</span>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
-                              <span className="text-sm font-medium text-accent-400 whitespace-nowrap">
-                                {acc.hidden || allBalancesHidden ? <span className="amount-masked">{formatBalance(acc.balance, acc.currency)}</span> : formatBalance(acc.balance, acc.currency)}
-                              </span>
+                              <div className="text-right">
+                                {(acc.balance_native ?? 0) > 0 && (
+                                  <span className="text-sm font-medium text-accent-400 whitespace-nowrap">
+                                    {acc.hidden || allBalancesHidden ? <span className="amount-masked">{formatBalance(acc.balance_native!)}</span> : formatBalance(acc.balance_native!)}
+                                  </span>
+                                )}
+                                <span className="text-[10px] text-muted whitespace-nowrap ml-1">
+                                  {acc.hidden || allBalancesHidden ? <span className="amount-masked">{formatBalance(acc.balance, acc.currency)}</span> : formatBalance(acc.balance, acc.currency)}
+                                </span>
+                              </div>
                               <div className="hidden sm:flex items-center gap-0">
                                 <button onClick={() => toggleHidden(acc)} className="text-muted hover:text-white transition-colors p-1" title={acc.hidden ? t('show') : t('hide')}>
                                   {acc.hidden ? <EyeOff size={12} /> : <Eye size={12} />}

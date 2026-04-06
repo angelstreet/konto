@@ -766,6 +766,21 @@ router.post('/api/coinbase/connect-apikey', async (c) => {
 
   // Sync accounts immediately (paginate to get all)
   try {
+    // Fetch v3 portfolio breakdown for EUR fiat values per asset
+    let fiatByAsset: Record<string, number> = {};
+    let portfolioTotal = 0;
+    try {
+      const userRes = await fetchCoinbaseWithApiKey(body.apiKey, body.apiSecret, '/v2/user') as any;
+      const portfolioId = userRes.data?.id;
+      if (portfolioId) {
+        const breakdown = await fetchCoinbaseWithApiKey(body.apiKey, body.apiSecret, `/api/v3/brokerage/portfolios/${portfolioId}?currency=EUR`) as any;
+        portfolioTotal = parseFloat(breakdown.breakdown?.portfolio_balances?.total_balance?.value || '0');
+        for (const pos of breakdown.breakdown?.spot_positions || []) {
+          fiatByAsset[pos.asset] = pos.total_balance_fiat || 0;
+        }
+      }
+    } catch { /* portfolio fetch is optional */ }
+
     let allCoinbaseAccounts: any[] = [];
     let nextPath: string | null = '/v2/accounts?limit=100';
     while (nextPath) {
@@ -778,6 +793,7 @@ router.post('/api/coinbase/connect-apikey', async (c) => {
     for (const acc of accounts) {
       const balance = parseFloat(acc.balance?.amount || '0');
       const currency = acc.balance?.currency || acc.currency?.code || 'USD';
+      const balanceNative = fiatByAsset[currency] || null;
       // Clean wallet name: "PEPE Wallet" → "PEPE", "Portefeuille en XRP" → "XRP"
       const rawName = acc.name || currency;
       const name = rawName.replace(/\s*Wallet$/i, '').replace(/^Portefeuille en\s*/i, '').replace(/\s*staké$/i, '').trim() || currency;
@@ -786,17 +802,17 @@ router.post('/api/coinbase/connect-apikey', async (c) => {
       let dbId: number;
       if (existing.rows.length === 0) {
         const ins = await db.execute({
-          sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
-          args: [userId, null, acc.id, name, balance, currency, now],
+          sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync, balance_native) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?, ?)`,
+          args: [userId, null, acc.id, name, balance, currency, now, balanceNative],
         });
         dbId = Number(ins.lastInsertRowid);
       } else {
         dbId = (existing.rows[0] as any).id;
-        await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, last_sync = ? WHERE id = ?', args: [balance, now, dbId] });
+        await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, last_sync = ?, balance_native = ?, name = ? WHERE id = ?', args: [balance, now, balanceNative, name, dbId] });
       }
-      syncedAccounts.push({ id: dbId, name, bank_name: 'Coinbase', balance, currency, type: 'investment', subtype: 'crypto', provider: 'coinbase', usage: 'personal', last_sync: now });
+      syncedAccounts.push({ id: dbId, name, bank_name: 'Coinbase', balance, currency, balance_native: balanceNative, type: 'investment', subtype: 'crypto', provider: 'coinbase', usage: 'personal', last_sync: now });
     }
-    return c.json({ success: true, synced: syncedAccounts.length, accounts: syncedAccounts });
+    return c.json({ success: true, synced: syncedAccounts.length, accounts: syncedAccounts, total_eur: portfolioTotal });
   } catch (e: any) {
     return c.json({ success: true, synced: 0, warning: e.message });
   }
