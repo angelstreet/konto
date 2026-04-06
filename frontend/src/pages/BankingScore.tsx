@@ -14,6 +14,8 @@ type AccountRow = {
   provider_bank_name?: string | null;
   provider?: string | null;
   balance: number;
+  balance_native?: number | null;
+  currency?: string | null;
   type: string;
   hidden?: number;
 };
@@ -22,6 +24,8 @@ type TxRow = {
   bank_account_id: number;
   amount: number;
   date: string;
+  category?: string | null;
+  label?: string | null;
 };
 
 type BankMetric = {
@@ -46,7 +50,7 @@ function clamp(v: number, min: number, max: number) {
 }
 
 function fmtCurrency(v: number) {
-  return new Intl.NumberFormat('fr-FR', {
+  return new Intl.NumberFormat('de-DE', {
     style: 'currency',
     currency: 'EUR',
     maximumFractionDigits: 0,
@@ -228,9 +232,23 @@ export default function BankingScore() {
           if (a.type === 'loan') {
             m.loans += Math.abs(Math.min(0, Number(a.balance || 0)));
           } else {
-            m.assets += Math.max(0, Number(a.balance || 0));
+            const cur = a.currency || 'EUR';
+            const FIAT = ['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'JPY', 'XOF'];
+            if (FIAT.includes(cur)) {
+              m.assets += Math.max(0, Number(a.balance || 0));
+            } else if (a.balance_native && a.balance_native > 0) {
+              m.assets += a.balance_native;
+            }
           }
         }
+
+        // Exclude internal transfers from income/charges
+        const TRANSFER_PATTERNS = /virement|transfer|interne|entre comptes|prelevement|prlvt|vir sepa recu.*(?:livret|epargne|ldd|pea)/i;
+        const isTransfer = (t: TxRow) => {
+          const cat = (t.category || '').toLowerCase();
+          if (cat === 'transfer' || cat === 'virement' || cat === 'internal') return true;
+          return TRANSFER_PATTERNS.test(t.label || '');
+        };
 
         for (const t of recentTx) {
           const a = accountMap.get(Number(t.bank_account_id));
@@ -239,12 +257,14 @@ export default function BankingScore() {
           if (!byBank.has(identity.key)) continue;
           const m = byBank.get(identity.key)!;
           const amt = Number(t.amount || 0);
-          if (amt > 0) m.incomeIn += amt;
-          else m.chargesOut += Math.abs(amt);
 
           if (a.type === 'loan' && amt < 0) {
             m.debtService += Math.abs(amt);
           }
+
+          if (isTransfer(t)) continue;
+          if (amt > 0) m.incomeIn += amt;
+          else m.chargesOut += Math.abs(amt);
         }
 
         const prevTx = txs.filter(t => {
@@ -255,6 +275,7 @@ export default function BankingScore() {
         for (const t of prevTx) {
           const a = accountMap.get(Number(t.bank_account_id));
           if (!a) continue;
+          if (isTransfer(t)) continue;
           const identity = bankIdentity(a);
           if (!byBank.has(identity.key)) continue;
           const m = byBank.get(identity.key)!;
