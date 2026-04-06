@@ -4,7 +4,7 @@ import { useAuthFetch } from '../useApi';
 import { API } from '../config';
 import { generateVisualReport, CaptureProgress } from '../services/pdfExport';
 
-const LAST_REPORT_KEY = 'konto_last_report_url';
+const LAST_REPORT_KEY = 'konto_last_report_b64';
 const LAST_REPORT_DATE_KEY = 'konto_last_report_date';
 
 /** Create/update a DOM overlay that survives React unmounts */
@@ -45,16 +45,15 @@ export default function ExportPdfButton() {
       // Open in new tab
       const blob = new Blob([pdfBytes as unknown as BlobPart], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
-
-      // Save blob URL + date to localStorage
-      localStorage.setItem(LAST_REPORT_KEY, url);
-      localStorage.setItem(LAST_REPORT_DATE_KEY, new Date().toISOString());
-
       window.open(url, '_blank');
+
+      // Save PDF as base64 to localStorage so it survives page reloads
+      const base64 = btoa(String.fromCharCode(...pdfBytes));
+      try { localStorage.setItem(LAST_REPORT_KEY, base64); } catch { /* quota exceeded */ }
+      localStorage.setItem(LAST_REPORT_DATE_KEY, new Date().toISOString());
 
       // Also save to backend (skip if too large for Vercel's 4.5MB limit)
       if (pdfBytes.length < 3_500_000) {
-        const base64 = btoa(String.fromCharCode(...pdfBytes));
         authFetch(`${API}/export/visual-report`, {
           method: 'POST',
           body: JSON.stringify({ pdf: base64 }),
@@ -69,10 +68,12 @@ export default function ExportPdfButton() {
   };
 
   const handleOpenLast = async () => {
-    // Try localStorage blob URL first (same session)
-    const blobUrl = localStorage.getItem(LAST_REPORT_KEY);
-    if (blobUrl) {
-      window.open(blobUrl, '_blank');
+    // Rebuild blob from base64 stored in localStorage
+    const b64 = localStorage.getItem(LAST_REPORT_KEY);
+    if (b64) {
+      const bytes = Uint8Array.from(atob(b64), c => c.charCodeAt(0));
+      const blob = new Blob([bytes], { type: 'application/pdf' });
+      window.open(URL.createObjectURL(blob), '_blank');
       return;
     }
     // Fall back to backend
@@ -80,8 +81,7 @@ export default function ExportPdfButton() {
       const res = await authFetch(`${API}/export/visual-report`);
       if (!res.ok) return;
       const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
+      window.open(URL.createObjectURL(blob), '_blank');
     } catch {}
   };
 
