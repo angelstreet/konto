@@ -1207,7 +1207,7 @@ export default function Accounts() {
             const groupCards = Object.entries(grouped).map(([provider, rawAccs]) => {
               // Filter zero-balance wallets, sort alphabetically by currency
               const accs = rawAccs
-                .filter(a => (a.balance || 0) !== 0)
+                .filter(a => Math.abs(a.balance || 0) >= 0.01)
                 .sort((a, b) => (a.currency || '').localeCompare(b.currency || ''));
               if (accs.length === 0) return null;
               const expanded = expandedGroups.has(provider);
