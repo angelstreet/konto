@@ -208,8 +208,8 @@ export default function SimulateurImmo() {
   const netYield = totalProject > 0 ? ((monthlyRent * 12 - totalMonthlyCharges * 12) / totalProject) * 100 : 0;
 
   const viability: 'VIABLE' | 'ATTENTION' | 'NON_VIABLE' =
-    newDebtRatio < 33 && cashflow >= 0 ? 'VIABLE' :
-    newDebtRatio <= 35 ? 'ATTENTION' : 'NON_VIABLE';
+    (newDebtRatio < 33 && cashflow >= 0) || (grossYield >= 5 && cashflow >= 0) ? 'VIABLE' :
+    newDebtRatio <= 35 || (grossYield >= 5 && cashflow >= -100) ? 'ATTENTION' : 'NON_VIABLE';
 
   // --- Banker's scoring ---
   const resteAVivre = totalIncome - (totalDebt + totalMonthlyPayment) - totalMonthlyCharges;
@@ -465,19 +465,21 @@ ${rentEstimate ? `<p style="font-size:12px;color:#888">Loyer estimé: ${fmt(rent
           )}
 
           <div className="border-t border-border/50 pt-3">
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-sm text-muted">{t('immo_purchase_price')}</label>
-              <span className="text-sm font-bold text-accent-400">{fmt(purchasePrice)}</span>
-            </div>
-            <input type="range" min={30000} max={2000000} step={5000} value={purchasePrice} onChange={e => setPurchasePrice(+e.target.value)}
-              className="w-full accent-amber-500" />
-          </div>
           <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted block mb-1">{t('immo_purchase_price')}</label>
+              <input type="number" step={1000} value={purchasePrice} onChange={e => setPurchasePrice(+e.target.value)}
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
             <div>
               <label className="text-xs text-muted block mb-1">{t('immo_notary_fees')} (%)</label>
               <input type="number" step={0.5} value={notaryPct} onChange={e => setNotaryPct(+e.target.value)}
                 className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
+          </div>
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div className="flex items-center">
+              <span className="text-xs text-muted">Frais notaire: {fmt(notaryFees)}</span>
             </div>
             <div className="flex items-end pb-2">
               <span className="text-sm text-muted">= {fmt(notaryFees)}</span>
