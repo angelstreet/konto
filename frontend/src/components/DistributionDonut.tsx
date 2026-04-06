@@ -90,7 +90,7 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
 
       {view === 'donut' ? (
         <div className="flex flex-col sm:flex-row items-center gap-4">
-          <div className="w-44 h-44 relative flex-shrink-0" style={{ minWidth: 176, minHeight: 176 }}>
+          <div className="w-48 h-48 relative flex-shrink-0" style={{ minWidth: 192, minHeight: 192 }}>
             <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
               <PieChart>
                 <Pie
@@ -147,7 +147,7 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
         </div>
       ) : (
         <div>
-          <div style={{ width: '100%', height: 220 }}>
+          <div style={{ width: '100%', height: 240 }}>
             <ResponsiveContainer width="100%" height="100%">
               <Treemap
                 data={treemapData}
