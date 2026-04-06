@@ -308,3 +308,25 @@ export function formatCurrencyFR(v: number) {
 export function escapeHtml(s: string) {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
+
+// --- Crypto EUR prices (cached 5 min) ---
+const CG_MAP: Record<string, string> = { BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple', POL: 'matic-network', BNB: 'binancecoin', AVAX: 'avalanche-2' };
+let _cryptoPriceCache: { prices: Record<string, number>; ts: number } | null = null;
+const CACHE_TTL = 5 * 60 * 1000; // 5 min
+
+export async function getCryptoEurPrices(): Promise<Record<string, number>> {
+  if (_cryptoPriceCache && Date.now() - _cryptoPriceCache.ts < CACHE_TTL) return _cryptoPriceCache.prices;
+  const ids = Object.values(CG_MAP).join(',');
+  try {
+    const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=eur`);
+    const data = await res.json() as Record<string, { eur?: number }>;
+    const prices: Record<string, number> = {};
+    for (const [code, cgId] of Object.entries(CG_MAP)) {
+      if (data[cgId]?.eur) prices[code] = data[cgId].eur;
+    }
+    _cryptoPriceCache = { prices, ts: Date.now() };
+    return prices;
+  } catch {
+    return _cryptoPriceCache?.prices || {};
+  }
+}

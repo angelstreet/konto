@@ -5,7 +5,7 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI,
          classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
-         calcInvestmentDiff, calcInvDiff } from '../shared.js';
+         calcInvestmentDiff, calcInvDiff, getCryptoEurPrices } from '../shared.js';
 import { estimatePropertyPrice } from '../services/propertyEstimation.js';
 
 const router = new Hono();
@@ -1025,22 +1025,8 @@ router.get('/api/dashboard', async (c) => {
   const companiesResult = await db.execute({ sql: 'SELECT COUNT(*) as count FROM companies WHERE user_id = ?', args: [userId] });
   const companyCount = (companiesResult.rows[0] as any)?.count || 0;
 
-  // Convert crypto balances to EUR for the dashboard
-  const cgMap: Record<string, string> = { BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple', POL: 'matic-network', BNB: 'binancecoin', AVAX: 'avalanche-2' };
-  const cryptoCurrencies = [...new Set(accounts.filter(a => a.subtype === 'crypto' && a.currency && a.currency !== 'EUR').map(a => a.currency as string))];
-  let eurPrices: Record<string, number> = {};
-  if (cryptoCurrencies.length > 0) {
-    const ids = cryptoCurrencies.map(c => cgMap[c]).filter(Boolean);
-    if (ids.length > 0) {
-      try {
-        const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=eur`);
-        const prices = await res.json() as Record<string, { eur?: number }>;
-        for (const [code, cgId] of Object.entries(cgMap)) {
-          if (prices[cgId]?.eur) eurPrices[code] = prices[cgId].eur;
-        }
-      } catch {}
-    }
-  }
+  // Convert crypto balances to EUR for the dashboard (cached 5min)
+  const eurPrices = await getCryptoEurPrices();
 
   const accountsByType: Record<string, any[]> = { checking: [], savings: [], investment: [], loan: [] };
   for (const a of accounts) {
