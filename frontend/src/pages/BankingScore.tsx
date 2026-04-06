@@ -46,7 +46,7 @@ function clamp(v: number, min: number, max: number) {
 }
 
 function fmtCurrency(v: number) {
-  return new Intl.NumberFormat('de-DE', {
+  return new Intl.NumberFormat('fr-FR', {
     style: 'currency',
     currency: 'EUR',
     maximumFractionDigits: 0,
