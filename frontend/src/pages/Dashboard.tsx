@@ -10,6 +10,7 @@ import { useAmountVisibility } from '../AmountVisibilityContext';
 import ScopeSelect from '../components/ScopeSelect';
 import PatrimoineChart from '../components/PatrimoineChart';
 import DistributionDonut from '../components/DistributionDonut';
+import ExportPdfButton from '../components/ExportPdfButton';
 
 
 interface DashboardAccount {
@@ -194,6 +195,7 @@ export default function Dashboard() {
           >
             {showNet ? 'Net' : 'Brut'}
           </button>
+          <ExportPdfButton />
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           <ScopeSelect />

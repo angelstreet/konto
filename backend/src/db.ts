@@ -565,7 +565,14 @@ export async function migrateDatabase() {
       phone TEXT,
       address TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
-    )
+    );
+
+    CREATE TABLE IF NOT EXISTS visual_reports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      pdf_data BLOB NOT NULL,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Check if PII still lives in users table (real emails, not placeholders)
