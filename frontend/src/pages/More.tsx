@@ -22,6 +22,7 @@ import {
   User,
   Briefcase,
   Lock,
+  Building2,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -88,6 +89,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/import', icon: Upload, labelKey: 'nav_import', disabled: true },
       { path: '/reconciliation', icon: GitCompareArrows, labelKey: 'nav_reconciliation' },
       { path: '/simulators', icon: Calculator, labelKey: 'nav_simulators' },
+      { path: '/simulateur-immo', icon: Building2, labelKey: 'nav_simulateur_immo' },
       { path: '/banking-score', icon: Landmark, labelKey: 'nav_banking_score' },
     ],
   },

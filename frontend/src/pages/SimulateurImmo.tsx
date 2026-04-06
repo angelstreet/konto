@@ -213,6 +213,8 @@ export default function SimulateurImmo() {
 <div class="footer">Document généré par Konto — à titre indicatif uniquement</div>
 </body></html>`;
 
+    localStorage.setItem('konto_immo_last_export', html);
+    localStorage.setItem('konto_immo_last_export_date', new Date().toISOString());
     const win = window.open('', '_blank');
     if (win) {
       win.document.write(html);
@@ -220,6 +222,16 @@ export default function SimulateurImmo() {
       setTimeout(() => win.print(), 300);
     }
   };
+
+  const viewLastExport = () => {
+    const html = localStorage.getItem('konto_immo_last_export');
+    if (!html) return;
+    const win = window.open('', '_blank');
+    if (win) { win.document.write(html); win.document.close(); }
+  };
+
+  const lastExportDate = localStorage.getItem('konto_immo_last_export_date');
+  const hasLastExport = !!localStorage.getItem('konto_immo_last_export');
 
   if (!loaded) {
     return <div className="text-sm text-muted py-8 text-center">Chargement…</div>;
@@ -235,9 +247,16 @@ export default function SimulateurImmo() {
           </button>
           <h1 className="text-xl font-semibold whitespace-nowrap">{t('tool_simulateur_immo')}</h1>
         </div>
-        <button onClick={exportForBank} className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 transition-colors px-3 py-1.5 border border-accent-500/30 rounded-lg">
-          <Printer size={14} /> {t('immo_export_pdf')}
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {hasLastExport && (
+            <button onClick={viewLastExport} className="text-xs text-muted hover:text-white transition-colors px-2 py-1.5 whitespace-nowrap">
+              {lastExportDate ? new Date(lastExportDate).toLocaleDateString('fr-FR') : 'Dernier'}
+            </button>
+          )}
+          <button onClick={exportForBank} className="flex items-center gap-1.5 text-xs text-accent-400 hover:text-accent-300 transition-colors px-3 py-1.5 border border-accent-500/30 rounded-lg whitespace-nowrap">
+            <Printer size={14} /> {t('immo_export_pdf')}
+          </button>
+        </div>
       </div>
 
       {/* Section 1: Ma situation actuelle */}

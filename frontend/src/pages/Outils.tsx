@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
-  Calculator, FileSearch, CloudUpload, Upload, Settings, ArrowLeft,
+  Calculator, FileSearch, CloudUpload, Upload, Settings, ArrowLeft, Building2,
 } from 'lucide-react';
 import TaxEstimation from '../components/TaxEstimation';
 import BorrowingCapacity from '../components/BorrowingCapacity';
@@ -16,6 +16,7 @@ interface Tool {
 const tools: Tool[] = [
   { icon: '📊', lucideIcon: FileSearch, labelKey: 'nav_rapport_patrimoine', path: '/rapport-patrimoine' },
   { icon: '🧮', lucideIcon: Calculator, labelKey: 'tool_credit_simulator', path: '/simulators' },
+  { icon: '🏠', lucideIcon: Building2, labelKey: 'tool_simulateur_immo', path: '/simulateur-immo' },
   { icon: '📄', lucideIcon: FileSearch, labelKey: 'tool_invoice_scanner', path: '/reconciliation' },
   { icon: '☁️', lucideIcon: CloudUpload, labelKey: 'tool_sync_drive', path: '/settings' },
   { icon: '📤', lucideIcon: Upload, labelKey: 'tool_export_data', path: '/rapport-patrimoine' },

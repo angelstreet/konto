@@ -42,6 +42,7 @@ import AnalysisSynthesis from './pages/AnalysisSynthesis';
 import LoansDashboard from './pages/LoansDashboard';
 import LoanDetail from './pages/LoanDetail';
 import Fiscal from './pages/Fiscal';
+import SimulateurImmo from './pages/SimulateurImmo';
 
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -104,6 +105,7 @@ function AppRoutes() {
         <Route path="/property-roi" element={<PropertyROI />} />
         <Route path="/simulators" element={<CreditSimulator />} />
         <Route path="/simulators/patrimoine" element={<PatrimoineSimulator />} />
+        <Route path="/simulateur-immo" element={<SimulateurImmo />} />
         <Route path="/outils" element={<Outils />} />
         <Route path="/more" element={<More />} />
         <Route path="/privacy" element={<Privacy />} />

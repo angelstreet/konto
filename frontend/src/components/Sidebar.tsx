@@ -128,6 +128,7 @@ const navGroups: NavGroup[] = [
       { kind: 'leaf', path: '/rapport-patrimoine', icon: FileSpreadsheet, labelKey: 'nav_rapport_patrimoine' },
       { kind: 'leaf', path: '/reconciliation', icon: GitCompareArrows, labelKey: 'nav_reconciliation' },
       { kind: 'leaf', path: '/simulators', icon: Calculator, labelKey: 'nav_simulators' },
+      { kind: 'leaf', path: '/simulateur-immo', icon: Building2, labelKey: 'nav_simulateur_immo' },
       { kind: 'leaf', path: '/banking-score', icon: Landmark, labelKey: 'nav_banking_score' },
     ],
   },

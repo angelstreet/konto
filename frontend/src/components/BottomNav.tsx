@@ -11,7 +11,7 @@ const mobileItems = [
   { path: 'more', icon: Menu, labelKey: 'more', isHamburger: true },
 ];
 
-const morePaths = ['/more', '/income', '/assets', '/loans', '/budget', '/analysis', '/cashflow', '/bilan', '/bilan-pro', '/reports', '/ledger', '/vat', '/fec-export', '/reconciliation', '/simulators', '/import', '/outils', '/settings', '/ranking', '/fiscal', '/crypto', '/actions-fonds', '/property-roi', '/banking-score', '/subscriptions', '/trends', '/rapport-patrimoine', '/privacy'];
+const morePaths = ['/more', '/income', '/assets', '/loans', '/budget', '/analysis', '/cashflow', '/bilan', '/bilan-pro', '/reports', '/ledger', '/vat', '/fec-export', '/reconciliation', '/simulators', '/simulateur-immo', '/import', '/outils', '/settings', '/ranking', '/fiscal', '/crypto', '/actions-fonds', '/property-roi', '/banking-score', '/subscriptions', '/trends', '/rapport-patrimoine', '/privacy'];
 
 const moreLinks = [
   { path: '/accounts', label: 'Accounts' },

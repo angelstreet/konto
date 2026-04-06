@@ -1,50 +1,81 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { FileText } from 'lucide-react';
 import { useAuthFetch } from '../useApi';
 import { API } from '../config';
 import { generateVisualReport, CaptureProgress } from '../services/pdfExport';
 
+const LAST_REPORT_KEY = 'konto_last_report_url';
+const LAST_REPORT_DATE_KEY = 'konto_last_report_date';
+
+/** Create/update a DOM overlay that survives React unmounts */
+function showOverlay(p: CaptureProgress) {
+  let el = document.getElementById('pdf-export-overlay');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'pdf-export-overlay';
+    el.className = 'fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center';
+    document.body.appendChild(el);
+  }
+  el.innerHTML = `
+    <div class="text-accent-400 text-lg font-semibold mb-4">Rapport</div>
+    <div class="w-64 h-1.5 bg-white/10 rounded-full overflow-hidden mb-3">
+      <div class="h-full bg-accent-500 transition-all duration-300" style="width:${(p.current / p.total) * 100}%"></div>
+    </div>
+    <div class="text-sm text-muted">${p.label}... (${p.current}/${p.total})</div>
+  `;
+}
+
+function hideOverlay() {
+  const el = document.getElementById('pdf-export-overlay');
+  if (el) el.remove();
+}
+
 export default function ExportPdfButton() {
   const authFetch = useAuthFetch();
   const [exporting, setExporting] = useState(false);
-  const [progress, setProgress] = useState<CaptureProgress | null>(null);
-  const [hasLastReport, setHasLastReport] = useState(false);
-
-  // Check if a previous report exists
-  useEffect(() => {
-    authFetch(`${API}/export/visual-report/check`)
-      .then(r => r.json())
-      .then(d => setHasLastReport(!!d.exists))
-      .catch(() => {});
-  }, [authFetch]);
+  const [lastReportDate] = useState<string | null>(
+    () => localStorage.getItem(LAST_REPORT_DATE_KEY)
+  );
 
   const handleExport = async () => {
     setExporting(true);
     try {
-      const pdfBytes = await generateVisualReport(setProgress);
+      const pdfBytes = await generateVisualReport(showOverlay);
 
       // Open in new tab
       const blob = new Blob([pdfBytes as unknown as BlobPart], { type: 'application/pdf' });
       const url = URL.createObjectURL(blob);
+
+      // Save blob URL + date to localStorage
+      localStorage.setItem(LAST_REPORT_KEY, url);
+      localStorage.setItem(LAST_REPORT_DATE_KEY, new Date().toISOString());
+
       window.open(url, '_blank');
 
-      // Save to backend (skip if too large for Vercel's 4.5MB limit)
+      // Also save to backend (skip if too large for Vercel's 4.5MB limit)
       if (pdfBytes.length < 3_500_000) {
         const base64 = btoa(String.fromCharCode(...pdfBytes));
         authFetch(`${API}/export/visual-report`, {
           method: 'POST',
           body: JSON.stringify({ pdf: base64 }),
-        }).then(() => setHasLastReport(true)).catch(() => {});
+        }).catch(() => {});
       }
     } catch (e) {
       console.error('PDF export failed:', e);
     } finally {
+      hideOverlay();
       setExporting(false);
-      setProgress(null);
     }
   };
 
   const handleOpenLast = async () => {
+    // Try localStorage blob URL first (same session)
+    const blobUrl = localStorage.getItem(LAST_REPORT_KEY);
+    if (blobUrl) {
+      window.open(blobUrl, '_blank');
+      return;
+    }
+    // Fall back to backend
     try {
       const res = await authFetch(`${API}/export/visual-report`);
       if (!res.ok) return;
@@ -56,40 +87,25 @@ export default function ExportPdfButton() {
 
   return (
     <>
-      <button
-        onClick={handleExport}
-        disabled={exporting}
-        className="text-xs px-2 py-1 rounded-md font-medium transition-colors text-muted hover:text-white hover:bg-surface-hover flex-shrink-0 flex items-center gap-1"
-        title="Exporter un rapport visuel PDF"
-      >
-        <FileText size={12} />
-        PDF
-      </button>
-
-      {hasLastReport && !exporting && (
+      {lastReportDate && !exporting && (
         <button
           onClick={handleOpenLast}
           className="text-xs px-2 py-1 rounded-md font-medium transition-colors text-muted hover:text-white hover:bg-surface-hover flex-shrink-0"
           title="Ouvrir le dernier rapport"
         >
-          Dernier rapport
+          {new Date(lastReportDate).toLocaleDateString('fr-FR')}
         </button>
       )}
 
-      {exporting && progress && (
-        <div id="pdf-export-overlay" className="fixed inset-0 z-[9999] bg-black/90 flex flex-col items-center justify-center">
-          <div className="text-accent-400 text-lg font-semibold mb-4">Rapport visuel</div>
-          <div className="w-64 h-1.5 bg-white/10 rounded-full overflow-hidden mb-3">
-            <div
-              className="h-full bg-accent-500 transition-all duration-300"
-              style={{ width: `${(progress.current / progress.total) * 100}%` }}
-            />
-          </div>
-          <div className="text-sm text-muted">
-            {progress.label}... ({progress.current}/{progress.total})
-          </div>
-        </div>
-      )}
+      <button
+        onClick={handleExport}
+        disabled={exporting}
+        className="text-xs px-2 py-1 rounded-md font-medium transition-colors text-muted hover:text-white hover:bg-surface-hover flex-shrink-0 flex items-center gap-1"
+        title="Exporter un rapport PDF"
+      >
+        <FileText size={12} />
+        PDF
+      </button>
     </>
   );
 }

@@ -195,9 +195,9 @@ export default function Dashboard() {
           >
             {showNet ? 'Net' : 'Brut'}
           </button>
-          <ExportPdfButton />
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
+          <ExportPdfButton />
           <ScopeSelect />
         </div>
       </div>
