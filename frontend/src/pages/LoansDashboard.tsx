@@ -402,7 +402,13 @@ export default function LoansDashboard() {
                         </td>
                         <td className="px-4 py-3 text-right">{loan.repaid_pct != null ? `${Math.round(loan.repaid_pct)} %` : '-'}</td>
                         <td className="px-4 py-3 text-right">{loan.interest_rate != null ? `${loan.interest_rate} %` : '-'}</td>
-                        <td className="px-4 py-3 text-right">{loan.monthly_breakdown.insurance && loan.remaining ? `${((loan.monthly_breakdown.insurance * 12) / (loan.principal_amount || loan.remaining) * 100).toFixed(2)} %` : '-'}</td>
+                        <td className="px-4 py-3 text-right">{loan.monthly_breakdown.insurance && loan.remaining ? (() => {
+                          const ins = loan.monthly_breakdown.insurance;
+                          const principal = loan.principal_amount || loan.remaining;
+                          // If value < 5, it's likely already a rate (%), not a monthly € amount
+                          const rate = ins < 5 ? ins : (ins * 12) / principal * 100;
+                          return `${rate.toFixed(2)} %`;
+                        })() : '-'}</td>
                         <td className="px-4 py-3 text-right">{loan.monthly_payment != null ? fc(loan.monthly_payment) : '-'}</td>
                         <td className="px-4 py-3 text-right">{fc(loan.remaining)}</td>
                         <td className="px-4 py-3 text-right">
