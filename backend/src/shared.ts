@@ -316,15 +316,41 @@ const CACHE_TTL = 5 * 60 * 1000; // 5 min
 
 export async function getCryptoEurPrices(): Promise<Record<string, number>> {
   if (_cryptoPriceCache && Date.now() - _cryptoPriceCache.ts < CACHE_TTL) return _cryptoPriceCache.prices;
+
+  // Check DB cache (survives Vercel cold starts)
+  const DB_KEY = 'crypto_eur_prices';
+  try {
+    const row = await db.execute({ sql: "SELECT data, updated_at FROM kv_cache WHERE key = ?", args: [DB_KEY] });
+    if (row.rows.length > 0) {
+      const r = row.rows[0] as any;
+      const ts = new Date(r.updated_at).getTime();
+      const prices = JSON.parse(r.data) as Record<string, number>;
+      if (Date.now() - ts < CACHE_TTL) {
+        _cryptoPriceCache = { prices, ts };
+        return prices;
+      }
+      // Stale but usable as fallback
+      _cryptoPriceCache = { prices, ts };
+    }
+  } catch {}
+
   const ids = Object.values(CG_MAP).join(',');
   try {
     const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids}&vs_currencies=eur`);
+    if (!res.ok) throw new Error(`CoinGecko ${res.status}`);
     const data = await res.json() as Record<string, { eur?: number }>;
     const prices: Record<string, number> = {};
     for (const [code, cgId] of Object.entries(CG_MAP)) {
       if (data[cgId]?.eur) prices[code] = data[cgId].eur;
     }
     _cryptoPriceCache = { prices, ts: Date.now() };
+    // Persist to DB
+    try {
+      await db.execute({
+        sql: "INSERT OR REPLACE INTO kv_cache (key, data, updated_at) VALUES (?, ?, ?)",
+        args: [DB_KEY, JSON.stringify(prices), new Date().toISOString()],
+      });
+    } catch {}
     return prices;
   } catch {
     return _cryptoPriceCache?.prices || {};
