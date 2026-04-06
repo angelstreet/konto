@@ -1250,7 +1250,7 @@ export default function Accounts() {
                       <span className="font-medium text-sm sm:text-base">{providerLabel[provider] || provider}</span>
                       <span className="text-xs text-muted">{accs.length} token{accs.length > 1 ? 's' : ''}</span>
                     </div>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 sm:mr-[88px]">
                       {totalEur > 0 && (
                         <span className="text-sm sm:text-base font-semibold text-accent-400">
                           {allBalancesHidden ? <span className="amount-masked">{formatBalance(totalEur)}</span> : formatBalance(totalEur)}
