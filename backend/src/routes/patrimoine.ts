@@ -868,7 +868,6 @@ router.get('/api/properties/roi', async (c) => {
   const prefsRow = await db.execute({ sql: 'SELECT smoobu_api_key FROM user_preferences WHERE user_id = ?', args: [userId] });
   const encryptedKey = (prefsRow.rows[0] as any)?.smoobu_api_key;
   const SMOOBU_API_KEY = encryptedKey ? decrypt(encryptedKey) : null;
-  if (!SMOOBU_API_KEY) return c.json({ error: 'Smoobu API key not configured. Add it in Settings → Integrations.' }, 400);
 
   const yearParam = c.req.query('year');
   const monthsParam = parseInt(c.req.query('months') || '6');
@@ -885,23 +884,26 @@ router.get('/api/properties/roi', async (c) => {
     toStr = now.toISOString().split('T')[0];
   }
 
-  // Fetch Smoobu apartments
-  const aptRes = await fetch(`${SMOOBU_API}/apartments`, { headers: { 'Api-Key': SMOOBU_API_KEY } });
-  const aptData = await aptRes.json() as any;
-  const apartments = aptData.apartments || [];
-
-  // Fetch all bookings (paginated)
+  // Fetch Smoobu apartments (skip if no API key)
+  let apartments: any[] = [];
   let allBookings: any[] = [];
-  let page = 1;
-  let pageCount = 1;
-  while (page <= pageCount) {
-    const bkRes = await fetch(`${SMOOBU_API}/reservations?from=${fromStr}&to=${toStr}&pageSize=100&page=${page}`, {
-      headers: { 'Api-Key': SMOOBU_API_KEY }
-    });
-    const bkData = await bkRes.json() as any;
-    allBookings.push(...(bkData.bookings || []));
-    pageCount = bkData.page_count || 1;
-    page++;
+  if (SMOOBU_API_KEY) {
+    const aptRes = await fetch(`${SMOOBU_API}/apartments`, { headers: { 'Api-Key': SMOOBU_API_KEY } });
+    const aptData = await aptRes.json() as any;
+    apartments = aptData.apartments || [];
+
+    // Fetch all bookings (paginated)
+    let page = 1;
+    let pageCount = 1;
+    while (page <= pageCount) {
+      const bkRes = await fetch(`${SMOOBU_API}/reservations?from=${fromStr}&to=${toStr}&pageSize=100&page=${page}`, {
+        headers: { 'Api-Key': SMOOBU_API_KEY }
+      });
+      const bkData = await bkRes.json() as any;
+      allBookings.push(...(bkData.bookings || []));
+      pageCount = bkData.page_count || 1;
+      page++;
+    }
   }
 
   // Calculate revenue per apartment per month
@@ -1025,6 +1027,55 @@ router.get('/api/properties/roi', async (c) => {
       costsBreakdown,
     };
   });
+
+  // ── Long-term rental properties (from assets table) ──
+  const assetsRes = await db.execute({
+    sql: `SELECT a.id, a.name, a.property_usage, a.monthly_rent, a.tenant_name, a.kozy_property_id,
+                 a.current_value, a.purchase_price, a.linked_loan_account_id, ba.balance as loan_balance,
+                 ld.monthly_payment as loan_monthly, ld.insurance_monthly as loan_insurance
+          FROM assets a
+          LEFT JOIN bank_accounts ba ON ba.id = a.linked_loan_account_id
+          LEFT JOIN loan_details ld ON ld.bank_account_id = a.linked_loan_account_id
+          WHERE a.type = 'real_estate' AND a.property_usage = 'rented_long' AND a.user_id = ?`,
+    args: [userId],
+  });
+
+  for (const asset of assetsRes.rows as any[]) {
+    const rent = asset.monthly_rent || 0;
+    if (rent <= 0) continue;
+    const revenue = rent * monthsParam;
+    const loanMonthly = (asset.loan_monthly || 0) + (asset.loan_insurance || 0);
+    const loanCosts = loanMonthly * monthsParam;
+
+    // Build monthly revenue/costs
+    const revenueByMonth: Record<string, number> = {};
+    const costsByMonth: Record<string, number> = {};
+    for (let i = 0; i < monthsParam; i++) {
+      const d = new Date(fromDate.getFullYear(), fromDate.getMonth() + i, 1);
+      const m = d.toISOString().substring(0, 7);
+      revenueByMonth[m] = rent;
+      if (loanMonthly > 0) costsByMonth[m] = loanMonthly;
+    }
+
+    const net = revenue - loanCosts;
+    properties.push({
+      id: -asset.id, // negative to avoid collision with Smoobu IDs
+      name: `${asset.name}${asset.tenant_name ? ` (${asset.tenant_name})` : ''}`,
+      revenue: Math.round(revenue * 100) / 100,
+      costs: Math.round(loanCosts * 100) / 100,
+      net: Math.round(net * 100) / 100,
+      monthlyRevenue: rent,
+      monthlyCosts: Math.round(loanMonthly * 100) / 100,
+      monthlyNet: Math.round((rent - loanMonthly) * 100) / 100,
+      occupancyRate: 100, // long-term = always occupied
+      nights: monthsParam * 30,
+      bookings: monthsParam,
+      revenueByMonth,
+      costsByMonth,
+      matchedCosts: [],
+      costsBreakdown: loanCosts > 0 ? [{ category: 'Prêt immobilier', amount: Math.round(loanCosts * 100) / 100, items: [{ label: `Mensualité prêt (${Math.round(loanMonthly)}€/m)`, amount: Math.round(loanCosts * 100) / 100, date: fromStr }] }] : [],
+    });
+  }
 
   const totalRevenue = properties.reduce((s: number, p: any) => s + p.revenue, 0);
   const totalCosts = properties.reduce((s: number, p: any) => s + p.costs, 0);
