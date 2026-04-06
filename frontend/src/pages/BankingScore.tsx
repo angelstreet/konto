@@ -287,6 +287,8 @@ export default function BankingScore() {
             m.debtService += Math.abs(amt);
           }
 
+          // Only count flux from checking accounts (not investment, savings, loan, crypto)
+          if (a.type !== 'checking') continue;
           if (isTransfer(t)) continue;
           if (amt > 0) m.incomeIn += amt;
           else m.chargesOut += Math.abs(amt);
@@ -302,6 +304,7 @@ export default function BankingScore() {
         for (const t of prevTx) {
           const a = accountMap.get(Number(t.bank_account_id));
           if (!a) continue;
+          if (a.type !== 'checking') continue;
           if (isTransfer(t)) continue;
           const identity = bankIdentity(a);
           if (!byBank.has(identity.key)) continue;
