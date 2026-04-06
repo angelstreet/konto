@@ -417,10 +417,12 @@ export default function Accounts() {
 
   const formatBalance = (n: number, currency?: string | null) => {
     const cur = currency || 'EUR';
-    if (cur !== 'EUR' && ['BTC', 'ETH', 'SOL'].includes(cur)) {
+    try {
+      return new Intl.NumberFormat('de-DE', { style: 'currency', currency: cur }).format(n);
+    } catch {
+      // Non-ISO currency (crypto tokens like ARKM, POL, etc.)
       return `${n.toLocaleString('de-DE', { maximumFractionDigits: 8 })} ${cur}`;
     }
-    return new Intl.NumberFormat('de-DE', { style: 'currency', currency: cur }).format(n);
   };
 
   const maskNumber = (num: string) => {
