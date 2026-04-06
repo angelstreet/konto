@@ -1,4 +1,4 @@
-import { createHmac } from 'node:crypto';
+import { createHmac, sign, randomUUID } from 'node:crypto';
 
 // Lazy-load Bitcoin modules (contain WASM that breaks Vercel serverless)
 let bip32: any = null;
@@ -669,26 +669,59 @@ router.delete('/api/binance/disconnect', async (c) => {
 
 // ========== COINBASE API KEY (Read-Only) ==========
 
+// Detect CDP keys: apiKey contains "organizations/" and apiSecret is a PEM EC private key
+function isCdpKey(apiKey: string, apiSecret: string): boolean {
+  return apiKey.includes('organizations/') && apiSecret.includes('BEGIN EC PRIVATE KEY');
+}
+
+function base64url(buf: Buffer): string {
+  return buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function createCdpJwt(apiKeyName: string, pemKey: string, uri: string): string {
+  const header = { alg: 'ES256', kid: apiKeyName, nonce: randomUUID(), typ: 'JWT' };
+  const now = Math.floor(Date.now() / 1000);
+  const payload = { sub: apiKeyName, iss: 'cdp', aud: ['cdp_service'], nbf: now, exp: now + 120, uris: [uri] };
+  const segments = [base64url(Buffer.from(JSON.stringify(header))), base64url(Buffer.from(JSON.stringify(payload)))];
+  const signingInput = segments.join('.');
+  // ES256 = ECDSA with P-256 + SHA-256, Node returns DER — convert to raw r||s (64 bytes)
+  const derSig = sign('SHA256', Buffer.from(signingInput), { key: pemKey, dsaEncoding: 'ieee-p1363' });
+  segments.push(base64url(derSig));
+  return segments.join('.');
+}
+
 function createCoinbaseSignature(timestamp: string, method: string, path: string, body: string, secret: string): string {
   const message = timestamp + method + path + body;
   return createHmac('sha256', secret).update(message).digest('hex');
 }
 
 async function fetchCoinbaseWithApiKey(apiKey: string, apiSecret: string, path: string) {
-  const timestamp = Math.floor(Date.now() / 1000).toString();
-  const signature = createCoinbaseSignature(timestamp, 'GET', path, '', apiSecret);
-  const res = await fetch(`https://api.coinbase.com${path}`, {
-    headers: {
+  const url = `https://api.coinbase.com${path}`;
+
+  let headers: Record<string, string>;
+  if (isCdpKey(apiKey, apiSecret)) {
+    // CDP key — use JWT Bearer auth (URI must exclude query string)
+    const uriPath = path.split('?')[0];
+    const uri = `GET api.coinbase.com${uriPath}`;
+    const jwt = createCdpJwt(apiKey, apiSecret.replace(/\\n/g, '\n'), uri);
+    headers = { 'Authorization': `Bearer ${jwt}`, 'Content-Type': 'application/json' };
+  } else {
+    // Legacy HMAC key
+    const timestamp = Math.floor(Date.now() / 1000).toString();
+    const signature = createCoinbaseSignature(timestamp, 'GET', path, '', apiSecret);
+    headers = {
       'CB-ACCESS-KEY': apiKey,
       'CB-ACCESS-SIGN': signature,
       'CB-ACCESS-TIMESTAMP': timestamp,
       'CB-VERSION': '2024-01-01',
       'Content-Type': 'application/json',
-    },
-  });
+    };
+  }
+
+  const res = await fetch(url, { headers });
   if (!res.ok) {
     const err = await res.json().catch(() => ({ errors: [{ message: `HTTP ${res.status}` }] })) as any;
-    throw new Error(err.errors?.[0]?.message || `Coinbase API error: ${res.status}`);
+    throw new Error(err.errors?.[0]?.message || err.message || `Coinbase API error: ${res.status}`);
   }
   return res.json();
 }
