@@ -1,6 +1,6 @@
 import { API } from '../config';
 import { useTranslation } from 'react-i18next';
-import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign, MoreVertical, Search, AlertTriangle, Upload, FileText } from 'lucide-react';
+import { Landmark, Plus, RefreshCw, Pencil, Trash2, Eye, EyeOff, Check, X, Wallet, Bitcoin, Building2, CircleDollarSign, MoreVertical, Search, AlertTriangle, Upload, FileText, ChevronDown, ChevronRight } from 'lucide-react';
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { useApi } from '../useApi';
 import { useFilter } from '../FilterContext';
@@ -111,6 +111,7 @@ export default function Accounts() {
   const [filterCrypto, setFilterCrypto] = useState(false);
   const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
   const [overflowMenuId, setOverflowMenuId] = useState<number | null>(null);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
   // Add account state
   const [addMode, setAddMode] = useState<AddMode>(null);
@@ -1176,7 +1177,79 @@ export default function Accounts() {
         </div>
       ) : (
         <div className="space-y-2 sm:space-y-3">
-          {filteredAccounts.map(acc => {
+          {(() => {
+            // Group coinbase/binance accounts under collapsible providers
+            const GROUPED_PROVIDERS = new Set(['coinbase', 'binance']);
+            const grouped: Record<string, typeof filteredAccounts> = {};
+            const ungrouped: typeof filteredAccounts = [];
+            for (const acc of filteredAccounts) {
+              if (GROUPED_PROVIDERS.has(acc.provider)) {
+                (grouped[acc.provider] ||= []).push(acc);
+              } else {
+                ungrouped.push(acc);
+              }
+            }
+
+            const toggleGroup = (key: string) => setExpandedGroups(prev => {
+              const next = new Set(prev);
+              next.has(key) ? next.delete(key) : next.add(key);
+              return next;
+            });
+
+            const providerLabel: Record<string, string> = { coinbase: '🪙 Coinbase', binance: '🟡 Binance' };
+
+            const groupCards = Object.entries(grouped).map(([provider, accs]) => {
+              const expanded = expandedGroups.has(provider);
+              const total = accs.reduce((s, a) => s + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0);
+              return (
+                <div key={`group-${provider}`} className="bg-surface rounded-xl border border-border overflow-hidden">
+                  <button
+                    onClick={() => toggleGroup(provider)}
+                    className="w-full flex items-center justify-between p-2.5 sm:px-4 sm:py-2.5 hover:bg-surface-hover transition-colors"
+                  >
+                    <div className="flex items-center gap-2">
+                      {expanded ? <ChevronDown size={16} className="text-muted" /> : <ChevronRight size={16} className="text-muted" />}
+                      <span className="font-medium text-sm sm:text-base">{providerLabel[provider] || provider}</span>
+                      <span className="text-xs text-muted">{accs.length} wallet{accs.length > 1 ? 's' : ''}</span>
+                    </div>
+                    <span className="text-sm sm:text-base font-semibold text-accent-400">
+                      {allBalancesHidden ? <span className="amount-masked">{formatBalance(total)}</span> : formatBalance(total)}
+                    </span>
+                  </button>
+                  {expanded && (
+                    <div className="border-t border-border divide-y divide-border">
+                      {accs.map(acc => {
+                        return (
+                          <div key={acc.id} className="px-2.5 sm:px-4 py-2 sm:py-2 flex items-center justify-between gap-2 hover:bg-surface-hover/50">
+                            <div className="flex items-center gap-2 min-w-0 flex-1">
+                              {acc.currency && acc.currency !== 'EUR' && (
+                                <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 flex-shrink-0">{acc.currency}</span>
+                              )}
+                              <span className="text-sm truncate">{acc.custom_name || acc.name}</span>
+                            </div>
+                            <div className="flex items-center gap-1 flex-shrink-0">
+                              <span className="text-sm font-medium text-accent-400 whitespace-nowrap">
+                                {acc.hidden || allBalancesHidden ? <span className="amount-masked">{formatBalance(acc.balance, acc.currency)}</span> : formatBalance(acc.balance, acc.currency)}
+                              </span>
+                              <div className="hidden sm:flex items-center gap-0">
+                                <button onClick={() => toggleHidden(acc)} className="text-muted hover:text-white transition-colors p-1" title={acc.hidden ? t('show') : t('hide')}>
+                                  {acc.hidden ? <EyeOff size={12} /> : <Eye size={12} />}
+                                </button>
+                                <button onClick={() => deleteAccount(acc.id)} className="text-muted hover:text-red-400 transition-colors p-1" title={t('delete')}>
+                                  <Trash2 size={12} />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            });
+
+            const accountCards = ungrouped.map(acc => {
             const prov = providerBadge(acc.provider);
             const { text: syncText, isStale } = getRelativeTime(acc.last_sync, t);
             return (
@@ -1369,7 +1442,10 @@ export default function Accounts() {
 
               </div>
             );
-          })}
+            });
+
+            return [...groupCards, ...accountCards];
+          })()}
         </div>
       )}
       <ConfirmDialog
