@@ -2,7 +2,7 @@ import { API } from '../../config';
 import { useAuthFetch } from '../../useApi';
 import { useFilter } from '../../FilterContext';
 import ScopeSelect from '../ScopeSelect';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { ChevronDown } from 'lucide-react';
 
@@ -76,6 +76,10 @@ type Props = {
 export default function AssetClassShell({ title, accountFilter, emptyHint }: Props) {
   const authFetch = useAuthFetch();
   const { scope, appendScope } = useFilter();
+  const authFetchRef = useRef(authFetch);
+  authFetchRef.current = authFetch;
+  const appendScopeRef = useRef(appendScope);
+  appendScopeRef.current = appendScope;
   const [isMobile, setIsMobile] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -102,12 +106,14 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
     const load = async () => {
       setLoading(true);
       setError(null);
+      const af = authFetchRef.current;
+      const as = appendScopeRef.current;
       try {
         const [accRes, invRes, txRes, pricesRes] = await Promise.all([
-          authFetch(appendScope(`${API}/bank/accounts`)),
-          authFetch(appendScope(`${API}/investments`)),
-          authFetch(appendScope(`${API}/transactions?limit=2000&offset=0`)),
-          authFetch(`${API}/crypto/prices`).catch(() => null),
+          af(as(`${API}/bank/accounts`)),
+          af(as(`${API}/investments`)),
+          af(as(`${API}/transactions?limit=2000&offset=0`)),
+          af(`${API}/crypto/prices`).catch(() => null),
         ]);
 
         const accJson = await accRes.json();
@@ -155,7 +161,7 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
 
     load();
     return () => { mounted = false; };
-  }, [authFetch, accountFilter, scope, appendScope]);
+  }, [accountFilter, scope]);
 
   const accountById = useMemo(() => {
     const m = new Map<number, AccountRow>();
