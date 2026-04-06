@@ -1122,10 +1122,10 @@ export default function Accounts() {
                 ))}
               </>
             )}
-            {uniqueSubtypes.length > 1 && (
+            {uniqueSubtypes.filter(s => s !== 'crypto').length > 0 && (
               <>
                 <span className="w-px h-5 bg-border self-center" />
-                {uniqueSubtypes.map(sub => (
+                {uniqueSubtypes.filter(s => s !== 'crypto').map(sub => (
                   <button
                     key={`sub-${sub}`}
                     onClick={() => setFilterType(filterType === `investment-${sub}` ? '' : `investment-${sub}`)}
