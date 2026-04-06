@@ -42,44 +42,43 @@ function monthLabel(m: string) {
   return `${names[parseInt(mo) - 1]} ${y.slice(2)}`;
 }
 
-const roiCache: Record<number, ROIData> = {};
+const roiCache: Record<string, ROIData> = {};
 
 export default function PropertyROI() {
   const navigate = useNavigate();
   const authFetch = useAuthFetch();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const { appendScope } = useFilter();
-  const [months, setMonths] = useState(6);
-  const [data, setData] = useState<ROIData | null>(() => roiCache[6] ?? null);
-  const [loading, setLoading] = useState(!roiCache[6]);
+  const [filter, setFilter] = useState('12');
+  const [data, setData] = useState<ROIData | null>(() => roiCache['12'] ?? null);
+  const [loading, setLoading] = useState(!roiCache['12']);
   const [error, setError] = useState<string | null>(null);
   const animatedProperties = useRef<Set<number>>(new Set());
   const [showChargesModal, setShowChargesModal] = useState(false);
   const [selectedProperty, setSelectedProperty] = useState<Property | null>(null);
 
-  // Reset animation tracking when months filter changes
+  // Reset animation tracking when filter changes
   useEffect(() => {
     animatedProperties.current = new Set();
-  }, [months, appendScope, authFetch]);
+  }, [filter, appendScope, authFetch]);
 
-  const handleMonthsChange = (value: string) => {
-    const val = value === 'year' ? 12 : parseInt(value);
-    setMonths(val);
-  };
+  const currentYear = new Date().getFullYear();
 
   useEffect(() => {
-    if (roiCache[months]) {
-      setData(roiCache[months]);
+    if (roiCache[filter]) {
+      setData(roiCache[filter]);
       setLoading(false);
       return;
     }
     setLoading(true);
-    const url = appendScope(`${API}/properties/roi?months=${months}`);
+    const isYear = /^\d{4}$/.test(filter);
+    const param = isYear ? `year=${filter}` : `months=${filter}`;
+    const url = appendScope(`${API}/properties/roi?${param}`);
     authFetch(url)
       .then(async r => { const d = await r.json(); if (!r.ok || d.error) throw new Error(d.error || `API ${r.status}`); return d; })
-      .then(d => { roiCache[months] = d; setData(d); setError(null); setLoading(false); })
+      .then(d => { roiCache[filter] = d; setData(d); setError(null); setLoading(false); })
       .catch((e) => { setData(null); setError(e.message); setLoading(false); });
-  }, [months]);
+  }, [filter]);
 
   const h = hideAmounts;
 
@@ -105,14 +104,14 @@ export default function PropertyROI() {
         <div className="flex items-center gap-1 flex-shrink-0">
           <ScopeSelect />
           <select
-            value={months === 12 ? 'year' : months}
-            onChange={(e) => handleMonthsChange(e.target.value)}
+            value={filter}
+            onChange={(e) => setFilter(e.target.value)}
             className="bg-card border border-border rounded-md px-2 py-1 text-sm"
           >
-            <option value={3}>3 mois</option>
-            <option value={6}>6 mois</option>
-            <option value={12}>12 mois</option>
-            <option value="year">Par an</option>
+            <option value="12">12 mois</option>
+            <option value={String(currentYear)}>{currentYear}</option>
+            <option value={String(currentYear - 1)}>{currentYear - 1}</option>
+            <option value={String(currentYear - 2)}>{currentYear - 2}</option>
           </select>
           <EyeToggle hidden={hideAmounts} onToggle={toggleHideAmounts} />
         </div>

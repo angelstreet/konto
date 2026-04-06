@@ -870,11 +870,20 @@ router.get('/api/properties/roi', async (c) => {
   const SMOOBU_API_KEY = encryptedKey ? decrypt(encryptedKey) : null;
   if (!SMOOBU_API_KEY) return c.json({ error: 'Smoobu API key not configured. Add it in Settings → Integrations.' }, 400);
 
+  const yearParam = c.req.query('year');
   const monthsParam = parseInt(c.req.query('months') || '6');
   const now = new Date();
-  const fromDate = new Date(now.getFullYear(), now.getMonth() - monthsParam + 1, 1);
-  const fromStr = fromDate.toISOString().split('T')[0];
-  const toStr = now.toISOString().split('T')[0];
+  let fromDate: Date, fromStr: string, toStr: string;
+  if (yearParam) {
+    const y = parseInt(yearParam);
+    fromDate = new Date(y, 0, 1);
+    fromStr = `${y}-01-01`;
+    toStr = y === now.getFullYear() ? now.toISOString().split('T')[0] : `${y}-12-31`;
+  } else {
+    fromDate = new Date(now.getFullYear(), now.getMonth() - monthsParam + 1, 1);
+    fromStr = fromDate.toISOString().split('T')[0];
+    toStr = now.toISOString().split('T')[0];
+  }
 
   // Fetch Smoobu apartments
   const aptRes = await fetch(`${SMOOBU_API}/apartments`, { headers: { 'Api-Key': SMOOBU_API_KEY } });
