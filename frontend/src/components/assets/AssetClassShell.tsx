@@ -286,30 +286,24 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
 
   return (
     <div className="space-y-4 max-w-7xl overflow-x-hidden">
-      <div className="flex items-center justify-between gap-2 mb-2 min-h-10">
-        <div className="flex items-center gap-2 min-w-0">
+      <div className="flex items-center justify-between gap-2 mb-2 h-10">
+        <div className="flex items-center gap-1 min-w-0">
           <h1 className="text-xl font-semibold whitespace-nowrap">{title}</h1>
           <ScopeSelect />
         </div>
-        {isMobile ? (
-          <div className="px-3 py-1.5 text-xs rounded-md border border-border bg-surface text-muted whitespace-nowrap">
-            6M
-          </div>
-        ) : (
-          <div className="sm:w-auto max-w-full rounded-lg bg-surface border border-border p-1 overflow-x-auto flex-shrink-0">
-            <div className="flex items-center gap-1 min-w-max">
-              {RANGES.map((r) => (
-                <button
-                  key={r.key}
-                  onClick={() => setRange(r.key)}
-                  className={`px-3 py-2 text-xs rounded-md whitespace-nowrap min-h-[38px] ${range === r.key ? 'bg-accent-500/20 text-accent-400' : 'text-muted hover:text-white'}`}
-                >
-                  {r.key}
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <div className="flex gap-1 flex-shrink-0">
+          {RANGES.map((r) => (
+            <button
+              key={r.key}
+              onClick={() => setRange(r.key)}
+              className={`px-3 py-2 text-xs rounded-md font-medium transition-colors min-h-[44px] min-w-[44px] ${
+                range === r.key ? 'bg-accent-500/20 text-accent-400' : 'text-muted hover:text-white hover:bg-surface-hover'
+              }`}
+            >
+              {r.key}
+            </button>
+          ))}
+        </div>
       </div>
 
       {loading && <div className="text-sm text-muted py-8 text-center">Loading…</div>}
