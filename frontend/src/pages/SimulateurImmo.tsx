@@ -565,12 +565,9 @@ ${rentEstimate ? `<p style="font-size:12px;color:#888">Loyer estimé: ${fmt(rent
                 className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
             </div>
             <div>
-              <div className="flex items-center justify-between mb-1">
-                <label className="text-xs text-muted">{t('immo_vacancy_rate')}</label>
-                <span className="text-xs font-bold text-accent-400">{vacancyRate}%</span>
-              </div>
-              <input type="range" min={0} max={15} step={1} value={vacancyRate} onChange={e => setVacancyRate(+e.target.value)}
-                className="w-full accent-amber-500 mt-2" />
+              <label className="text-xs text-muted block mb-1">{t('immo_vacancy_rate')} (%)</label>
+              <input type="number" step={1} min={0} max={30} value={vacancyRate} onChange={e => setVacancyRate(+e.target.value)}
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
             </div>
           </div>
           <div className="text-sm text-muted">{t('immo_effective_rent')}: <span className="text-white font-medium">{fmt2(effectiveRent)}</span></div>
