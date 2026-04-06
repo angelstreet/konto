@@ -109,7 +109,7 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
   const [investments, setInvestments] = useState<InvestmentRow[]>([]);
   const [txs, setTxs] = useState<TxRow[]>([]);
   const [cryptoPrices, setCryptoPrices] = useState<Record<string, number>>({});
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     const mq = window.matchMedia('(max-width: 639px)');
@@ -416,8 +416,8 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
                 <div className="space-y-3">
                   {grouped.map((g) => {
                     const collapseKey = g.key;
-                    const isCollapsed = collapsed.has(collapseKey);
-                    const toggleCollapse = () => setCollapsed(prev => {
+                    const isCollapsed = !expanded.has(collapseKey);
+                    const toggleCollapse = () => setExpanded(prev => {
                       const next = new Set(prev);
                       if (next.has(collapseKey)) next.delete(collapseKey); else next.add(collapseKey);
                       return next;
