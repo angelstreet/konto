@@ -999,65 +999,96 @@ router.get('/api/properties/roi', async (c) => {
       .sort((a, b) => b.amount - a.amount);
   };
 
-  // Build response
+  // Fetch ALL real_estate assets to enrich Smoobu properties with loans + manual charges
+  const allAssetsRes = await db.execute({
+    sql: `SELECT a.id, a.name, a.property_usage, a.linked_loan_account_id, a.monthly_rent,
+                 ld.monthly_payment as loan_monthly, ld.insurance_monthly as loan_insurance
+          FROM assets a
+          LEFT JOIN loan_details ld ON ld.bank_account_id = a.linked_loan_account_id
+          WHERE a.type = 'real_estate' AND a.user_id = ?`,
+    args: [userId],
+  });
+  const allAssets = allAssetsRes.rows as any[];
+
+  // Fetch manual costs for all assets
+  const allAssetIds = allAssets.map((a: any) => a.id);
+  let allManualCosts: Record<number, { label: string; amount: number; frequency: string }[]> = {};
+  if (allAssetIds.length > 0) {
+    const ph = allAssetIds.map(() => '?').join(',');
+    const mcRes = await db.execute({ sql: `SELECT asset_id, label, amount, frequency FROM asset_costs WHERE asset_id IN (${ph})`, args: allAssetIds });
+    for (const r of mcRes.rows as any[]) (allManualCosts[r.asset_id] ||= []).push(r);
+  }
+
+  const toMonthly = (amount: number, freq: string) => freq === 'yearly' ? amount / 12 : freq === 'one_time' ? 0 : amount;
+
+  // Match Smoobu apartments to assets by name similarity
+  const findAssetForApt = (aptName: string) => {
+    const lower = aptName.toLowerCase();
+    return allAssets.find((a: any) => {
+      const aLower = (a.name || '').toLowerCase();
+      return lower.includes(aLower) || aLower.includes(lower) || lower.split(/\s+/).some((w: string) => w.length > 3 && aLower.includes(w));
+    });
+  };
+
+  // Build response — enrich Smoobu properties with loans + manual charges
   const properties = apartments.map((apt: any) => {
     const rev = revenueByApt[apt.id] || { total: 0, byMonth: {}, nights: 0, bookingCount: 0 };
-    const costs = costsByApt[apt.id] || { total: 0, byMonth: {}, matched: [] };
-    const net = rev.total - costs.total;
+    const bankCosts = costsByApt[apt.id] || { total: 0, byMonth: {}, matched: [] };
     const occupancyRate = totalDays > 0 ? Math.round((rev.nights / totalDays) * 100) : 0;
+
+    // Find linked asset for loan + manual charges
+    const linkedAsset = findAssetForApt(apt.name);
+    const loanMonthly = linkedAsset ? ((linkedAsset.loan_monthly || 0) + (linkedAsset.loan_insurance || 0)) : 0;
+    const loanTotal = loanMonthly * monthsParam;
+    const manualCosts = linkedAsset ? (allManualCosts[linkedAsset.id] || []) : [];
+    const chargesMonthly = manualCosts.reduce((s: number, c: any) => s + toMonthly(c.amount, c.frequency), 0);
+    const chargesTotal = chargesMonthly * monthsParam;
+
+    const totalCosts = bankCosts.total + loanTotal + chargesTotal;
+    const net = rev.total - totalCosts;
     const monthlyRevenue = monthsParam > 0 ? Math.round(rev.total / monthsParam) : 0;
-    const monthlyCosts = monthsParam > 0 ? Math.round(costs.total / monthsParam) : 0;
-    const costsBreakdown = buildCostsBreakdown(costs.matched);
+    const monthlyCostsVal = monthsParam > 0 ? Math.round(totalCosts / monthsParam) : 0;
+
+    // Build costs breakdown
+    const costsBreakdown = buildCostsBreakdown(bankCosts.matched);
+    if (loanMonthly > 0) {
+      costsBreakdown.unshift({ category: 'Prêt immobilier', amount: Math.round(loanTotal * 100) / 100, items: [{ label: `Mensualité (${Math.round(loanMonthly)}€/m)`, amount: Math.round(loanTotal * 100) / 100, date: fromStr }] });
+    }
+    for (const c of manualCosts) {
+      const mAmt = toMonthly(c.amount, c.frequency);
+      costsBreakdown.push({ category: c.label, amount: Math.round(mAmt * monthsParam * 100) / 100, items: [{ label: `${c.label} (${Math.round(mAmt)}€/m)`, amount: Math.round(mAmt * monthsParam * 100) / 100, date: fromStr }] });
+    }
 
     return {
       id: apt.id,
       name: apt.name,
       revenue: Math.round(rev.total * 100) / 100,
-      costs: Math.round(costs.total * 100) / 100,
+      costs: Math.round(totalCosts * 100) / 100,
       net: Math.round(net * 100) / 100,
       monthlyRevenue,
-      monthlyCosts,
-      monthlyNet: monthlyRevenue - monthlyCosts,
+      monthlyCosts: monthlyCostsVal,
+      monthlyNet: monthlyRevenue - monthlyCostsVal,
       occupancyRate,
       nights: rev.nights,
       bookings: rev.bookingCount,
       revenueByMonth: rev.byMonth,
-      costsByMonth: costs.byMonth,
-      matchedCosts: costs.matched,
+      costsByMonth: bankCosts.byMonth,
+      matchedCosts: bankCosts.matched,
       costsBreakdown,
     };
   });
 
   // ── Long-term rental properties (from assets table) ──
-  const assetsRes = await db.execute({
-    sql: `SELECT a.id, a.name, a.property_usage, a.monthly_rent, a.tenant_name, a.kozy_property_id,
-                 a.current_value, a.purchase_price, a.linked_loan_account_id, ba.balance as loan_balance,
-                 ld.monthly_payment as loan_monthly, ld.insurance_monthly as loan_insurance
-          FROM assets a
-          LEFT JOIN bank_accounts ba ON ba.id = a.linked_loan_account_id
-          LEFT JOIN loan_details ld ON ld.bank_account_id = a.linked_loan_account_id
-          WHERE a.type = 'real_estate' AND a.property_usage = 'rented_long' AND a.user_id = ?`,
-    args: [userId],
-  });
+  const longTermAssets = allAssets.filter((a: any) => a.property_usage === 'rented_long');
 
-  // Fetch manual costs & revenues for all long-term assets
-  const longTermAssets = assetsRes.rows as any[];
-  const assetIds = longTermAssets.map((a: any) => a.id);
-  let manualCostsByAsset: Record<number, { label: string; amount: number; frequency: string }[]> = {};
+  // Fetch manual revenues for long-term assets
   let manualRevsByAsset: Record<number, { label: string; amount: number; frequency: string }[]> = {};
-  if (assetIds.length > 0) {
-    const placeholders = assetIds.map(() => '?').join(',');
-    const costsRes = await db.execute({ sql: `SELECT asset_id, label, amount, frequency FROM asset_costs WHERE asset_id IN (${placeholders})`, args: assetIds });
-    for (const r of costsRes.rows as any[]) {
-      (manualCostsByAsset[r.asset_id] ||= []).push(r);
-    }
-    const revsRes = await db.execute({ sql: `SELECT asset_id, label, amount, frequency FROM asset_revenues WHERE asset_id IN (${placeholders})`, args: assetIds });
-    for (const r of revsRes.rows as any[]) {
-      (manualRevsByAsset[r.asset_id] ||= []).push(r);
-    }
+  const ltIds = longTermAssets.map((a: any) => a.id);
+  if (ltIds.length > 0) {
+    const ph = ltIds.map(() => '?').join(',');
+    const revsRes = await db.execute({ sql: `SELECT asset_id, label, amount, frequency FROM asset_revenues WHERE asset_id IN (${ph})`, args: ltIds });
+    for (const r of revsRes.rows as any[]) (manualRevsByAsset[r.asset_id] ||= []).push(r);
   }
-
-  const toMonthly = (amount: number, freq: string) => freq === 'yearly' ? amount / 12 : freq === 'one_time' ? 0 : amount;
 
   for (const asset of longTermAssets) {
     const rent = asset.monthly_rent || 0;
@@ -1070,7 +1101,7 @@ router.get('/api/properties/roi', async (c) => {
     const loanMonthly = (asset.loan_monthly || 0) + (asset.loan_insurance || 0);
 
     // Manual charges → monthly total
-    const manualCosts = manualCostsByAsset[asset.id] || [];
+    const manualCosts = allManualCosts[asset.id] || [];
     const chargesMonthly = manualCosts.reduce((s: number, c: any) => s + toMonthly(c.amount, c.frequency), 0);
     const totalMonthlyCost = loanMonthly + chargesMonthly;
     const totalCostsAsset = totalMonthlyCost * monthsParam;
