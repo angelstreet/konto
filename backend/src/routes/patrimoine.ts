@@ -477,18 +477,33 @@ router.get('/api/report/patrimoine', async (c) => {
   if (wantedCategories.includes('crypto')) {
     const eurPricesCrypto = await getCryptoEurPrices();
     const FIAT = new Set(['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'JPY', 'XOF']);
-    const items = accounts
-      .filter(a => a.provider === 'blockchain' || a.provider === 'coinbase' || a.provider === 'binance')
-      .map(a => {
-        const cur = a.currency || 'EUR';
-        let value: number;
-        if (a.balance_native != null && a.balance_native > 0) value = a.balance_native;
-        else if (FIAT.has(cur)) value = a.balance || 0;
-        else if (eurPricesCrypto[cur]) value = (a.balance || 0) * eurPricesCrypto[cur];
-        else value = 0;
-        return { name: a.custom_name || a.name, value };
-      })
-      .filter(i => i.value > 0.01);
+    const cryptoAccounts = accounts.filter(a => a.provider === 'blockchain' || a.provider === 'coinbase' || a.provider === 'binance');
+
+    // Group by provider (Coinbase/Binance as single line), keep blockchain individual
+    const providerTotals: Record<string, number> = {};
+    const individualItems: { name: string; value: number }[] = [];
+    for (const a of cryptoAccounts) {
+      const cur = a.currency || 'EUR';
+      let value: number;
+      if (a.balance_native != null && a.balance_native > 0) value = a.balance_native;
+      else if (FIAT.has(cur)) value = a.balance || 0;
+      else if (eurPricesCrypto[cur]) value = (a.balance || 0) * eurPricesCrypto[cur];
+      else value = 0;
+      if (value < 0.01) continue;
+
+      if (a.provider === 'coinbase' || a.provider === 'binance') {
+        const label = a.provider === 'coinbase' ? 'Coinbase' : 'Binance';
+        providerTotals[label] = (providerTotals[label] || 0) + value;
+      } else {
+        individualItems.push({ name: a.custom_name || a.name, value });
+      }
+    }
+
+    const items = [
+      ...Object.entries(providerTotals).map(([name, value]) => ({ name, value })),
+      ...individualItems,
+    ].sort((a, b) => b.value - a.value);
+
     if (items.length) sections.push({ title: 'Crypto', items, total: items.reduce((s, i) => s + i.value, 0) });
   }
   if (wantedCategories.includes('stocks')) {
