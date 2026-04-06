@@ -68,6 +68,10 @@ function subtypeBadgeColor(subtype: string): string {
   return 'bg-white/5 text-muted';
 }
 
+function cleanCryptoName(name: string): string {
+  return name.replace(/\s*Wallet$/i, '').replace(/^Portefeuille en\s*/i, '').replace(/\s*staké$/i, '').replace(/\s*Staked\s*/i, '').trim();
+}
+
 function providerBadge(provider: string): { color: string; label: string } {
   if (provider === 'blockchain') return { color: 'bg-amber-500/20 text-amber-400', label: '⛓️' };
   if (provider === 'manual') return { color: 'bg-gray-500/20 text-gray-400', label: '✏️' };
@@ -1228,7 +1232,7 @@ export default function Accounts() {
                               {acc.currency && acc.currency !== 'EUR' && (
                                 <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 flex-shrink-0">{acc.currency}</span>
                               )}
-                              <span className="text-sm truncate">{acc.custom_name || acc.name}</span>
+                              <span className="text-sm truncate">{cleanCryptoName(acc.custom_name || acc.name)}</span>
                             </div>
                             <div className="flex items-center gap-1 flex-shrink-0">
                               <span className="text-sm font-medium text-accent-400 whitespace-nowrap">
