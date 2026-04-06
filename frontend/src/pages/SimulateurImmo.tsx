@@ -516,26 +516,21 @@ ${rentEstimate ? `<p style="font-size:12px;color:#888">Loyer estimé: ${fmt(rent
       {/* Section 3: Financement */}
       <section className="bg-surface rounded-xl border border-border p-4">
         <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">{t('immo_section_financement')}</h2>
-        <div className="space-y-3">
+        <div className="grid grid-cols-3 gap-3">
           <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-sm text-muted">{t('immo_duration')}</label>
-              <span className="text-sm font-bold text-accent-400">{duration} ans</span>
-            </div>
-            <input type="range" min={10} max={25} step={1} value={duration} onChange={e => setDuration(+e.target.value)}
-              className="w-full accent-amber-500" />
+            <label className="text-xs text-muted block mb-1">{t('immo_duration')} (ans)</label>
+            <input type="number" min={5} max={30} step={1} value={duration} onChange={e => setDuration(+e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="text-xs text-muted block mb-1">{t('immo_interest_rate')} (%)</label>
-              <input type="number" step={0.01} value={interestRate} onChange={e => setInterestRate(+e.target.value)}
-                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-            </div>
-            <div>
-              <label className="text-xs text-muted block mb-1">{t('immo_insurance_rate')} (%)</label>
-              <input type="number" step={0.01} value={insuranceRate} onChange={e => setInsuranceRate(+e.target.value)}
-                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
-            </div>
+          <div>
+            <label className="text-xs text-muted block mb-1">{t('immo_interest_rate')} (%)</label>
+            <input type="number" step={0.01} value={interestRate} onChange={e => setInterestRate(+e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label className="text-xs text-muted block mb-1">{t('immo_insurance_rate')} (%)</label>
+            <input type="number" step={0.01} value={insuranceRate} onChange={e => setInsuranceRate(+e.target.value)}
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
           </div>
         </div>
         <div className="grid grid-cols-3 gap-3 mt-4">
