@@ -41,6 +41,16 @@ export default function SimulateurImmo() {
   const [proDebt, setProDebt] = useState(0);
   const [loaded, setLoaded] = useState(false);
 
+  // --- Property search ---
+  const [address, setAddress] = useState('');
+  const [addressResults, setAddressResults] = useState<{ label: string; citycode: string; lat: number; lon: number }[]>([]);
+  const [selectedAddress, setSelectedAddress] = useState<{ citycode: string; lat: number; lon: number } | null>(null);
+  const [surface, setSurface] = useState(50);
+  const [propertyType, setPropertyType] = useState<'Appartement' | 'Maison'>('Appartement');
+  const [dvfEstimate, setDvfEstimate] = useState<{ pricePerM2: number; comparables: number; range?: { low: number; high: number } } | null>(null);
+  const [rentEstimate, setRentEstimate] = useState<{ estimated_rent: number; range: { low: number; high: number } } | null>(null);
+  const [currentSavings, setCurrentSavings] = useState(0);
+
   // --- Project ---
   const [purchasePrice, setPurchasePrice] = useState(200000);
   const [notaryPct, setNotaryPct] = useState(8);
@@ -91,9 +101,69 @@ export default function SimulateurImmo() {
         if (match) setInterestRate(match.avg_rate);
       }
 
+      // Fetch savings for banker's view
+      authFetch(`${API}/dashboard`).then(r => r.json()).then(d => {
+        const accs = [...(d?.financial?.accountsByType?.checking || []), ...(d?.financial?.accountsByType?.savings || [])];
+        setCurrentSavings(accs.reduce((s: number, a: any) => s + Math.max(0, a.balance || 0), 0));
+      }).catch(() => {});
+
       setLoaded(true);
     });
   }, []);
+
+  // Address autocomplete
+  const searchAddress = async (q: string) => {
+    setAddress(q);
+    if (q.length < 3) { setAddressResults([]); return; }
+    try {
+      const res = await fetch(`https://api-adresse.data.gouv.fr/search/?q=${encodeURIComponent(q)}&limit=5`);
+      const data = await res.json();
+      setAddressResults((data.features || []).map((f: any) => ({
+        label: f.properties.label,
+        citycode: f.properties.citycode,
+        lat: f.geometry.coordinates[1],
+        lon: f.geometry.coordinates[0],
+      })));
+    } catch { setAddressResults([]); }
+  };
+
+  const selectAddress = (addr: { label: string; citycode: string; lat: number; lon: number }) => {
+    setAddress(addr.label);
+    setSelectedAddress({ citycode: addr.citycode, lat: addr.lat, lon: addr.lon });
+    setAddressResults([]);
+    // Auto-estimate property value + rent
+    fetchEstimations(addr.citycode, addr.lat, addr.lon, surface, propertyType);
+  };
+
+  const fetchEstimations = async (citycode: string, lat: number, lon: number, surf: number, type: string) => {
+    // DVF price estimation
+    authFetch(`${API}/estimation/price?citycode=${citycode}&lat=${lat}&lon=${lon}&surface=${surf}&type=${type}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.estimatedValue) {
+          setPurchasePrice(Math.round(d.estimatedValue / 1000) * 1000);
+          setDvfEstimate({ pricePerM2: d.pricePerM2, comparables: d.meta?.totalSales || 0, range: d.range });
+        }
+      }).catch(() => {});
+    // Rent estimation
+    authFetch(`${API}/estimation/rent?citycode=${citycode}&lat=${lat}&lon=${lon}&surface=${surf}&type=${type}`)
+      .then(r => r.json())
+      .then(d => {
+        if (d.estimated_rent) {
+          setMonthlyRent(d.estimated_rent);
+          setRentEstimate(d);
+        }
+      }).catch(() => {});
+    // Auto-estimate property tax
+    setTaxeFonciere(Math.round(surf * 12));
+  };
+
+  // Re-estimate when surface or type changes (if address selected)
+  useEffect(() => {
+    if (selectedAddress && surface > 0) {
+      fetchEstimations(selectedAddress.citycode, selectedAddress.lat, selectedAddress.lon, surface, propertyType);
+    }
+  }, [surface, propertyType]);
 
   // --- Calculations ---
   const notaryFees = useMemo(() => Math.round(purchasePrice * notaryPct / 100), [purchasePrice, notaryPct]);
@@ -129,6 +199,25 @@ export default function SimulateurImmo() {
   const viability: 'VIABLE' | 'ATTENTION' | 'NON_VIABLE' =
     newDebtRatio < 33 && cashflow >= 0 ? 'VIABLE' :
     newDebtRatio <= 35 ? 'ATTENTION' : 'NON_VIABLE';
+
+  // --- Banker's scoring ---
+  const resteAVivre = totalIncome - (totalDebt + totalMonthlyPayment) - totalMonthlyCharges;
+  const apportPct = totalProject > 0 ? (apport / totalProject) * 100 : 0;
+  const savingsAfterApport = currentSavings - apport;
+  const monthsReserve = (totalMonthlyPayment + totalMonthlyCharges) > 0 ? savingsAfterApport / (totalMonthlyPayment + totalMonthlyCharges) : 0;
+
+  const bankerCriteria = [
+    { label: "Taux d'endettement", value: pct(newDebtRatio), ok: newDebtRatio < 33 ? 'green' : newDebtRatio <= 35 ? 'amber' : 'red' },
+    { label: 'Reste à vivre', value: fmt(resteAVivre) + '/mois', ok: resteAVivre > 1000 ? 'green' : resteAVivre > 700 ? 'amber' : 'red' },
+    { label: 'Apport / Projet', value: pct(apportPct), ok: apportPct >= 20 ? 'green' : apportPct >= 10 ? 'amber' : 'red' },
+    { label: 'Épargne résiduelle', value: `${Math.round(monthsReserve)} mois`, ok: monthsReserve >= 6 ? 'green' : monthsReserve >= 3 ? 'amber' : 'red' },
+    { label: 'Cash flow net', value: fmt2(cashflow) + '/mois', ok: cashflow >= 0 ? 'green' : cashflow >= -100 ? 'amber' : 'red' },
+    { label: 'Durée emprunt', value: `${duration} ans`, ok: duration <= 20 ? 'green' : duration <= 25 ? 'amber' : 'red' },
+  ];
+  const greenCount = bankerCriteria.filter(c => c.ok === 'green').length;
+  const bankerVerdict = greenCount >= 5 ? 'Dossier solide' : greenCount >= 3 ? 'Dossier à renforcer' : 'Dossier insuffisant';
+  const bankerVerdictColor = greenCount >= 5 ? 'text-emerald-400' : greenCount >= 3 ? 'text-amber-400' : 'text-red-400';
+  const bankerVerdictBg = greenCount >= 5 ? 'bg-emerald-500/15 border-emerald-500/30' : greenCount >= 3 ? 'bg-amber-500/15 border-amber-500/30' : 'bg-red-500/15 border-red-500/30';
 
   const viabilityLabel = { VIABLE: t('immo_viable'), ATTENTION: t('immo_attention'), NON_VIABLE: t('immo_non_viable') };
   const viabilityColor = { VIABLE: 'text-emerald-400', ATTENTION: 'text-amber-400', NON_VIABLE: 'text-red-400' };
@@ -209,6 +298,13 @@ export default function SimulateurImmo() {
   <tr><td>Taux d'endettement avant projet</td><td>${pct(currentDebtRatio)}</td></tr>
   <tr><td><strong>Taux d'endettement après projet</strong></td><td><strong>${pct(newDebtRatio)}</strong></td></tr>
 </table>
+
+<h2>6. Vision banquier — ${bankerVerdict}</h2>
+<table>
+${bankerCriteria.map(c => `  <tr><td>${c.label}</td><td style="color:${c.ok === 'green' ? '#059669' : c.ok === 'amber' ? '#d97706' : '#dc2626'}">${c.value} ${c.ok === 'green' ? '✓' : c.ok === 'amber' ? '⚠' : '✗'}</td></tr>`).join('\n')}
+</table>
+${dvfEstimate ? `<p style="font-size:12px;color:#888">Estimation DVF: ${dvfEstimate.pricePerM2.toLocaleString('fr-FR')} €/m² (${dvfEstimate.comparables} ventes comparables)</p>` : ''}
+${rentEstimate ? `<p style="font-size:12px;color:#888">Loyer estimé: ${fmt(rentEstimate.estimated_rent)}/mois (${fmt(rentEstimate.range.low)} – ${fmt(rentEstimate.range.high)})</p>` : ''}
 
 <div class="footer">Document généré par Konto — à titre indicatif uniquement</div>
 </body></html>`;
@@ -299,6 +395,53 @@ export default function SimulateurImmo() {
       <section className="bg-surface rounded-xl border border-border p-4">
         <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">{t('immo_section_projet')}</h2>
         <div className="space-y-3">
+          {/* Address autocomplete */}
+          <div className="relative">
+            <label className="text-xs text-muted block mb-1">Adresse du bien</label>
+            <input
+              value={address}
+              onChange={e => searchAddress(e.target.value)}
+              placeholder="Tapez une adresse..."
+              className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm"
+            />
+            {addressResults.length > 0 && (
+              <div className="absolute z-10 w-full bg-surface border border-border rounded-lg mt-1 shadow-xl max-h-48 overflow-y-auto">
+                {addressResults.map((r, i) => (
+                  <button key={i} onClick={() => selectAddress(r)} className="w-full text-left px-3 py-2 text-sm hover:bg-surface-hover">
+                    {r.label}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="text-xs text-muted block mb-1">Surface (m²)</label>
+              <input type="number" value={surface} onChange={e => setSurface(+e.target.value)}
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
+            </div>
+            <div>
+              <label className="text-xs text-muted block mb-1">Type</label>
+              <select value={propertyType} onChange={e => setPropertyType(e.target.value as any)}
+                className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm">
+                <option value="Appartement">Appartement</option>
+                <option value="Maison">Maison</option>
+              </select>
+            </div>
+          </div>
+          {dvfEstimate && (
+            <div className="text-xs text-muted">
+              DVF: {dvfEstimate.pricePerM2.toLocaleString('fr-FR')} €/m² ({dvfEstimate.comparables} ventes)
+              {dvfEstimate.range && <> · {fmt(dvfEstimate.range.low)} – {fmt(dvfEstimate.range.high)}</>}
+            </div>
+          )}
+          {rentEstimate && (
+            <div className="text-xs text-muted">
+              Loyer estimé: {fmt(rentEstimate.estimated_rent)}/mois ({fmt(rentEstimate.range.low)} – {fmt(rentEstimate.range.high)})
+            </div>
+          )}
+
+          <div className="border-t border-border/50 pt-3">
           <div>
             <div className="flex items-center justify-between mb-1">
               <label className="text-sm text-muted">{t('immo_purchase_price')}</label>
@@ -328,6 +471,7 @@ export default function SimulateurImmo() {
               <input type="number" step={1000} value={apport} onChange={e => setApport(+e.target.value)}
                 className="w-full bg-background border border-border rounded-lg px-3 py-2 text-sm" />
             </div>
+          </div>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3 mt-4">
@@ -522,6 +666,34 @@ export default function SimulateurImmo() {
               </Bar>
             </BarChart>
           </ResponsiveContainer>
+        </div>
+      </section>
+
+      {/* Section 6: Banker's View */}
+      <section className="bg-surface rounded-xl border border-border p-4">
+        <h2 className="text-sm font-medium text-muted uppercase tracking-wide mb-3">Vision banquier</h2>
+
+        <div className={`rounded-xl border p-4 text-center mb-4 ${bankerVerdictBg}`}>
+          <p className={`text-xl font-bold ${bankerVerdictColor}`}>{bankerVerdict}</p>
+          <p className="text-xs text-muted mt-1">{greenCount}/6 critères validés</p>
+        </div>
+
+        <div className="space-y-2">
+          {bankerCriteria.map((c, i) => (
+            <div key={i} className="flex items-center justify-between py-2 border-b border-border/30 last:border-0">
+              <div className="flex items-center gap-2">
+                <span className={`w-2.5 h-2.5 rounded-full flex-shrink-0 ${c.ok === 'green' ? 'bg-emerald-500' : c.ok === 'amber' ? 'bg-amber-500' : 'bg-red-500'}`} />
+                <span className="text-sm">{c.label}</span>
+              </div>
+              <span className={`text-sm font-semibold ${c.ok === 'green' ? 'text-emerald-400' : c.ok === 'amber' ? 'text-amber-400' : 'text-red-400'}`}>
+                {c.value}
+              </span>
+            </div>
+          ))}
+        </div>
+
+        <div className="mt-4 p-3 bg-black/20 rounded-lg text-xs text-muted space-y-1">
+          <p>Les banques évaluent: taux d'endettement &lt; 33%, reste à vivre &gt; 700€/pers, apport &ge; 10%, épargne résiduelle &ge; 3 mois, durée &le; 25 ans.</p>
         </div>
       </section>
     </div>

@@ -138,6 +138,36 @@ router.post('/api/borrowing-capacity', async (c) => {
   });
 });
 
+// ========== RENT ESTIMATION ==========
 
+router.get('/api/estimation/rent', async (c) => {
+  const citycode = c.req.query('citycode');
+  const surface = parseFloat(c.req.query('surface') || '0');
+  const type = c.req.query('type') || 'Appartement';
+
+  if (!citycode || !surface) return c.json({ error: 'citycode and surface required' }, 400);
+
+  // Try to get local price/m² from DVF estimation endpoint
+  const lat = parseFloat(c.req.query('lat') || '0');
+  const lon = parseFloat(c.req.query('lon') || '0');
+  let pricePerM2 = 3500; // default fallback
+
+  if (lat && lon) {
+    try {
+      const { estimatePropertyPrice } = await import('../services/propertyEstimation.js');
+      const est = await estimatePropertyPrice({ citycode, lat, lon, surface, propertyType: type });
+      if (est?.estimation?.pricePerM2) pricePerM2 = est.estimation.pricePerM2;
+    } catch {}
+  }
+
+  // Rent/price ratio: ~4-5% gross yield in France
+  // Appartement: higher yield (~5%), Maison: lower (~4%)
+  const ratio = type === 'Maison' ? 280 : 240;
+  const estimatedRent = Math.round(surface * pricePerM2 / ratio);
+  const low = Math.round(estimatedRent * 0.85);
+  const high = Math.round(estimatedRent * 1.15);
+
+  return c.json({ estimated_rent: estimatedRent, range: { low, high }, price_per_m2: pricePerM2 });
+});
 
 export default router;
