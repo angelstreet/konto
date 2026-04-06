@@ -73,6 +73,24 @@ type Props = {
   emptyHint: string;
 };
 
+// --- SWR cache for AssetClassShell data ---
+const SHELL_CACHE_KEY = 'konto_shell_cache';
+const SHELL_CACHE_TTL = 30_000;
+const _shellCache: Record<string, { data: any; ts: number }> = (() => {
+  try {
+    const stored = sessionStorage.getItem(SHELL_CACHE_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch { return {}; }
+})();
+function getShellCache(key: string) {
+  const entry = _shellCache[key];
+  return entry || null;
+}
+function setShellCache(key: string, data: any) {
+  _shellCache[key] = { data, ts: Date.now() };
+  try { sessionStorage.setItem(SHELL_CACHE_KEY, JSON.stringify(_shellCache)); } catch {}
+}
+
 export default function AssetClassShell({ title, accountFilter, emptyHint }: Props) {
   const authFetch = useAuthFetch();
   const { scope, appendScope } = useFilter();
@@ -103,9 +121,21 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
 
   useEffect(() => {
     let mounted = true;
+    const cacheKey = `${title}:${scope}`;
+
+    // Serve cached data instantly (SWR pattern)
+    const cached = getShellCache(cacheKey);
+    if (cached) {
+      const { accounts: ca, investments: ci, txs: ct, cryptoPrices: cp } = cached.data;
+      setAccounts(ca); setInvestments(ci); setTxs(ct); setCryptoPrices(cp);
+      setSelectedTx(ct[0] || null);
+      setLoading(false);
+      // Skip refetch if cache is fresh
+      if (Date.now() - cached.ts < SHELL_CACHE_TTL) return;
+    }
+
     const load = async () => {
-      setLoading(true);
-      setError(null);
+      if (!cached) { setLoading(true); setError(null); }
       const af = authFetchRef.current;
       const as = appendScopeRef.current;
       try {
@@ -124,11 +154,22 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
         if (!invRes.ok) throw new Error(invJson?.error || 'Failed loading investments');
         if (!txRes.ok) throw new Error(txJson?.error || 'Failed loading transactions');
 
-        // Build currency→EUR price map
         // Response shape: { BTC: 84000, ETH: 3200, ... }
         let priceMap: Record<string, number> = {};
         if (pricesRes?.ok) {
-          priceMap = await pricesRes.json();
+          const fetched = await pricesRes.json();
+          if (fetched && !fetched.error && Object.keys(fetched).length > 0) {
+            priceMap = fetched;
+            // Persist last good prices
+            try { localStorage.setItem('konto_crypto_prices', JSON.stringify(priceMap)); } catch {}
+          }
+        }
+        // Fall back to last known good prices if fetch failed
+        if (Object.keys(priceMap).length === 0) {
+          try {
+            const stored = localStorage.getItem('konto_crypto_prices');
+            if (stored) priceMap = JSON.parse(stored);
+          } catch {}
         }
 
         const allAccounts = (accJson as AccountRow[]).filter(a => !a.hidden);
@@ -147,8 +188,9 @@ export default function AssetClassShell({ title, accountFilter, emptyHint }: Pro
         setTxs(filteredTx);
         setCryptoPrices(priceMap);
         setSelectedTx(filteredTx[0] || null);
+        setShellCache(cacheKey, { accounts: filteredAccounts, investments: filteredInv, txs: filteredTx, cryptoPrices: priceMap });
       } catch (e: any) {
-        if (mounted) setError(e?.message || 'Failed loading asset class');
+        if (mounted && !cached) setError(e?.message || 'Failed loading asset class');
       } finally {
         if (mounted) setLoading(false);
       }
