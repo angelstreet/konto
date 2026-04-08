@@ -7,6 +7,7 @@ export interface UserPreferences {
   display_currency: string;
   crypto_display: string;
   kozy_enabled: number;
+  hide_crypto: number;
 }
 
 interface PreferencesContextType {
@@ -36,6 +37,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   display_currency: 'EUR',
   crypto_display: 'native',
   kozy_enabled: 0,
+  hide_crypto: 0,
 };
 
 function normalizePreferences(input: any): UserPreferences {

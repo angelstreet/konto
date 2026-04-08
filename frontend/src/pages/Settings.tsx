@@ -428,6 +428,20 @@ export default function Settings() {
           </span>
         </button>
 
+        {/* Hide crypto toggle */}
+        <button
+          onClick={() => updatePrefs({ hide_crypto: prefs?.hide_crypto ? 0 : 1 })}
+          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+        >
+          <EyeOff size={18} className="text-muted" />
+          <span className="text-sm">Masquer les cryptos</span>
+          <span className="ml-auto">
+            <span className={`inline-block w-9 h-5 rounded-full transition-colors relative ${prefs?.hide_crypto ? 'bg-accent-500' : 'bg-white/10'}`}>
+              <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${prefs?.hide_crypto ? 'left-[1.125rem]' : 'left-0.5'}`} />
+            </span>
+          </span>
+        </button>
+
         {isSandbox() && (
           <a
             href={`${BASE_PATH}/konto-showcase.pdf`}

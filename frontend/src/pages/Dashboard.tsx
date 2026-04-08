@@ -57,7 +57,8 @@ const sizeClasses: Record<string, string> = { sm: 'text-sm', base: 'text-base', 
 export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const { appendScope } = useFilter();
-  const { formatCurrency, convertToDisplay } = usePreferences();
+  const { prefs, formatCurrency, convertToDisplay } = usePreferences();
+  const hideCrypto = !!prefs?.hide_crypto;
   const authFetch = useAuthFetch();
   const { data, loading } = useApi<DashboardData>(appendScope(`${API}/dashboard`));
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
@@ -92,7 +93,7 @@ export default function Dashboard() {
   const cryptoAccounts = investmentAccounts.filter(a => a.subtype === 'crypto');
   const stockAccounts = investmentAccounts.filter(a => a.subtype !== 'crypto');
   const investments = stockAccounts.reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
-  const crypto = cryptoAccounts.reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
+  const crypto = hideCrypto ? 0 : cryptoAccounts.reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
   const loans = (accountsByType.loan || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
   
   const immoAssets = data ? data.patrimoine.assets.filter(a => a.type === 'real_estate') : [];

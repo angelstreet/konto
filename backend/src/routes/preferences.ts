@@ -10,6 +10,7 @@ const DEFAULT_PREFERENCES = {
   display_currency: 'EUR',
   crypto_display: 'native',
   kozy_enabled: 0,
+  hide_crypto: 0,
 };
 
 function normalizePrefsRow(row: any) {
@@ -56,7 +57,7 @@ router.patch('/api/preferences', async (c) => {
     const userId = await getUserId(c);
     await ensurePreferences(userId);
     const body = await c.req.json();
-    const allowed = ['onboarded', 'display_currency', 'crypto_display', 'kozy_enabled'];
+    const allowed = ['onboarded', 'display_currency', 'crypto_display', 'kozy_enabled', 'hide_crypto'];
     const sets: string[] = [];
     const args: any[] = [];
     for (const key of allowed) {

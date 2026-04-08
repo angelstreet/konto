@@ -654,6 +654,13 @@ export async function migrateDatabase() {
     await db.execute("ALTER TABLE user_preferences ADD COLUMN smoobu_api_key TEXT");
   }
 
+  // Add hide_crypto preference
+  try {
+    await db.execute("SELECT hide_crypto FROM user_preferences LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE user_preferences ADD COLUMN hide_crypto INTEGER NOT NULL DEFAULT 0");
+  }
+
   // API keys table for agent/AI access
   await db.execute(`
     CREATE TABLE IF NOT EXISTS api_keys (

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { usePreferences } from '../PreferencesContext';
 import {
   Banknote,
   Home,
@@ -105,6 +106,8 @@ export default function More() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { t } = useTranslation();
+  const { prefs } = usePreferences();
+  const hideCrypto = !!prefs?.hide_crypto;
   const [openSubs, setOpenSubs] = useState<Set<string>>(() => {
     // Auto-open subgroups containing active path
     const active = new Set<string>();
@@ -166,7 +169,7 @@ export default function More() {
             {/* Flat items */}
             {group.items && (
               <div className="bg-surface rounded-xl border border-border divide-y divide-border">
-                {group.items.map(renderItem)}
+                {group.items.filter((item: any) => !hideCrypto || item.path !== '/crypto').map(renderItem)}
               </div>
             )}
 

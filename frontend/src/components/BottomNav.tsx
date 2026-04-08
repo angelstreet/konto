@@ -2,6 +2,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, Landmark, MoreHorizontal, Menu } from 'lucide-react';
 import { useState } from 'react';
+import { usePreferences } from '../PreferencesContext';
 
 // Mobile: 4 items max with hamburger for more
 const mobileItems = [
@@ -29,6 +30,8 @@ export default function BottomNav() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { prefs } = usePreferences();
+  const hideCrypto = !!prefs?.hide_crypto;
   const [showDrawer, setShowDrawer] = useState(false);
 
   const items = mobileItems;
@@ -80,7 +83,7 @@ export default function BottomNav() {
             className="absolute bottom-20 left-2 right-2 bg-surface border border-border rounded-lg shadow-xl p-2"
             onClick={(e) => e.stopPropagation()}
           >
-            {moreLinks.map(({ path, label }) => (
+            {moreLinks.filter(l => !hideCrypto || l.path !== '/crypto').map(({ path, label }) => (
               <button
                 key={path}
                 onClick={() => {

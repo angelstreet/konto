@@ -92,7 +92,8 @@ type AddMode = null | 'choose' | 'manual' | 'blockchain' | 'metamask-scanning' |
 export default function Accounts() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.slice(0, 2) || 'fr';
-  const { convertToDisplay } = usePreferences();
+  const { prefs, convertToDisplay } = usePreferences();
+  const hideCrypto = !!prefs?.hide_crypto;
   let getTokenAcc: (() => Promise<string | null>) | undefined;
   if (clerkEnabledAcc) { try { const auth = useAuth(); getTokenAcc = auth.getToken; } catch {} }
   const authFetch = async (url: string, opts?: RequestInit) => {
@@ -632,6 +633,7 @@ export default function Accounts() {
   const uniqueSubtypes = [...new Set(allAccounts.filter(a => a.type === 'investment' && a.subtype).map(a => a.subtype!))];
   const hasCrypto = allAccounts.some(a => a.provider === 'blockchain' || a.provider === 'coinbase');
   const filteredAccounts = allAccounts.filter(acc => {
+    if (hideCrypto && acc.subtype === 'crypto') return false;
     if (filterBank && acc.bank_name !== filterBank) return false;
     if (filterType === 'crypto') {
       if (acc.provider !== 'blockchain' && acc.provider !== 'coinbase') return false;

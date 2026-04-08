@@ -48,6 +48,8 @@ const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 function AppRoutes() {
   const location = useLocation();
+  const { prefs } = usePreferences();
+  const hideCrypto = !!prefs?.hide_crypto;
   const [keepAlive, setKeepAlive] = useState(() => ({
     crypto: location.pathname === '/crypto',
     actionsFunds: location.pathname === '/actions-fonds',
@@ -64,7 +66,7 @@ function AppRoutes() {
 
   return (
     <>
-      {keepAlive.crypto && (
+      {keepAlive.crypto && !hideCrypto && (
         <div className={location.pathname === '/crypto' ? 'block' : 'hidden'}>
           <Crypto />
         </div>

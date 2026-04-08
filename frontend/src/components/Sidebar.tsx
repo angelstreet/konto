@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { UserButton } from '@clerk/clerk-react';
 import { isSandbox } from '../sandbox';
+import { usePreferences } from '../PreferencesContext';
 
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 import {
@@ -169,6 +170,8 @@ export default function Sidebar({ onLogout }: Props) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
+  const { prefs } = usePreferences();
+  const hideCrypto = !!prefs?.hide_crypto;
   const sandbox = isSandbox();
   const [collapsed, setCollapsed] = useState(() => {
     const stored = localStorage.getItem('konto_sidebar_collapsed');
@@ -362,7 +365,7 @@ export default function Sidebar({ onLogout }: Props) {
 
       {/* Navigation */}
       <nav className={`flex-1 px-2 py-3 space-y-1 scrollbar-thin ${collapsed ? 'overflow-hidden' : 'overflow-y-auto'}`}>
-        {navGroups.map((group, gi) => {
+        {navGroups.map(g => hideCrypto ? { ...g, children: g.children.filter(c => c.kind !== 'leaf' || c.path !== '/crypto') } : g).map((group, gi) => {
           const isOpen = openGroup === gi;
           const hasActiveItem = childContainsActive(group.children, pathname);
 
