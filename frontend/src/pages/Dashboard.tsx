@@ -103,7 +103,7 @@ export default function Dashboard() {
   // For now include all investments as "Stocks" and patrimoine real_estate as "Real Estate"
   const cashTotal = checking + savings;
 
-  const brutTotal = cashTotal + investments + immoValue + (data ? data.patrimoine.assets.filter(a => a.type !== 'real_estate').reduce((s, a) => s + a.currentValue, 0) : 0);
+  const brutTotal = cashTotal + investments + crypto + immoValue + (data ? data.patrimoine.assets.filter(a => a.type !== 'real_estate').reduce((s, a) => s + a.currentValue, 0) : 0);
   const netTotal = brutTotal + loans;
 
   // Summary blocks
