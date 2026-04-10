@@ -256,7 +256,12 @@ async function createPatrimoineSnapshot(userId: number, date?: string) {
   const assetsResult = await db.execute({ sql: 'SELECT * FROM assets WHERE user_id = ?', args: [userId] });
 
   const categories: Record<string, number> = { checking: 0, savings: 0, investment: 0, loan: 0, real_estate: 0, vehicle: 0, valuable: 0, other: 0 };
-  for (const a of accountsResult.rows as any[]) categories[a.type || 'checking'] = (categories[a.type || 'checking'] || 0) + (a.balance || 0);
+  for (const a of accountsResult.rows as any[]) {
+    // For crypto accounts, balance is in native units (e.g. PEPE), balance_native holds the EUR value
+    const isCrypto = a.subtype === 'crypto';
+    const value = isCrypto ? (a.balance_native || 0) : (a.balance || 0);
+    categories[a.type || 'checking'] = (categories[a.type || 'checking'] || 0) + value;
+  }
   for (const a of assetsResult.rows as any[]) categories[a.type || 'other'] = (categories[a.type || 'other'] || 0) + (a.current_value || a.purchase_price || 0);
 
   let total = 0;
