@@ -6,15 +6,29 @@ import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'rec
 const ranges = ['1m', '3m', '6m', '1y', 'max'] as const;
 const rangeLabels: Record<string, string> = { '1m': '1M', '3m': '3M', '6m': '6M', '1y': '1A', max: 'Max' };
 
+// Module-level cache survives unmount/remount + sessionStorage persistence
+type ChartPoint = { date: string; value: number };
+const CACHE_KEY = 'konto_patrimoine_chart_cache';
+const chartCache: Record<string, ChartPoint[]> = (() => {
+  try {
+    const stored = sessionStorage.getItem(CACHE_KEY);
+    return stored ? JSON.parse(stored) : {};
+  } catch { return {}; }
+})();
+function persistChartCache() {
+  try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(chartCache)); } catch {}
+}
+
 function formatCurrency(v: number) {
   return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 }
 
 export default function PatrimoineChart({ showNet = true, hideAmounts = false }: { showNet?: boolean; hideAmounts?: boolean }) {
   const [range, setRange] = useState<string>('6m');
-  const [data, setData] = useState<{ date: string; value: number }[]>([]);
-  const [loading, setLoading] = useState(true);
-  const initialLoaded = useRef(false);
+  const cacheKey = `${range}:${showNet ? 'net' : 'brut'}`;
+  const [data, setData] = useState<{ date: string; value: number }[]>(() => chartCache[cacheKey] || []);
+  const [loading, setLoading] = useState(!chartCache[cacheKey]);
+  const initialLoaded = useRef(!!chartCache[cacheKey]);
   const prevShowNet = useRef(showNet);
 
   // Auth — get Clerk token for API calls
@@ -30,10 +44,18 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
   getTokenRef.current = getToken;
 
   useEffect(() => {
-    // Only show loading spinner on initial load or range change, not brut/net toggle
-    const isNetToggle = prevShowNet.current !== showNet;
+    // Show cached data immediately if available, then refetch in background
+    const cached = chartCache[cacheKey];
+    if (cached) {
+      setData(cached);
+      setLoading(false);
+      initialLoaded.current = true;
+    } else {
+      const isNetToggle = prevShowNet.current !== showNet;
+      if (!isNetToggle) setLoading(true);
+    }
     prevShowNet.current = showNet;
-    if (!isNetToggle) setLoading(true);
+
     const params = new URLSearchParams({ range, category: 'all' });
     if (showNet) params.set('net', '1');
     (async () => {
@@ -47,11 +69,13 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
       .then(r => r.json())
       .then(d => {
         const history = d.history || [];
+        chartCache[cacheKey] = history;
+        persistChartCache();
         setData(history);
         if (history.length >= 2) initialLoaded.current = true;
       })
       .finally(() => setLoading(false));
-  }, [range, showNet]);
+  }, [range, showNet, cacheKey]);
 
   const latestValue = data.length > 0 ? data[data.length - 1].value : 0;
   const firstValue = data.length > 0 ? data[0].value : 0;
