@@ -454,53 +454,6 @@ export default function Settings() {
           </a>
         )}
 
-        {/* Export data */}
-        <button
-          onClick={async () => {
-            const res = await authFetch(API + '/export');
-            const data = await res.json();
-            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `konto-backup-${new Date().toISOString().split('T')[0]}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-          }}
-          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
-        >
-          <Download size={18} className="text-muted" />
-          <span className="text-sm">{t('export_data')}</span>
-        </button>
-
-        {/* Import data */}
-        <label className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors cursor-pointer">
-          <Upload size={18} className="text-muted" />
-          <span className="text-sm">{t('import_data')}</span>
-          <input
-            type="file"
-            accept=".json"
-            className="hidden"
-            onChange={async (e) => {
-              const file = e.target.files?.[0];
-              if (!file) return;
-              const text = await file.text();
-              const data = JSON.parse(text);
-              const res = await authFetch(API + '/import', {
-                method: 'POST',
-                body: JSON.stringify(data),
-              });
-              const result = await res.json();
-              if (result.ok) {
-                alert(`Importé: ${result.imported.companies} entreprises, ${result.imported.bank_accounts} comptes, ${result.imported.transactions} transactions, ${result.imported.assets} biens`);
-              } else {
-                alert('Erreur: ' + (result.error || 'Import échoué'));
-              }
-              e.target.value = '';
-            }}
-          />
-        </label>
-
         <button
           className="w-full flex items-center gap-3 px-4 py-3.5 text-left text-muted/40 cursor-not-allowed"
           disabled
@@ -556,6 +509,36 @@ export default function Settings() {
               <p className="text-xs text-muted mt-0.5">{t('export_my_data_desc', 'Télécharger toutes vos données au format JSON')}</p>
             </div>
           </button>
+
+          <label className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors cursor-pointer">
+            <Upload size={18} className="text-muted" />
+            <div>
+              <span className="text-sm">{t('import_data', 'Importer mes données')}</span>
+              <p className="text-xs text-muted mt-0.5">Restaurer depuis un fichier JSON</p>
+            </div>
+            <input
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const text = await file.text();
+                const data = JSON.parse(text);
+                const res = await authFetch(API + '/import', {
+                  method: 'POST',
+                  body: JSON.stringify(data),
+                });
+                const result = await res.json();
+                if (result.ok) {
+                  alert(`Importé: ${result.imported.companies} entreprises, ${result.imported.bank_accounts} comptes, ${result.imported.transactions} transactions, ${result.imported.assets} biens`);
+                } else {
+                  alert('Erreur: ' + (result.error || 'Import échoué'));
+                }
+                e.target.value = '';
+              }}
+            />
+          </label>
 
           <button
             onClick={() => navigate('/privacy')}
