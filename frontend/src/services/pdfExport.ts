@@ -2,7 +2,7 @@ import { toJpeg } from 'html-to-image';
 import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import { BASE_PATH } from '../config';
 
-const PAGES = [
+const ALL_PAGES = [
   { path: '/', label: 'Synthèse' },
   { path: '/accounts', label: 'Comptes' },
   { path: '/companies', label: 'Entreprises' },
@@ -12,6 +12,10 @@ const PAGES = [
   { path: '/actions-fonds', label: 'Actions & Fonds' },
   { path: '/property-roi', label: 'Rendement' },
 ];
+
+function getPages(opts?: { hideCrypto?: boolean }) {
+  return ALL_PAGES.filter(p => !opts?.hideCrypto || p.path !== '/crypto');
+}
 
 function waitFor(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms));
@@ -58,9 +62,11 @@ function navigateTo(path: string) {
 
 export async function capturePages(
   onProgress: (p: CaptureProgress) => void,
+  opts?: { hideCrypto?: boolean },
 ): Promise<{ label: string; dataUrl: string }[]> {
   const savedPath = window.location.pathname;
   const results: { label: string; dataUrl: string }[] = [];
+  const PAGES = getPages(opts);
 
   // Remove sidebar margin from <main> during capture
   const main = getMainContent();
@@ -162,8 +168,10 @@ export async function buildPdf(captures: { label: string; dataUrl: string }[]): 
 
 export async function generateVisualReport(
   onProgress: (p: CaptureProgress) => void,
+  opts?: { hideCrypto?: boolean },
 ): Promise<Uint8Array> {
-  const captures = await capturePages(onProgress);
-  onProgress({ current: PAGES.length, total: PAGES.length, label: 'Génération PDF...' });
+  const captures = await capturePages(onProgress, opts);
+  const total = getPages(opts).length;
+  onProgress({ current: total, total, label: 'Génération PDF...' });
   return buildPdf(captures);
 }

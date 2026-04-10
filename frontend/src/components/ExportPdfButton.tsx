@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { FileText } from 'lucide-react';
 import { useAuthFetch } from '../useApi';
+import { usePreferences } from '../PreferencesContext';
 import { API } from '../config';
 import { generateVisualReport, CaptureProgress } from '../services/pdfExport';
 
@@ -32,6 +33,7 @@ function hideOverlay() {
 
 export default function ExportPdfButton() {
   const authFetch = useAuthFetch();
+  const { prefs } = usePreferences();
   const [exporting, setExporting] = useState(false);
   const [lastReportDate] = useState<string | null>(
     () => localStorage.getItem(LAST_REPORT_DATE_KEY)
@@ -40,7 +42,7 @@ export default function ExportPdfButton() {
   const handleExport = async () => {
     setExporting(true);
     try {
-      const pdfBytes = await generateVisualReport(showOverlay);
+      const pdfBytes = await generateVisualReport(showOverlay, { hideCrypto: !!prefs?.hide_crypto });
 
       // Open in new tab
       const blob = new Blob([pdfBytes as unknown as BlobPart], { type: 'application/pdf' });
