@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Globe, Palette, Bell, Building2, LogOut, Shield, Check, Download, Upload, Type, EyeOff, Coins, Bitcoin, Home, ArrowLeft, CloudOff, Cloud, User, RefreshCw } from 'lucide-react';
 import { usePreferences } from '../PreferencesContext';
-import { useAuthFetch } from '../useApi';
+import { useAuthFetch, invalidateAllApi } from '../useApi';
 import { useLogout } from '../LogoutContext';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import { isSandbox } from '../sandbox';
@@ -21,6 +21,7 @@ const THEMES = [
 export default function Settings() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
+  const [hideCryptoLoading, setHideCryptoLoading] = useState(false);
   const [showThemes, setShowThemes] = useState(false);
   const [showQuoteSize, setShowQuoteSize] = useState(false);
   const [currentTheme, setCurrentTheme] = useState(
@@ -430,12 +431,22 @@ export default function Settings() {
 
         {/* Hide crypto toggle */}
         <button
-          onClick={() => updatePrefs({ hide_crypto: prefs?.hide_crypto ? 0 : 1 })}
-          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors"
+          onClick={async () => {
+            setHideCryptoLoading(true);
+            try {
+              await updatePrefs({ hide_crypto: prefs?.hide_crypto ? 0 : 1 });
+              invalidateAllApi();
+            } finally {
+              setHideCryptoLoading(false);
+            }
+          }}
+          disabled={hideCryptoLoading}
+          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-surface-hover transition-colors disabled:opacity-60"
         >
           <EyeOff size={18} className="text-muted" />
           <span className="text-sm">Masquer les cryptos</span>
-          <span className="ml-auto">
+          <span className="ml-auto flex items-center gap-2">
+            {hideCryptoLoading && <RefreshCw size={14} className="text-muted animate-spin" />}
             <span className={`inline-block w-9 h-5 rounded-full transition-colors relative ${prefs?.hide_crypto ? 'bg-accent-500' : 'bg-white/10'}`}>
               <span className={`absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform ${prefs?.hide_crypto ? 'left-[1.125rem]' : 'left-0.5'}`} />
             </span>
