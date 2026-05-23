@@ -1,8 +1,7 @@
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { LayoutDashboard, Landmark, MoreHorizontal, Menu } from 'lucide-react';
-import { useState } from 'react';
-import { usePreferences } from '../PreferencesContext';
+import { useState, useEffect } from 'react';
 
 // Mobile: 4 items max with hamburger for more
 const mobileItems = [
@@ -15,12 +14,14 @@ const mobileItems = [
 const morePaths = ['/more', '/income', '/assets', '/loans', '/budget', '/analysis', '/cashflow', '/bilan', '/bilan-pro', '/reports', '/ledger', '/vat', '/fec-export', '/reconciliation', '/simulators', '/simulateur-immo', '/import', '/outils', '/settings', '/ranking', '/fiscal', '/crypto', '/actions-fonds', '/property-roi', '/banking-score', '/subscriptions', '/trends', '/rapport-patrimoine', '/privacy'];
 
 const moreLinks = [
+  { path: '/assets', label: 'Assets' },
+  { path: '/actions-fonds', label: 'Stocks' },
+  { path: '/crypto', label: 'Crypto' },
   { path: '/accounts', label: 'Accounts' },
   { path: '/transactions', label: 'Transactions' },
   { path: '/loans', label: 'Loans' },
   { path: '/settings', label: 'Settings' },
   { path: '/fiscal', label: 'Fiscal' },
-  { path: '/crypto', label: 'Crypto' },
   { path: '/banking-score', label: 'Banking Score' },
   { path: '/subscriptions', label: 'Subscriptions' },
   { path: '/privacy', label: 'Privacy Policy' },
@@ -30,9 +31,25 @@ export default function BottomNav() {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { t } = useTranslation();
-  const { prefs } = usePreferences();
-  const hideCrypto = !!prefs?.hide_crypto;
   const [showDrawer, setShowDrawer] = useState(false);
+
+  // Lock body scroll when drawer is open
+  useEffect(() => {
+    if (showDrawer) {
+      document.body.style.overflow = 'hidden';
+      document.body.style.position = 'fixed';
+      document.body.style.inset = '0';
+    } else {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.inset = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+      document.body.style.position = '';
+      document.body.style.inset = '';
+    };
+  }, [showDrawer]);
 
   const items = mobileItems;
 
@@ -83,7 +100,7 @@ export default function BottomNav() {
             className="absolute bottom-20 left-2 right-2 bg-surface border border-border rounded-lg shadow-xl p-2"
             onClick={(e) => e.stopPropagation()}
           >
-            {moreLinks.filter(l => !hideCrypto || l.path !== '/crypto').map(({ path, label }) => (
+            {moreLinks.map(({ path, label }) => (
               <button
                 key={path}
                 onClick={() => {
