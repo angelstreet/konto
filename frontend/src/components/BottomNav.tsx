@@ -14,12 +14,12 @@ const mobileItems = [
 const morePaths = ['/more', '/income', '/assets', '/loans', '/budget', '/analysis', '/cashflow', '/bilan', '/bilan-pro', '/reports', '/ledger', '/vat', '/fec-export', '/reconciliation', '/simulators', '/simulateur-immo', '/import', '/outils', '/settings', '/ranking', '/fiscal', '/crypto', '/actions-fonds', '/property-roi', '/banking-score', '/subscriptions', '/trends', '/rapport-patrimoine', '/privacy'];
 
 const moreLinks = [
-  { path: '/assets', label: 'Assets' },
-  { path: '/actions-fonds', label: 'Stocks' },
-  { path: '/crypto', label: 'Crypto' },
   { path: '/accounts', label: 'Accounts' },
   { path: '/transactions', label: 'Transactions' },
   { path: '/loans', label: 'Loans' },
+  { path: '/assets', label: 'Assets' },
+  { path: '/actions-fonds', label: 'Stocks' },
+  { path: '/crypto', label: 'Crypto' },
   { path: '/settings', label: 'Settings' },
   { path: '/fiscal', label: 'Fiscal' },
   { path: '/banking-score', label: 'Banking Score' },
