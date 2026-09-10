@@ -6,6 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useApi } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
+import BilanDonut from '../components/BilanDonut';
 
 interface BilanData {
   year: number;
@@ -155,45 +156,16 @@ export default function Bilan() {
         </div>
       </div>
 
-      {/* Bilan simplifié */}
+      {/* Bilan donut */}
+      <BilanDonut actif={data.bilan.actif} passif={data.bilan.passif} />
+
+      {/* Capitaux propres */}
       <div className="bg-surface rounded-xl border border-border p-3">
-        <h2 className="text-sm font-semibold mb-3 flex items-center gap-2"><Building2 size={16} /> Bilan simplifié</h2>
-        <div className="grid grid-cols-2 gap-2.5">
-          <div>
-            <div className="text-xs text-muted mb-2 font-medium">ACTIF</div>
-            {data.bilan.actif.items.length === 0 ? (
-              <p className="text-xs text-muted">—</p>
-            ) : (
-              data.bilan.actif.items.map((a, i) => (
-                <div key={i} className="flex justify-between text-xs py-0.5">
-                  <span className="truncate">{a.name}</span>
-                  <span className="ml-2 tabular-nums">{mask(fmt(a.balance))}</span>
-                </div>
-              ))
-            )}
-            <div className="border-t border-border mt-2 pt-1 flex justify-between text-xs font-bold">
-              <span>Total</span><span>{mask(fmt(data.bilan.actif.total))}</span>
-            </div>
-          </div>
-          <div>
-            <div className="text-xs text-muted mb-2 font-medium">PASSIF</div>
-            {data.bilan.passif.items.length === 0 ? (
-              <p className="text-xs text-muted">—</p>
-            ) : (
-              data.bilan.passif.items.map((p, i) => (
-                <div key={i} className="flex justify-between text-xs py-0.5">
-                  <span className="truncate">{p.name}</span>
-                  <span className="ml-2 tabular-nums">{mask(fmt(p.balance))}</span>
-                </div>
-              ))
-            )}
-            <div className="border-t border-border mt-2 pt-1 flex justify-between text-xs font-bold">
-              <span>Total</span><span>{mask(fmt(data.bilan.passif.total))}</span>
-            </div>
-          </div>
-        </div>
-        <div className="mt-3 text-center text-sm font-semibold">
-          Capitaux propres: <span className={data.bilan.capitaux_propres >= 0 ? 'text-green-400' : 'text-red-400'}>
+        <h2 className="text-sm font-semibold mb-2 flex items-center gap-2">
+          <Building2 size={16} /> Capitaux propres
+        </h2>
+        <div className="text-center text-lg font-bold">
+          <span className={data.bilan.capitaux_propres >= 0 ? 'text-green-400' : 'text-red-400'}>
             {mask(fmt(data.bilan.capitaux_propres))}
           </span>
         </div>
