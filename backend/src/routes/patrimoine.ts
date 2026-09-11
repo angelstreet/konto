@@ -5,7 +5,8 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI,
          classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
-         calcInvestmentDiff, calcInvDiff, getCryptoEurPrices, updateCryptoBalanceNative } from '../shared.js';
+         calcInvestmentDiff, calcInvDiff, getCryptoEurPrices, updateCryptoBalanceNative,
+         getFiatEurRates, accountBalanceEur } from '../shared.js';
 import { estimatePropertyPrice } from '../services/propertyEstimation.js';
 
 const router = new Hono();
@@ -256,10 +257,12 @@ async function createPatrimoineSnapshot(userId: number, date?: string) {
   const assetsResult = await db.execute({ sql: 'SELECT * FROM assets WHERE user_id = ?', args: [userId] });
 
   const categories: Record<string, number> = { checking: 0, savings: 0, investment: 0, loan: 0, real_estate: 0, vehicle: 0, valuable: 0, other: 0 };
+  // Crypto balances are native units and foreign fiat needs converting, so both
+  // go through the shared helper to keep snapshots on the same basis as the dashboard.
+  const snapshotCryptoPrices = await getCryptoEurPrices();
+  const snapshotFiatRates = await getFiatEurRates();
   for (const a of accountsResult.rows as any[]) {
-    // For crypto accounts, balance is in native units (e.g. PEPE), balance_native holds the EUR value
-    const isCrypto = a.subtype === 'crypto';
-    const value = isCrypto ? (a.balance_native || 0) : (a.balance || 0);
+    const value = accountBalanceEur(a, snapshotCryptoPrices, snapshotFiatRates);
     categories[a.type || 'checking'] = (categories[a.type || 'checking'] || 0) + value;
   }
   for (const a of assetsResult.rows as any[]) categories[a.type || 'other'] = (categories[a.type || 'other'] || 0) + (a.current_value || a.purchase_price || 0);
@@ -471,8 +474,12 @@ router.get('/api/report/patrimoine', async (c) => {
   const wantedCategories = categoriesParam === 'all' ? ['bank', 'immobilier', 'crypto', 'stocks'] : categoriesParam.split(',');
   const sections: { title: string; items: { name: string; value: number }[]; total: number }[] = [];
 
+  const reportCryptoPrices = await getCryptoEurPrices();
+  const reportFiatRates = await getFiatEurRates();
+
   if (wantedCategories.includes('bank')) {
-    const items = accounts.filter(a => a.type === 'checking' || a.type === 'savings').map(a => ({ name: a.custom_name || a.name, value: a.balance || 0 }));
+    const items = accounts.filter(a => a.type === 'checking' || a.type === 'savings')
+      .map(a => ({ name: a.custom_name || a.name, value: accountBalanceEur(a, reportCryptoPrices, reportFiatRates) }));
     if (items.length) sections.push({ title: 'Comptes bancaires', items, total: items.reduce((s, i) => s + i.value, 0) });
   }
   if (wantedCategories.includes('immobilier')) {
@@ -480,20 +487,13 @@ router.get('/api/report/patrimoine', async (c) => {
     if (items.length) sections.push({ title: 'Immobilier', items, total: items.reduce((s, i) => s + i.value, 0) });
   }
   if (wantedCategories.includes('crypto')) {
-    const eurPricesCrypto = await getCryptoEurPrices();
-    const FIAT = new Set(['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'JPY', 'XOF']);
     const cryptoAccounts = accounts.filter(a => a.provider === 'blockchain' || a.provider === 'coinbase' || a.provider === 'binance');
 
     // Group by provider (Coinbase/Binance as single line), keep blockchain individual
     const providerTotals: Record<string, number> = {};
     const individualItems: { name: string; value: number }[] = [];
     for (const a of cryptoAccounts) {
-      const cur = a.currency || 'EUR';
-      let value: number;
-      if (a.balance_native != null && a.balance_native > 0) value = a.balance_native;
-      else if (FIAT.has(cur)) value = a.balance || 0;
-      else if (eurPricesCrypto[cur]) value = (a.balance || 0) * eurPricesCrypto[cur];
-      else value = 0;
+      const value = accountBalanceEur(a, reportCryptoPrices, reportFiatRates);
       if (value < 0.01) continue;
 
       if (a.provider === 'coinbase' || a.provider === 'binance') {
@@ -718,19 +718,24 @@ router.get('/api/bilan/:year', async (c) => {
   if (companyId) { accountsWhere.push('ba.company_id = ?'); accountsArgs.push(Number(companyId)); }
   if (usage) { accountsWhere.push('ba.usage = ?'); accountsArgs.push(usage); }
   const accountsRes = await db.execute({
-    sql: `SELECT ba.name, ba.type, ba.balance, ba.currency
+    sql: `SELECT ba.name, ba.type, ba.balance, ba.currency, ba.subtype, ba.balance_native
           FROM bank_accounts ba
           WHERE ${accountsWhere.join(' AND ')}
           ORDER BY ba.type, ba.name`,
     args: accountsArgs
   });
 
+  // Balances are stored in each account's own currency; the bilan totals in EUR.
+  const bilanCryptoPrices = await getCryptoEurPrices();
+  const bilanFiatRates = await getFiatEurRates();
+  const toEur = (a: any) => accountBalanceEur(a, bilanCryptoPrices, bilanFiatRates);
+
   const actif = accountsRes.rows
     .filter((a: any) => !['loan'].includes(a.type))
-    .map((a: any) => ({ name: a.name, type: a.type, balance: Number(a.balance), currency: a.currency }));
+    .map((a: any) => ({ name: a.name, type: a.type, balance: toEur(a), currency: 'EUR' }));
   const passif = accountsRes.rows
     .filter((a: any) => ['loan'].includes(a.type))
-    .map((a: any) => ({ name: a.name, type: a.type, balance: Math.abs(Number(a.balance)), currency: a.currency }));
+    .map((a: any) => ({ name: a.name, type: a.type, balance: Math.abs(toEur(a)), currency: 'EUR' }));
 
   const totalActif = actif.reduce((s: number, a: any) => s + a.balance, 0);
   const totalPassif = passif.reduce((s: number, a: any) => s + a.balance, 0);
@@ -1235,24 +1240,13 @@ router.get('/api/dashboard', async (c) => {
   // Persist EUR values to DB so cold starts always have a valid amount
   updateCryptoBalanceNative(userId, eurPrices);
 
-  const FIAT_CURRENCIES = new Set(['EUR', 'USD', 'GBP', 'CHF', 'CAD', 'JPY', 'XOF']);
+  const fiatRates = await getFiatEurRates();
   const accountsByType: Record<string, any[]> = { checking: [], savings: [], investment: [], loan: [] };
   for (const a of accounts) {
     const type = a.type || 'checking';
     if (!accountsByType[type]) accountsByType[type] = [];
     const cur = a.currency || 'EUR';
-    let balanceEur: number;
-    if (FIAT_CURRENCIES.has(cur)) {
-      balanceEur = a.balance || 0;
-    } else if (eurPrices[cur]) {
-      // Fresh price available — always use it (same as crypto page)
-      balanceEur = (a.balance || 0) * eurPrices[cur];
-    } else if (a.balance_native != null && a.balance_native > 0) {
-      // No fresh price — fall back to last stored EUR value
-      balanceEur = a.balance_native;
-    } else {
-      balanceEur = 0;
-    }
+    const balanceEur = accountBalanceEur(a, eurPrices, fiatRates);
     accountsByType[type].push({
       id: a.id, name: a.custom_name || a.name, balance: balanceEur, type, subtype: a.subtype || null, currency: 'EUR',
       bankName: a.bank_name || a.provider_bank_name || null,

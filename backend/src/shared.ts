@@ -357,6 +357,96 @@ export async function getCryptoEurPrices(): Promise<Record<string, number>> {
   }
 }
 
+// --- Fiat EUR rates (cached 12h — the ECB publishes once per working day) ---
+
+/**
+ * Units of each currency per 1 EUR. Used when the live feed is unavailable.
+ * XOF is pegged to the euro at a fixed parity and is never quoted by the ECB.
+ */
+const FIAT_EUR_FALLBACK: Record<string, number> = {
+  EUR: 1, USD: 1.08, GBP: 0.86, CHF: 0.94, CAD: 1.47, JPY: 162, XOF: 655.957,
+};
+
+/** Currencies treated as fiat; anything else is looked up as a crypto asset. */
+export const FIAT_CURRENCIES = new Set(Object.keys(FIAT_EUR_FALLBACK));
+
+let _fiatRateCache: { rates: Record<string, number>; ts: number } | null = null;
+const FIAT_CACHE_TTL = 12 * 60 * 60 * 1000; // 12h
+
+/**
+ * Live EUR reference rates, expressed as units of currency per 1 EUR
+ * (so CHF 0.94 means 1 EUR = 0.94 CHF). Falls back to the static table.
+ */
+export async function getFiatEurRates(): Promise<Record<string, number>> {
+  if (_fiatRateCache && Date.now() - _fiatRateCache.ts < FIAT_CACHE_TTL) return _fiatRateCache.rates;
+
+  const DB_KEY = 'fiat_eur_rates';
+  try {
+    const row = await db.execute({ sql: 'SELECT data, updated_at FROM kv_cache WHERE key = ?', args: [DB_KEY] });
+    if (row.rows.length > 0) {
+      const r = row.rows[0] as any;
+      const ts = new Date(r.updated_at).getTime();
+      const rates = { ...FIAT_EUR_FALLBACK, ...JSON.parse(r.data) } as Record<string, number>;
+      if (Date.now() - ts < FIAT_CACHE_TTL) {
+        _fiatRateCache = { rates, ts };
+        return rates;
+      }
+      // Stale but still better than the static table if the fetch below fails.
+      _fiatRateCache = { rates, ts };
+    }
+  } catch {}
+
+  // ECB reference rates via Frankfurter — no API key required.
+  const symbols = Object.keys(FIAT_EUR_FALLBACK).filter(c => c !== 'EUR' && c !== 'XOF').join(',');
+  try {
+    const res = await fetch(`https://api.frankfurter.dev/v1/latest?base=EUR&symbols=${symbols}`);
+    if (!res.ok) throw new Error(`Frankfurter ${res.status}`);
+    const data = await res.json() as { rates?: Record<string, number> };
+    if (!data.rates || Object.keys(data.rates).length === 0) throw new Error('Frankfurter: empty rates');
+
+    const fetched: Record<string, number> = {};
+    for (const [code, rate] of Object.entries(data.rates)) {
+      if (typeof rate === 'number' && rate > 0) fetched[code] = rate;
+    }
+    const rates = { ...FIAT_EUR_FALLBACK, ...fetched };
+    _fiatRateCache = { rates, ts: Date.now() };
+    try {
+      await db.execute({
+        sql: 'INSERT OR REPLACE INTO kv_cache (key, data, updated_at) VALUES (?, ?, ?)',
+        args: [DB_KEY, JSON.stringify(fetched), new Date().toISOString()],
+      });
+    } catch {}
+    return rates;
+  } catch {
+    return _fiatRateCache?.rates || FIAT_EUR_FALLBACK;
+  }
+}
+
+/**
+ * A bank account's balance converted to EUR — the single source of truth for
+ * every total in the app.
+ *
+ * Fiat balances are divided by their per-EUR rate. Crypto balances are stored
+ * in native units, so they are priced live, falling back to the last EUR value
+ * persisted in balance_native.
+ */
+export function accountBalanceEur(
+  account: any,
+  cryptoPrices: Record<string, number>,
+  fiatRates: Record<string, number>,
+): number {
+  const cur = account.currency || 'EUR';
+  const balance = account.balance || 0;
+
+  if (FIAT_CURRENCIES.has(cur)) {
+    const rate = fiatRates[cur];
+    return rate && rate > 0 ? balance / rate : balance;
+  }
+  if (cryptoPrices[cur]) return balance * cryptoPrices[cur];
+  if (account.balance_native != null && account.balance_native !== 0) return account.balance_native;
+  return 0;
+}
+
 /** Update balance_native (EUR) for all crypto accounts that have a known price */
 export async function updateCryptoBalanceNative(userId: number, prices: Record<string, number>) {
   if (Object.keys(prices).length === 0) return;

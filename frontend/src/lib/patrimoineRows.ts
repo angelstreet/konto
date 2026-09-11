@@ -54,7 +54,7 @@ export interface PatrimoineRow {
   typeKey: string;
   typeLabel: string;
   institution: string | null;
-  /** Always in display currency. */
+  /** Always in EUR; the display-currency conversion happens at render time. */
   value: number;
   nativeValue: number | null;
   nativeCurrency: string | null;
@@ -96,12 +96,11 @@ export interface BuildOptions {
   /** Net folds each asset's linked loan into its own value, as the rest of the page does. */
   showNet: boolean;
   hideCrypto: boolean;
-  convert: (amount: number, fromCurrency?: string) => number;
 }
 
 /** One row per account and per asset, split into actif / passif. */
 export function buildPatrimoineRows({
-  accountsByType, assets, showNet, hideCrypto, convert,
+  accountsByType, assets, showNet, hideCrypto,
 }: BuildOptions): PatrimoineRow[] {
   const rows: PatrimoineRow[] = [];
 
@@ -113,7 +112,8 @@ export function buildPatrimoineRows({
       // Loans are the passif side; their balances are stored negative.
       const isLoan = type === 'loan';
       const typeKey = isCrypto ? 'crypto' : type;
-      const value = convert(a.balance, a.currency || 'EUR');
+      // Already in EUR from /api/dashboard; formatCurrency converts once at render.
+      const value = a.balance;
       if (value === 0) continue;
 
       const native = a.nativeBalance ?? null;

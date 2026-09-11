@@ -24,7 +24,7 @@ interface Props extends BuildOptions {
  * grouping selector. Sits below the daily quote on the Synthèse page.
  */
 export default function PatrimoineBreakdown({
-  accountsByType, assets, showNet, hideCrypto, convert, formatCurrency, hideAmounts,
+  accountsByType, assets, showNet, hideCrypto, formatCurrency, hideAmounts,
 }: Props) {
   const [side, setSide] = useState<Side>('actif');
   const [groupBy, setGroupBy] = useState<GroupBy>('asset');
@@ -33,8 +33,8 @@ export default function PatrimoineBreakdown({
   const [menuOpen, setMenuOpen] = useState(false);
 
   const allRows = useMemo(
-    () => buildPatrimoineRows({ accountsByType, assets, showNet, hideCrypto, convert }),
-    [accountsByType, assets, showNet, hideCrypto, convert],
+    () => buildPatrimoineRows({ accountsByType, assets, showNet, hideCrypto }),
+    [accountsByType, assets, showNet, hideCrypto],
   );
 
   const rows = useMemo(() => allRows.filter(r => r.side === side && r.value > 0), [allRows, side]);
