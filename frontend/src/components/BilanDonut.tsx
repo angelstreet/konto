@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Treemap } from 'recharts';
 import { useAmountVisibility } from '../AmountVisibilityContext';
+import { usePreferences } from '../PreferencesContext';
 
 // ── Colors ────────────────────────────────────────────────────────────────
 const ACTIF_COLORS: Record<string, string> = {
@@ -25,11 +26,7 @@ const DEFAULT_ACTIF_COLOR = '#9ca3af';
 const DEFAULT_PASSIF_COLOR = '#818cf8';
 
 // ── Helpers ───────────────────────────────────────────────────────────────
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
-}
-
-function TreemapCell({ x, y, width, height, name, value, posSum, hideAmounts, isPassif }: any) {
+function TreemapCell({ x, y, width, height, name, value, posSum, hideAmounts, isPassif, formatCurrency }: any) {
   const label = name;
   const pct = posSum > 0 ? ((value / posSum) * 100).toFixed(1) : '0';
   const showLabel = width > 50 && height > 36;
@@ -65,6 +62,8 @@ type Tab = 'actif' | 'passif';
 
 // ── Component ──────────────────────────────────────────────────────────────
 export default function BilanDonut({ actif, passif }: Props) {
+  // Values are stored in EUR; render them in the user's display currency.
+  const { formatCurrencyRounded: formatCurrency } = usePreferences();
   const [tab, setTab] = useState<Tab>('actif');
   const [view, setView] = useState<'donut' | 'treemap'>('donut');
   const { hideAmounts } = useAmountVisibility();
@@ -213,7 +212,7 @@ export default function BilanDonut({ actif, passif }: Props) {
               dataKey="size"
               aspectRatio={4 / 3}
               isAnimationActive={false}
-              content={<TreemapCell posSum={posSum} hideAmounts={hideAmounts} isPassif={isPassif} />}
+              content={<TreemapCell posSum={posSum} hideAmounts={hideAmounts} isPassif={isPassif} formatCurrency={formatCurrency} />}
             >
               <Tooltip
                 formatter={(value: any, name: any) => [hideAmounts ? '••••' : formatCurrency(value as number), name]}

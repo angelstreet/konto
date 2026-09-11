@@ -4,6 +4,7 @@ import { Printer, ExternalLink, FileText, Check, ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom';
 import { useAuthFetch } from '../useApi';
 import { useFilter } from '../FilterContext';
+import { usePreferences } from '../PreferencesContext';
 
 const CATEGORIES = [
   { key: 'bank', label: 'Comptes bancaires', icon: '🏦' },
@@ -11,10 +12,6 @@ const CATEGORIES = [
   { key: 'crypto', label: 'Crypto', icon: '₿' },
   { key: 'stocks', label: 'Actions & Fonds', icon: '📈' },
 ];
-
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 2 }).format(v);
-}
 
 interface ReportSection {
   title: string;
@@ -24,6 +21,8 @@ interface ReportSection {
 type ReportPayload = { sections: ReportSection[]; grandTotal: number; generatedAt: string; id?: number; createdAt?: string };
 
 export default function Report() {
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrency } = usePreferences();
   const navigate = useNavigate();
   const authFetch = useAuthFetch();
   const { companies } = useFilter();

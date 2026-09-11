@@ -7,6 +7,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
 import DriveFolderPickerModal from '../components/DriveFolderPickerModal';
+import { usePreferences } from '../PreferencesContext';
 
 interface Company {
   id: number;
@@ -313,8 +314,8 @@ export default function CompanyPage() {
     return abbrevs[form] || form;
   };
 
-  const formatBalance = (n: number) =>
-    new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrency: formatBalance } = usePreferences();
 
   const legalForms = ['SARL', 'SAS', 'SASU', 'EURL', 'SA', 'SCI', 'Auto-entrepreneur', 'EI', 'Autre'];
 

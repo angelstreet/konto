@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import { usePreferences } from '../PreferencesContext';
 
 type Asset = {
   id: number;
@@ -18,11 +19,9 @@ const USAGE_COLORS: Record<string, string> = {
   vacant: '#6b7280',
 };
 
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
-}
-
 export default function AssetMap({ assets }: { assets: Asset[] }) {
+  // Values are stored in EUR; render them in the user's display currency.
+  const { formatCurrencyRounded: formatCurrency } = usePreferences();
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
 

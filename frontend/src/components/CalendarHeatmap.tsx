@@ -5,16 +5,13 @@ import { useAuthFetch } from '../useApi';
 import { API } from '../config';
 import { useFilter } from '../FilterContext';
 import { useEffect } from 'react';
+import { usePreferences } from '../PreferencesContext';
 
 interface DayData {
   date: string;
   income: number;
   expense: number;
   net: number;
-}
-
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
 }
 
 function getColor(net: number): string {
@@ -32,6 +29,8 @@ function getColor(net: number): string {
 const DAY_LABELS = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
 
 export default function CalendarHeatmap() {
+  // Values are stored in EUR; render them in the user's display currency.
+  const { formatCurrencyRounded: formatCurrency } = usePreferences();
   const authFetch = useAuthFetch();
   const { appendScope } = useFilter();
   const { hideAmounts } = useAmountVisibility();

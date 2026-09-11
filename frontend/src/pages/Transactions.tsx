@@ -7,6 +7,7 @@ import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
 import ScopeSelect from '../components/ScopeSelect';
 import { useAuth } from '@clerk/clerk-react';
+import { usePreferences } from '../PreferencesContext';
 const clerkEnabledTx = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
 interface Transaction {
@@ -263,7 +264,8 @@ export default function Transactions() {
     setPage(0);
   };
 
-  const fmtCur = (n: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrency: fmtCur } = usePreferences();
   const fmtPct = (p: number) => `${(p * 100).toFixed(1)}%`;
 
   const formatDate = (d: string) => {
@@ -280,7 +282,8 @@ export default function Transactions() {
       const decimals = currency === 'BTC' ? 8 : 6;
       formatted = `${new Intl.NumberFormat('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: decimals }).format(n)} ${currency}`;
     } else {
-      formatted = new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
+      // Converts from the account's own currency, not just EUR.
+      formatted = fmtCur(n, currency || 'EUR');
     }
     if (hideAmounts) return <span className="amount-masked">{formatted}</span>;
     return formatted;

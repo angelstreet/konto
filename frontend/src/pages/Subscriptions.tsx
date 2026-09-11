@@ -2,6 +2,7 @@ import { useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { ArrowLeft, ChevronDown } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { usePreferences } from '../PreferencesContext';
 
 interface Subscription {
   merchant: string;
@@ -43,10 +44,6 @@ const MOCK_DATA: SubscriptionsData = {
 };
 
 type SortKey = 'amount' | 'category' | 'date';
-
-function formatAmount(n: number): string {
-  return n.toLocaleString('de-DE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
 
 function formatDateShort(dateStr: string): string {
   const d = new Date(dateStr);
@@ -91,6 +88,8 @@ function getCatColor(cat: string) {
 }
 
 export default function Subscriptions() {
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrency } = usePreferences();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { search } = useLocation();
@@ -135,9 +134,9 @@ export default function Subscriptions() {
           <div className="flex flex-wrap items-center gap-2 text-sm">
             <span className="text-foreground font-semibold text-lg">{data.count} {t('detected', 'detectes')}</span>
             <span className="text-muted">•</span>
-            <span className="font-medium text-red-400">{formatAmount(Math.abs(data.totalMonthly))} €/{t('monthly_short', 'mois')}</span>
+            <span className="font-medium text-red-400">{formatCurrency(Math.abs(data.totalMonthly))}/{t('monthly_short', 'mois')}</span>
             <span className="text-muted">•</span>
-            <span className="text-muted">{formatAmount(Math.abs(data.totalYearly))} €/{t('yearly_short', 'an')}</span>
+            <span className="text-muted">{formatCurrency(Math.abs(data.totalYearly))}/{t('yearly_short', 'an')}</span>
           </div>
         </div>
 
@@ -195,7 +194,7 @@ export default function Subscriptions() {
                     <span className="font-semibold text-sm truncate">{sub.merchant}</span>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <span className="font-bold text-sm text-red-400">{formatAmount(sub.amount)} €</span>
+                    <span className="font-bold text-sm text-red-400">{formatCurrency(sub.amount)}</span>
                     <span className="text-muted text-xs">/{sub.frequency === 'monthly' ? t('monthly_short', 'mois') : t('yearly_short', 'an')}</span>
                   </div>
                 </div>
@@ -208,7 +207,7 @@ export default function Subscriptions() {
                 </div>
                 <div className="mt-1 ml-9 flex flex-wrap justify-between gap-x-4 text-xs text-muted">
                   <span>{t('next_expected', 'Prochain')}: ~{addOneMonth(sub.lastDate)}</span>
-                  <span>{t('yearly_total', 'Total')}: {formatAmount(sub.totalYearly)} €/{t('yearly_short', 'an')}</span>
+                  <span>{t('yearly_total', 'Total')}: {formatCurrency(sub.totalYearly)}/{t('yearly_short', 'an')}</span>
                 </div>
               </div>
             ))}

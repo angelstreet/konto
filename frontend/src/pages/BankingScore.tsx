@@ -4,6 +4,7 @@ import { useAuthFetch } from '../useApi';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Landmark, TrendingUp } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
+import { usePreferences } from '../PreferencesContext';
 
 type AccountRow = {
   id: number;
@@ -47,14 +48,6 @@ type BankMetric = {
 
 function clamp(v: number, min: number, max: number) {
   return Math.max(min, Math.min(max, v));
-}
-
-function fmtCurrency(v: number) {
-  return new Intl.NumberFormat('de-DE', {
-    style: 'currency',
-    currency: 'EUR',
-    maximumFractionDigits: 0,
-  }).format(v || 0);
 }
 
 function fmtCompact(v: number) {
@@ -172,6 +165,8 @@ function loanCapacity(m: Omit<BankMetric, 'score' | 'suggestedLoan' | 'lowLoan' 
 }
 
 export default function BankingScore() {
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrencyRounded: fmtCurrency } = usePreferences();
   const navigate = useNavigate();
   const authFetch = useAuthFetch();
 

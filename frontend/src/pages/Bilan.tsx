@@ -7,6 +7,7 @@ import { useApi } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
 import BilanDonut from '../components/BilanDonut';
+import { usePreferences } from '../PreferencesContext';
 
 interface BilanData {
   year: number;
@@ -38,7 +39,8 @@ export default function Bilan() {
   });
   const { data, loading } = useApi<BilanData>(`${API}/bilan/${year}?usage=personal`);
 
-  const fmt = (n: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrency: fmt } = usePreferences();
 
   if (loading) return <div className="text-center text-muted py-12">Chargement...</div>;
   if (!data) return <div className="text-center text-muted py-12">Erreur de chargement</div>;

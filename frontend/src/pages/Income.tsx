@@ -8,6 +8,7 @@ import EyeToggle from '../components/EyeToggle';
 import { useNavigate } from 'react-router-dom';
 import { useApi, useAuthFetch } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
+import { usePreferences } from '../PreferencesContext';
 
 interface IncomeEntry {
   id: number;
@@ -1139,7 +1140,8 @@ function PassiveIncomeSection({ year }: { year: number }) {
   }, [isPastYear]);
   const { data, loading } = useApi<PassiveIncomeData>(`${API}/analysis/passive-income?usage=personal&year=${year}`);
 
-  const fmt = (v: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrencyRounded: fmt } = usePreferences();
 
   const typeIcon = (type: string) => type === 'rental' ? '🏠' : type === 'dividend' ? '📈' : '💰';
 
