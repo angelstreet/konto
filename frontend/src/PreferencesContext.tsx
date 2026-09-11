@@ -16,6 +16,8 @@ interface PreferencesContextType {
   refresh: () => void;
   update: (partial: Partial<UserPreferences>) => Promise<void>;
   formatCurrency: (amount: number, fromCurrency?: string) => string;
+  /** Same as formatCurrency but without cents — for tables and charts. */
+  formatCurrencyRounded: (amount: number, fromCurrency?: string) => string;
   convertToDisplay: (amount: number, fromCurrency?: string) => number;
 }
 
@@ -25,6 +27,7 @@ const PreferencesContext = createContext<PreferencesContextType>({
   refresh: () => {},
   update: async () => {},
   formatCurrency: (n) => `€${n.toFixed(2)}`,
+  formatCurrencyRounded: (n) => `€${Math.round(n)}`,
   convertToDisplay: (n) => n,
 });
 
@@ -141,8 +144,16 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     return new Intl.NumberFormat('de-DE', { style: 'currency', currency: displayCur }).format(converted);
   }, [prefs?.display_currency, convertToDisplay]);
 
+  const formatCurrencyRounded = useCallback((amount: number, fromCurrency?: string) => {
+    const displayCur = prefs?.display_currency || 'EUR';
+    const converted = convertToDisplay(amount, fromCurrency);
+    return new Intl.NumberFormat('de-DE', {
+      style: 'currency', currency: displayCur, maximumFractionDigits: 0,
+    }).format(converted);
+  }, [prefs?.display_currency, convertToDisplay]);
+
   return (
-    <PreferencesContext.Provider value={{ prefs, loading, refresh: fetchPrefs, update, formatCurrency, convertToDisplay }}>
+    <PreferencesContext.Provider value={{ prefs, loading, refresh: fetchPrefs, update, formatCurrency, formatCurrencyRounded, convertToDisplay }}>
       {children}
     </PreferencesContext.Provider>
   );

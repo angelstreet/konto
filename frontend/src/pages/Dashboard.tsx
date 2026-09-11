@@ -69,14 +69,14 @@ const sizeClasses: Record<string, string> = { sm: 'text-sm', base: 'text-base', 
 export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const { appendScope } = useFilter();
-  const { prefs, formatCurrency } = usePreferences();
+  const { prefs, formatCurrencyRounded } = usePreferences();
   const hideCrypto = !!prefs?.hide_crypto;
   const authFetch = useAuthFetch();
   const { data, loading } = useApi<DashboardData>(appendScope(`${API}/dashboard`));
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
   const [showNet, setShowNet] = useState(() => localStorage.getItem('konto_show_net') !== 'false');
   const [speaking, setSpeaking] = useState(false);
-  const fc = (n: number) => hideAmounts ? <span className="amount-masked">{formatCurrency(n)}</span> : formatCurrency(n);
+  const fc = (n: number) => hideAmounts ? <span className="amount-masked">{formatCurrencyRounded(n)}</span> : formatCurrencyRounded(n);
 
   const quoteIndex = (Math.floor(Date.now() / 86400000) % QUOTE_COUNT) + 1;
   const quoteText = t(`quote_${quoteIndex}`);
@@ -96,7 +96,7 @@ export default function Dashboard() {
   }, [quoteText, i18n.language]);
 
   // Compute summary values
-  // /api/dashboard returns balances already converted to EUR; formatCurrency
+  // /api/dashboard returns balances already converted to EUR; formatCurrencyRounded
   // applies the display-currency conversion once at render time.
   const convertAcc = (a: DashboardAccount) => a.balance;
   
@@ -277,7 +277,7 @@ export default function Dashboard() {
               assets={data.patrimoine.assets}
               showNet={showNet}
               hideCrypto={hideCrypto}
-              formatCurrency={formatCurrency}
+              formatCurrency={formatCurrencyRounded}
               hideAmounts={hideAmounts}
             />
             <PatrimoineTable
@@ -285,7 +285,7 @@ export default function Dashboard() {
               assets={data.patrimoine.assets}
               showNet={showNet}
               hideCrypto={hideCrypto}
-              formatCurrency={formatCurrency}
+              formatCurrency={formatCurrencyRounded}
               hideAmounts={hideAmounts}
             />
           </div>
