@@ -1253,7 +1253,36 @@ router.get('/api/dashboard', async (c) => {
     } else {
       balanceEur = 0;
     }
-    accountsByType[type].push({ id: a.id, name: a.custom_name || a.name, balance: balanceEur, type, subtype: a.subtype || null, currency: 'EUR' });
+    accountsByType[type].push({
+      id: a.id, name: a.custom_name || a.name, balance: balanceEur, type, subtype: a.subtype || null, currency: 'EUR',
+      bankName: a.bank_name || a.provider_bank_name || null,
+      nativeBalance: a.balance || 0,
+      nativeCurrency: cur,
+    });
+  }
+
+  // Per-account unrealised gain, aggregated from held positions (PEA, CTO, …).
+  // Accounts without positions (plain current accounts) stay null so the UI leaves the cell blank.
+  const investmentDiffs = new Map<number, { gain: number; cost: number }>();
+  if (accounts.length > 0) {
+    const invResult = await db.execute({
+      sql: `SELECT i.bank_account_id, SUM(i.diff) AS gain, SUM(i.quantity * i.unit_price) AS cost
+            FROM investments i
+            WHERE i.bank_account_id IN (SELECT id FROM bank_accounts WHERE ${accountWhere})
+              AND i.diff IS NOT NULL
+            GROUP BY i.bank_account_id`,
+      args: accountParams,
+    });
+    for (const r of invResult.rows as any[]) {
+      investmentDiffs.set(Number(r.bank_account_id), { gain: r.gain || 0, cost: r.cost || 0 });
+    }
+  }
+  for (const list of Object.values(accountsByType)) {
+    for (const a of list as any[]) {
+      const d = investmentDiffs.get(Number(a.id));
+      a.gain = d ? d.gain : null;
+      a.gainPercent = d && d.cost > 0 ? (d.gain / d.cost) * 100 : null;
+    }
   }
 
   const brutBalance = [...accountsByType.checking, ...accountsByType.savings, ...accountsByType.investment]
@@ -1274,7 +1303,8 @@ router.get('/api/dashboard', async (c) => {
   else if (usage === 'professional') { assetWhere += ' AND a.usage = ?'; assetParams.push('professional'); }
   else if (companyId) { assetWhere += ' AND a.company_id = ?'; assetParams.push(companyId); }
   const assetsResult = await db.execute({
-    sql: `SELECT a.id, a.type, a.name, a.current_value, a.purchase_price, ba.balance as loan_balance
+    sql: `SELECT a.id, a.type, a.name, a.current_value, a.purchase_price, a.notary_fees, a.travaux,
+                 a.property_usage, a.address, ba.balance as loan_balance
           FROM assets a LEFT JOIN bank_accounts ba ON ba.id = a.linked_loan_account_id WHERE ${assetWhere}`,
     args: assetParams
   });
@@ -1288,7 +1318,22 @@ router.get('/api/dashboard', async (c) => {
     financial: { brutBalance, netBalance, accountsByType },
     patrimoine: {
       brutValue: patrimoineBrut, netValue: patrimoineNet, count: assets.length,
-      assets: assets.map((a: any) => ({ id: a.id, type: a.type, name: a.name, currentValue: a.current_value || a.purchase_price || 0, loanBalance: a.loan_balance || 0 })),
+      assets: assets.map((a: any) => {
+        const currentValue = a.current_value || a.purchase_price || 0;
+        // Acquisition cost mirrors the asset detail view: price + notary fees + works.
+        const acquisitionCost = a.purchase_price
+          ? a.purchase_price + (a.notary_fees || 0) + (a.travaux || 0)
+          : null;
+        return {
+          id: a.id, type: a.type, name: a.name, currentValue,
+          loanBalance: a.loan_balance || 0,
+          address: a.address || null,
+          propertyUsage: a.property_usage || null,
+          acquisitionCost,
+          gain: acquisitionCost != null ? currentValue - acquisitionCost : null,
+          gainPercent: acquisitionCost ? ((currentValue - acquisitionCost) / acquisitionCost) * 100 : null,
+        };
+      }),
     },
     totals: { brut: brutBalance + patrimoineBrut, net: netBalance + patrimoineNet },
     accountCount: accounts.length, companyCount,
