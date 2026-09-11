@@ -55,7 +55,6 @@ router.get('/api/preferences', async (c) => {
 /**
  * Live EUR reference rates for the frontend's display-currency conversion,
  * so it no longer relies on a hardcoded table that drifts out of date.
- * Public: exchange rates are not user data.
  */
 router.get('/api/fx-rates', async (c) => {
   try {
