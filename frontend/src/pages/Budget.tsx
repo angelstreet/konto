@@ -11,6 +11,7 @@ import EyeToggle from '../components/EyeToggle';
 import CategoryDonut from '../components/CategoryDonut';
 import CalendarHeatmap from '../components/CalendarHeatmap';
 import CategoryBreakdown from '../components/CategoryBreakdown';
+import { usePreferences } from '../PreferencesContext';
 
 const RANGES = [
   { key: 'all', label: 'Tout', days: 0 },
@@ -20,10 +21,6 @@ const RANGES = [
 ] as const;
 
 type ViewMode = 'graph' | 'calendar';
-
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
-}
 
 interface CashflowData {
   totalIncome: number;
@@ -48,6 +45,8 @@ interface CategoriesData {
 }
 
 export default function Budget() {
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrencyRounded: formatCurrency } = usePreferences();
   const navigate = useNavigate();
   const { t: _t } = useTranslation();
   const authFetch = useAuthFetch();

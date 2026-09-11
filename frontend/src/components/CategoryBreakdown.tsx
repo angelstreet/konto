@@ -1,4 +1,5 @@
 import { useAmountVisibility } from '../AmountVisibilityContext';
+import { usePreferences } from '../PreferencesContext';
 
 interface Category {
   name: string;
@@ -14,11 +15,9 @@ interface Props {
   totalExpense: number;
 }
 
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
-}
-
 export default function CategoryBreakdown({ categories }: Props) {
+  // Values are stored in EUR; render them in the user's display currency.
+  const { formatCurrencyRounded: formatCurrency } = usePreferences();
   const { hideAmounts } = useAmountVisibility();
   const mask = (v: string) => hideAmounts ? <span className="amount-masked">{v}</span> : v;
 

@@ -92,7 +92,7 @@ type AddMode = null | 'choose' | 'manual' | 'blockchain' | 'metamask-scanning' |
 export default function Accounts() {
   const { t, i18n } = useTranslation();
   const lang = i18n.language?.slice(0, 2) || 'fr';
-  const { prefs, convertToDisplay } = usePreferences();
+  const { prefs, convertToDisplay, formatCurrency } = usePreferences();
   const hideCrypto = !!prefs?.hide_crypto;
   let getTokenAcc: (() => Promise<string | null>) | undefined;
   if (clerkEnabledAcc) { try { const auth = useAuth(); getTokenAcc = auth.getToken; } catch {} }
@@ -658,7 +658,7 @@ export default function Accounts() {
           )}
           {!loading && filteredAccounts.length > 0 && (
             <span className="text-sm font-semibold text-accent-400 truncate">
-              {allBalancesHidden ? <span className="amount-masked">{formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}</span> : formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0))}
+              {allBalancesHidden ? <span className="amount-masked">{formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0), prefs?.display_currency)}</span> : formatBalance(filteredAccounts.filter(a => !a.hidden).reduce((sum, a) => sum + convertToDisplay(a.balance || 0, a.currency || 'EUR'), 0), prefs?.display_currency)}
               <span className="text-muted font-normal text-xs ml-1">· {filteredAccounts.filter(a => !a.hidden).length}</span>
             </span>
           )}
@@ -1255,7 +1255,7 @@ export default function Accounts() {
                     <div className="flex items-center gap-2 sm:mr-[88px]">
                       {totalEur > 0 && (
                         <span className="text-sm sm:text-base font-semibold text-accent-400">
-                          {allBalancesHidden ? <span className="amount-masked">{formatBalance(totalEur)}</span> : formatBalance(totalEur)}
+                          {allBalancesHidden ? <span className="amount-masked">{formatCurrency(totalEur)}</span> : formatCurrency(totalEur)}
                         </span>
                       )}
                       <button
@@ -1283,7 +1283,7 @@ export default function Accounts() {
                               <div className="text-right">
                                 {(acc.balance_native ?? 0) > 0 && (
                                   <span className="text-sm font-medium text-accent-400 whitespace-nowrap">
-                                    {acc.hidden || allBalancesHidden ? <span className="amount-masked">{formatBalance(acc.balance_native!)}</span> : formatBalance(acc.balance_native!)}
+                                    {acc.hidden || allBalancesHidden ? <span className="amount-masked">{formatCurrency(acc.balance_native!)}</span> : formatCurrency(acc.balance_native!)}
                                   </span>
                                 )}
                                 <span className="text-[10px] text-muted whitespace-nowrap ml-1">

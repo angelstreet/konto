@@ -44,7 +44,6 @@ interface Asset {
 
 interface BankAccount { id: number; name: string; custom_name: string | null; type: string; balance: number; }
 
-const fmt = (n: number) => new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR' }).format(n);
 const fmtCompact = (n: number) => {
   if (Math.abs(n) >= 1_000_000) return `${(n / 1_000_000).toFixed(1).replace('.0', '')}M€`;
   if (Math.abs(n) >= 1_000) return `${Math.round(n / 1_000)}k€`;
@@ -53,6 +52,8 @@ const fmtCompact = (n: number) => {
 const fmtPct = (n: number) => `${n >= 0 ? '+' : ''}${n.toFixed(1)}%`;
 
 export default function Assets() {
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrency: fmt } = usePreferences();
   const { t } = useTranslation();
   const navigate = useNavigate();
   const authFetch = useAuthFetch();

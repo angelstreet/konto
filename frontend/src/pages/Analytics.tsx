@@ -8,6 +8,7 @@ import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
 import { useFilter } from '../FilterContext';
 import ScopeSelect from '../components/ScopeSelect';
+import { usePreferences } from '../PreferencesContext';
 
 
 const COLORS = ['#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#22c55e', '#ec4899', '#6b7280'];
@@ -25,11 +26,6 @@ interface AnalyticsData {
   cached: boolean;
 }
 
-function fmt(n: number) {
-  const v = Number.isFinite(Number(n)) ? Number(n) : 0;
-  return v.toLocaleString('de-DE', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-}
-
 function monthLabel(period: string) {
   const [y, m] = period.split('-');
   const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
@@ -37,6 +33,8 @@ function monthLabel(period: string) {
 }
 
 export default function Analytics() {
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrencyRounded } = usePreferences();
   
   const navigate = useNavigate();
   const { pathname } = useLocation();
@@ -151,9 +149,9 @@ export default function Analytics() {
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <Card label="Revenus" value={mask(`${fmt(d.totalIncome)} €`)} icon={<TrendingUp size={18} />} color="text-green-400" sub={d.mom.income !== 0 ? `${d.mom.income > 0 ? '+' : ''}${d.mom.income}% vs mois préc.` : undefined} />
-        <Card label="Dépenses" value={mask(`${fmt(d.totalExpenses)} €`)} icon={<TrendingDown size={18} />} color="text-red-400" sub={d.mom.expenses !== 0 ? `${d.mom.expenses > 0 ? '+' : ''}${d.mom.expenses}% vs mois préc.` : undefined} />
-        <Card label="Épargne" value={mask(`${fmt(d.totalIncome - d.totalExpenses)} €`)} icon={<TrendingUp size={18} />} color="text-blue-400" />
+        <Card label="Revenus" value={mask(formatCurrencyRounded(d.totalIncome))} icon={<TrendingUp size={18} />} color="text-green-400" sub={d.mom.income !== 0 ? `${d.mom.income > 0 ? '+' : ''}${d.mom.income}% vs mois préc.` : undefined} />
+        <Card label="Dépenses" value={mask(formatCurrencyRounded(d.totalExpenses))} icon={<TrendingDown size={18} />} color="text-red-400" sub={d.mom.expenses !== 0 ? `${d.mom.expenses > 0 ? '+' : ''}${d.mom.expenses}% vs mois préc.` : undefined} />
+        <Card label="Épargne" value={mask(formatCurrencyRounded(d.totalIncome - d.totalExpenses))} icon={<TrendingUp size={18} />} color="text-blue-400" />
         <Card label="Taux d'épargne" value={`${d.savingsRate}%`} icon={<TrendingUp size={18} />} color={savingsColor} />
       </div>
 
@@ -163,7 +161,7 @@ export default function Analytics() {
           <div className="bg-surface rounded-xl p-3 border border-border">
             <p className="text-xs text-muted mb-1">Revenus vs même mois N-1</p>
             <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-white">{mask(`${fmt(d.yoy.income)} €`)}</span>
+              <span className="text-lg font-bold text-white">{mask(formatCurrencyRounded(d.yoy.income))}</span>
               {d.yoy.incomeChange !== 0 && (
                 <span className={`text-xs flex items-center gap-0.5 ${d.yoy.incomeChange > 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {d.yoy.incomeChange > 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
@@ -175,7 +173,7 @@ export default function Analytics() {
           <div className="bg-surface rounded-xl p-3 border border-border">
             <p className="text-xs text-muted mb-1">Dépenses vs même mois N-1</p>
             <div className="flex items-center gap-2">
-              <span className="text-lg font-bold text-white">{mask(`${fmt(d.yoy.expenses)} €`)}</span>
+              <span className="text-lg font-bold text-white">{mask(formatCurrencyRounded(d.yoy.expenses))}</span>
               {d.yoy.expensesChange !== 0 && (
                 <span className={`text-xs flex items-center gap-0.5 ${d.yoy.expensesChange < 0 ? 'text-green-400' : 'text-red-400'}`}>
                   {d.yoy.expensesChange > 0 ? <ArrowUpRight size={12} /> : <ArrowDownRight size={12} />}
@@ -197,7 +195,7 @@ export default function Analytics() {
               <BarChart data={d.trends.map(t => ({ ...t, label: monthLabel(t.period) }))}>
                 <XAxis dataKey="label" tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} />
                 <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={v => hideAmounts ? '' : `${(v / 1000).toFixed(0)}k`} />
-                <Tooltip cursor={{ fill: 'rgba(255,255,255,0.04)' }} formatter={(v: any) => hideAmounts ? <span className="amount-masked">{`${fmt(v)} €`}</span> : `${fmt(v)} €`} contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }} itemStyle={{ color: '#fff' }} />
+                <Tooltip cursor={{ fill: 'rgba(255,255,255,0.04)' }} formatter={(v: any) => hideAmounts ? <span className="amount-masked">{formatCurrencyRounded(v)}</span> : formatCurrencyRounded(v)} contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }} itemStyle={{ color: '#fff' }} />
                 <Bar dataKey="income" name="Revenus" fill="#22c55e" radius={[4, 4, 0, 0]} isAnimationActive={!barChartAnimated.current} />
                 <Bar dataKey="expenses" name="Dépenses" fill="#ef4444" radius={[4, 4, 0, 0]} isAnimationActive={!barChartAnimated.current} onAnimationEnd={() => { barChartAnimated.current = true; }} />
               </BarChart>
@@ -217,7 +215,7 @@ export default function Analytics() {
                   <Pie data={d.topCategories} dataKey="amount" nameKey="category" cx="50%" cy="50%" innerRadius={40} outerRadius={70} paddingAngle={2} isAnimationActive={!pieChartAnimated.current} onAnimationEnd={() => { pieChartAnimated.current = true; }}>
                     {d.topCategories.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip formatter={(v: any) => hideAmounts ? <span className="amount-masked">{`${fmt(v)} €`}</span> : `${fmt(v)} €`} contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }} itemStyle={{ color: '#fff' }} />
+                  <Tooltip formatter={(v: any) => hideAmounts ? <span className="amount-masked">{formatCurrencyRounded(v)}</span> : formatCurrencyRounded(v)} contentStyle={{ backgroundColor: '#1f2937', border: 'none', borderRadius: 8, color: '#fff', fontSize: 12 }} itemStyle={{ color: '#fff' }} />
                 </PieChart>
               </ResponsiveContainer>
               <div className="flex-1 space-y-1.5">
@@ -241,13 +239,13 @@ export default function Analytics() {
         <div className="bg-surface rounded-xl p-3 border border-border">
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-semibold text-white">Dépenses récurrentes</h3>
-            <span className="text-sm font-bold text-orange-400">{mask(`${fmt(d.recurring.reduce((s, r) => s + r.avgAmount, 0))} € /mois`)}</span>
+            <span className="text-sm font-bold text-orange-400">{mask(`${formatCurrencyRounded(d.recurring.reduce((s, r) => s + r.avgAmount, 0))} /mois`)}</span>
           </div>
           <div className="space-y-2">
             {d.recurring.map((r, i) => (
               <div key={i} className="flex items-center justify-between py-1.5 border-b border-border/50 last:border-0">
                 <span className="text-sm text-muted truncate flex-1">{r.label}</span>
-                <span className="text-sm text-white font-medium">{mask(`${fmt(r.avgAmount)} €`)}</span>
+                <span className="text-sm text-white font-medium">{mask(formatCurrencyRounded(r.avgAmount))}</span>
               </div>
             ))}
           </div>

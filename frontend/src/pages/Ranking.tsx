@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuthFetch } from '../useApi';
 import { API } from '../config';
+import { usePreferences } from '../PreferencesContext';
 
 type RankingScope = 'konto' | 'country' | 'world';
 
@@ -59,10 +60,10 @@ function getRankColor(p: number) {
   return { text: 'text-red-400', bg: 'bg-red-500', bgLight: 'bg-red-500/20' };
 }
 
-function fmt(key: string, v: number | undefined): string {
+function fmt(key: string, v: number | undefined, formatCurrency: (n: number) => string): string {
   if (v === undefined || v === null) return '\u2014';
   if (key === 'savings_rate') return `${Math.round(v)}%`;
-  return new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(v) + ' €';
+  return formatCurrency(v);
 }
 
 function getTopLabel(p: number): string {
@@ -104,6 +105,8 @@ function PercentileBar({ percentile, colorClass }: { percentile: number; colorCl
 }
 
 export default function Ranking() {
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrencyRounded } = usePreferences();
   const { t } = useTranslation();
   const authFetch = useAuthFetch();
 
@@ -252,7 +255,7 @@ export default function Ranking() {
               const p = percentiles[m.key];
               const color = getRankColor(p);
               const label = getRankLabel(m.key, p);
-              const val = fmt(m.key, data?.user?.[m.key]);
+              const val = fmt(m.key, data?.user?.[m.key], formatCurrencyRounded);
 
               return (
                 <div key={m.key} className="bg-surface border border-border rounded-xl p-4">

@@ -5,6 +5,7 @@ import ScopeSelect from '../ScopeSelect';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 import { ChevronDown } from 'lucide-react';
+import { usePreferences } from '../../PreferencesContext';
 
 type AccountRow = {
   id: number;
@@ -56,10 +57,6 @@ const RANGES: { key: RangeKey; days: number | null }[] = [
   { key: 'TOUT', days: null },
 ];
 
-function fmtCurrency(v: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v || 0);
-}
-
 function shortDate(d: string) {
   const dt = new Date(d);
   if (Number.isNaN(dt.getTime())) return d;
@@ -92,6 +89,8 @@ function setShellCache(key: string, data: any) {
 }
 
 export default function AssetClassShell({ title, accountFilter, emptyHint }: Props) {
+  // Values are stored in EUR; render them in the user's display currency.
+  const { formatCurrencyRounded: fmtCurrency } = usePreferences();
   const authFetch = useAuthFetch();
   const { scope, appendScope } = useFilter();
   const authFetchRef = useRef(authFetch);

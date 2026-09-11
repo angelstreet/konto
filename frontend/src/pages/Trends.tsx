@@ -8,6 +8,7 @@ import { useApi } from '../useApi';
 import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
 import { useFilter } from '../FilterContext';
+import { usePreferences } from '../PreferencesContext';
 
 const CATEGORY_COLORS: Record<string, string> = {
   'Énergie': '#f59e0b',
@@ -22,10 +23,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   'Loyers & Charges': '#a855f7',
   'Autre': '#6b7280',
 };
-
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
-}
 
 function getColor(cat: string) {
   return CATEGORY_COLORS[cat] || `hsl(${Math.abs(cat.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % 360}, 60%, 50%)`;
@@ -55,6 +52,8 @@ const MONTH_RANGES = [
 ];
 
 export default function Trends() {
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrencyRounded: formatCurrency } = usePreferences();
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const { t } = useTranslation();

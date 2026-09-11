@@ -8,6 +8,7 @@ import { useFilter } from '../FilterContext';
 import { ArrowLeft, Home, X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { usePreferences } from '../PreferencesContext';
 
 interface Property {
   id: number;
@@ -32,10 +33,6 @@ interface ROIData {
   period: { from: string; to: string; months: number };
 }
 
-function fmt(n: number) {
-  return new Intl.NumberFormat('de-DE', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(n);
-}
-
 function monthLabel(m: string) {
   const [y, mo] = m.split('-');
   const names = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Jun', 'Jul', 'Aoû', 'Sep', 'Oct', 'Nov', 'Déc'];
@@ -45,6 +42,8 @@ function monthLabel(m: string) {
 const roiCache: Record<string, ROIData> = {};
 
 export default function PropertyROI() {
+  // Amounts are stored in EUR; show them in the user's display currency.
+  const { formatCurrencyRounded: fmt } = usePreferences();
   const navigate = useNavigate();
   const authFetch = useAuthFetch();
   const { hideAmounts, toggleHideAmounts } = useAmountVisibility();
