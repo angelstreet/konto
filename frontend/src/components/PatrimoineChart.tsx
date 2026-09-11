@@ -2,6 +2,7 @@ import { API } from '../config';
 import { useState, useEffect, useRef } from 'react';
 import { useAuth } from '@clerk/clerk-react';
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+import { usePreferences } from '../PreferencesContext';
 
 const ranges = ['1m', '3m', '6m', '1y', 'max'] as const;
 const rangeLabels: Record<string, string> = { '1m': '1M', '3m': '3M', '6m': '6M', '1y': '1A', max: 'Max' };
@@ -19,11 +20,9 @@ function persistChartCache() {
   try { sessionStorage.setItem(CACHE_KEY, JSON.stringify(chartCache)); } catch {}
 }
 
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
-}
-
 export default function PatrimoineChart({ showNet = true, hideAmounts = false }: { showNet?: boolean; hideAmounts?: boolean }) {
+  // Snapshot values are stored in EUR; render them in the user's display currency.
+  const { formatCurrencyRounded: formatCurrency, convertToDisplay } = usePreferences();
   const [range, setRange] = useState<string>('6m');
   const cacheKey = `${range}:${showNet ? 'net' : 'brut'}`;
   const [data, setData] = useState<{ date: string; value: number }[]>(() => chartCache[cacheKey] || []);
@@ -137,7 +136,7 @@ export default function PatrimoineChart({ showNet = true, hideAmounts = false }:
               tickLine={false}
             />
             <YAxis
-              tickFormatter={(v: number) => hideAmounts ? '' : `${(v / 1000).toFixed(0)}k`}
+              tickFormatter={(v: number) => hideAmounts ? '' : `${(convertToDisplay(v) / 1000).toFixed(0)}k`}
               tick={{ fontSize: 10, fill: '#888' }}
               axisLine={false}
               tickLine={false}

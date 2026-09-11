@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Treemap } from 'recharts';
+import { usePreferences } from '../PreferencesContext';
 
 const COLORS: Record<string, string> = {
   checking: '#9ca3af',
@@ -25,11 +26,7 @@ const LABELS: Record<string, string> = {
   other: 'Autres',
 };
 
-function formatCurrency(v: number) {
-  return new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v);
-}
-
-function TreemapCell({ x, y, width, height, name, value, posSum, hideAmounts }: any) {
+function TreemapCell({ x, y, width, height, name, value, posSum, hideAmounts, formatCurrency }: any) {
   const label = LABELS[name] || name;
   const pct = posSum > 0 ? ((value / posSum) * 100).toFixed(1) : '0';
   const showLabel = width > 50 && height > 36;
@@ -60,6 +57,7 @@ interface Props {
 }
 
 export default function DistributionDonut({ data, total, hideAmounts, showNet = true, loans = 0 }: Props) {
+  const { formatCurrencyRounded: formatCurrency } = usePreferences();
   const [view, setView] = useState<'donut' | 'treemap'>('donut');
   const positiveData = data.filter(d => d.value > 0);
   if (positiveData.length === 0) return null;
@@ -154,7 +152,7 @@ export default function DistributionDonut({ data, total, hideAmounts, showNet = 
                 dataKey="size"
                 aspectRatio={4 / 3}
                 isAnimationActive={false}
-                content={<TreemapCell posSum={posSum} hideAmounts={hideAmounts} />}
+                content={<TreemapCell posSum={posSum} hideAmounts={hideAmounts} formatCurrency={formatCurrency} />}
               >
                 <Tooltip
                   formatter={(value: any, name: any) => [hideAmounts ? '••••' : formatCurrency(value as number), LABELS[name as string] || name]}
