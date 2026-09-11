@@ -1,11 +1,27 @@
 import { Fragment, useMemo, useState } from 'react';
-import { Plus, Search, ArrowUpDown, ArrowUp, ArrowDown, X } from 'lucide-react';
+import { Plus, Search, ArrowUpDown, ArrowUp, ArrowDown, X, ChevronDown } from 'lucide-react';
+import { API } from '../config';
+import { useApi } from '../useApi';
 import {
   buildPatrimoineRows, sliceColor, AUTO_COLOR, TYPE_LABELS,
   type PatrimoineRow, type Side, type BuildOptions,
 } from '../lib/patrimoineRows';
 
-type SortKey = 'name' | 'typeLabel' | 'share' | 'value' | 'gain';
+type SortKey = 'name' | 'typeLabel' | 'share' | 'value' | 'gain' | 'variation';
+
+/** 'all' compares against acquisition cost; the rest against a dated snapshot. */
+type Period = 'all' | '1w' | '1m' | '3m' | '6m' | '1y';
+
+const PERIODS: { id: Period; label: string }[] = [
+  { id: '1w', label: '1S' }, { id: '1m', label: '1M' }, { id: '3m', label: '3M' },
+  { id: '6m', label: '6M' }, { id: '1y', label: '1A' }, { id: 'all', label: 'Tout' },
+];
+
+interface VariationResponse {
+  range: string;
+  from?: string;
+  baselines: Record<string, { value: number; date: string }>;
+}
 type SortDir = 'asc' | 'desc';
 
 interface Props extends BuildOptions {
@@ -106,6 +122,14 @@ export default function PatrimoineTable({
   const [groupByType, setGroupByType] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>('value');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+  const [period, setPeriod] = useState<Period>('all');
+  const [periodOpen, setPeriodOpen] = useState(false);
+
+  // Per-holding baselines for the chosen period. 'all' needs no request —
+  // it compares against acquisition cost, which the row already carries.
+  const { data: variation } = useApi<VariationResponse>(
+    period === 'all' ? '' : `${API}/holdings/variation?range=${period}`,
+  );
 
   const allRows = useMemo(
     () => buildPatrimoineRows({ accountsByType, assets, showNet, hideCrypto }),
@@ -140,13 +164,20 @@ export default function PatrimoineTable({
         case 'name': return a.name.localeCompare(b.name) * dir;
         case 'typeLabel': return a.typeLabel.localeCompare(b.typeLabel) * dir;
         case 'gain': return ((a.gain ?? 0) - (b.gain ?? 0)) * dir;
+        case 'variation': {
+          const av = a.holdingKey && variation?.baselines?.[a.holdingKey];
+          const bv = b.holdingKey && variation?.baselines?.[b.holdingKey];
+          const ad = period === 'all' ? (a.gain ?? 0) : (av ? a.value - av.value : 0);
+          const bd = period === 'all' ? (b.gain ?? 0) : (bv ? b.value - bv.value : 0);
+          return (ad - bd) * dir;
+        }
         // Share is proportional to value, so both sort on the same field.
         case 'share':
         case 'value':
         default: return (a.value - b.value) * dir;
       }
     });
-  }, [filtered, sortKey, sortDir]);
+  }, [filtered, sortKey, sortDir, period, variation]);
 
   const filteredTotal = useMemo(() => sorted.reduce((s, r) => s + r.value, 0), [sorted]);
   const filteredGain = useMemo(
@@ -155,6 +186,26 @@ export default function PatrimoineTable({
   );
   const gainBase = filteredTotal - filteredGain;
   const filteredGainPct = gainBase > 0 ? (filteredGain / gainBase) * 100 : null;
+
+  // Period total only counts rows that actually have a baseline, so a partially
+  // tracked portfolio doesn't silently report a wrong figure.
+  const totalVariation = useMemo(() => {
+    if (period === 'all') {
+      return filteredGain ? { amount: filteredGain, pct: filteredGainPct } : null;
+    }
+    const baselines = variation?.baselines;
+    if (!baselines) return null;
+    let base = 0, current = 0, n = 0;
+    for (const r of sorted) {
+      const b = r.holdingKey ? baselines[r.holdingKey] : undefined;
+      if (!b) continue;
+      base += r.side === 'passif' ? Math.abs(b.value) : b.value;
+      current += r.value;
+      n++;
+    }
+    if (n === 0 || base === 0) return null;
+    return { amount: current - base, pct: ((current - base) / Math.abs(base)) * 100 };
+  }, [period, variation, sorted, filteredGain, filteredGainPct]);
 
   const toggleSort = (key: SortKey) => {
     if (sortKey === key) setSortDir(d => (d === 'asc' ? 'desc' : 'asc'));
@@ -181,10 +232,28 @@ export default function PatrimoineTable({
       );
   }, [sorted, groupByType]);
 
-  const gainCell = (gain: number | null, pct: number | null) => {
+  /** Change over the selected period: amount and percentage, or null when unknown. */
+  const rowVariation = (r: PatrimoineRow): { amount: number; pct: number | null } | null => {
+    if (period === 'all') {
+      return r.gain == null ? null : { amount: r.gain, pct: r.gainPercent };
+    }
+    const base = r.holdingKey ? variation?.baselines?.[r.holdingKey] : undefined;
+    if (!base) return null;
+    // Loans are held as positive magnitudes in the table but stored negative.
+    const baseValue = r.side === 'passif' ? Math.abs(base.value) : base.value;
+    const amount = r.value - baseValue;
+    return { amount, pct: baseValue !== 0 ? (amount / Math.abs(baseValue)) * 100 : null };
+  };
+
+  /**
+   * `invert` is for liabilities: the arrow still follows the number, but debt
+   * going up is bad, so the colour is flipped.
+   */
+  const gainCell = (gain: number | null, pct: number | null, invert = false) => {
     if (gain == null) return <span className="text-muted/40">—</span>;
     const positive = gain >= 0;
-    const cls = positive ? 'text-green-400' : 'text-red-400';
+    const good = invert ? !positive : positive;
+    const cls = good ? 'text-green-400' : 'text-red-400';
     return (
       <div className="flex flex-col items-end gap-0.5">
         <span className={`tabular-nums ${cls}`}>
@@ -259,14 +328,46 @@ export default function PatrimoineTable({
 
       {/* Table */}
       <div className="overflow-x-auto">
-        <table className="w-full text-sm min-w-[640px]">
+        <table className="w-full text-sm min-w-[760px]">
           <thead>
             <tr className="border-b border-border">
               <th className="text-left py-2 pr-3"><SortHeader label="Nom" active={sortKey === 'name'} dir={sortDir} onClick={() => toggleSort('name')} /></th>
               <th className="text-left py-2 px-3 w-32"><SortHeader label="Type" active={sortKey === 'typeLabel'} dir={sortDir} onClick={() => toggleSort('typeLabel')} /></th>
               <th className="text-left py-2 px-3 w-32"><SortHeader label="Répartition" active={sortKey === 'share'} dir={sortDir} onClick={() => toggleSort('share')} /></th>
               <th className="text-right py-2 px-3 w-32"><SortHeader label="Valeur" active={sortKey === 'value'} dir={sortDir} onClick={() => toggleSort('value')} align="right" /></th>
-              <th className="text-right py-2 pl-3 w-32"><SortHeader label="+/- value" active={sortKey === 'gain'} dir={sortDir} onClick={() => toggleSort('gain')} align="right" /></th>
+              <th className="text-right py-2 px-3 w-32"><SortHeader label="+/- value" active={sortKey === 'gain'} dir={sortDir} onClick={() => toggleSort('gain')} align="right" /></th>
+              <th className="text-right py-2 pl-3 w-36">
+                <div className="flex items-center justify-end gap-1">
+                  <SortHeader label="Var." active={sortKey === 'variation'} dir={sortDir} onClick={() => toggleSort('variation')} align="right" />
+                  <div className="relative">
+                    <button
+                      onClick={() => setPeriodOpen(v => !v)}
+                      className="flex items-center gap-0.5 text-xs text-muted hover:text-foreground transition-colors"
+                    >
+                      {PERIODS.find(x => x.id === period)?.label}
+                      <ChevronDown size={11} />
+                    </button>
+                    {periodOpen && (
+                      <>
+                        <div className="fixed inset-0 z-10" onClick={() => setPeriodOpen(false)} />
+                        <div className="absolute right-0 mt-1 z-20 bg-surface border border-border rounded-lg shadow-xl py-1">
+                          {PERIODS.map(x => (
+                            <button
+                              key={x.id}
+                              onClick={() => { setPeriod(x.id); setPeriodOpen(false); }}
+                              className={`block w-full text-left px-3 py-1.5 text-xs whitespace-nowrap transition-colors ${
+                                period === x.id ? 'text-accent-400 bg-accent-500/10' : 'text-muted hover:text-foreground hover:bg-surface-hover'
+                              }`}
+                            >
+                              {x.label}
+                            </button>
+                          ))}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </th>
             </tr>
           </thead>
           <tbody>
@@ -283,12 +384,13 @@ export default function PatrimoineTable({
               <td className="px-3" />
               <td className="px-3" />
               <td className="px-3 text-right font-semibold tabular-nums">{fc(filteredTotal)}</td>
-              <td className="pl-3 text-right">{gainCell(filteredGain || null, filteredGainPct)}</td>
+              <td className="px-3 text-right">{gainCell(filteredGain || null, filteredGainPct, side === 'passif')}</td>
+              <td className="pl-3 text-right">{totalVariation ? gainCell(totalVariation.amount, totalVariation.pct, side === 'passif') : <span className="text-muted/40">—</span>}</td>
             </tr>
 
             {sorted.length === 0 && (
               <tr>
-                <td colSpan={5} className="py-10 text-center text-xs text-muted">Aucun résultat</td>
+                <td colSpan={6} className="py-10 text-center text-xs text-muted">Aucun résultat</td>
               </tr>
             )}
 
@@ -296,7 +398,7 @@ export default function PatrimoineTable({
               <Fragment key={group.label ?? '__flat__'}>
                 {group.label && (
                   <tr className="bg-white/[0.02]">
-                    <td colSpan={5} className="py-1.5 px-1 text-[11px] uppercase tracking-wider text-muted">
+                    <td colSpan={6} className="py-1.5 px-1 text-[11px] uppercase tracking-wider text-muted">
                       {group.label}
                     </td>
                   </tr>
@@ -341,7 +443,11 @@ export default function PatrimoineTable({
                           )}
                         </div>
                       </td>
-                      <td className="pl-3 text-right">{gainCell(r.gain, r.gainPercent)}</td>
+                      <td className="px-3 text-right">{gainCell(r.gain, r.gainPercent, r.side === 'passif')}</td>
+                      <td className="pl-3 text-right">{(() => {
+                        const v = rowVariation(r);
+                        return v ? gainCell(v.amount, v.pct, r.side === 'passif') : <span className="text-muted/40">—</span>;
+                      })()}</td>
                     </tr>
                   );
                 })}

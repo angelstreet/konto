@@ -2,6 +2,7 @@ import cron from 'node-cron';
 import db from '../db.js';
 import 'dotenv/config';
 import { cronMonitor } from './cronMonitor.js';
+import { createPatrimoineSnapshot } from '../services/snapshots.js';
 
 const JOB_NAME = 'daily-snapshots';
 
@@ -28,66 +29,13 @@ async function createDailySnapshots() {
       const userId = user.id;
 
       try {
-        // Get user's bank accounts (excluding hidden ones)
-        const accountsResult = await db.execute({
-          sql: 'SELECT type, balance FROM bank_accounts WHERE hidden = 0 AND user_id = ?',
-          args: [userId]
-        });
-
-        // Get user's assets
-        const assetsResult = await db.execute({
-          sql: 'SELECT type, current_value, purchase_price FROM assets WHERE user_id = ?',
-          args: [userId]
-        });
-
-        // Aggregate by category
-        const categories: Record<string, number> = {
-          checking: 0,
-          savings: 0,
-          investment: 0,
-          loan: 0,
-          real_estate: 0,
-          vehicle: 0,
-          valuable: 0,
-          other: 0
-        };
-
-        // Sum up bank accounts by type
-        for (const acc of accountsResult.rows as any[]) {
-          const type = acc.type || 'checking';
-          categories[type] = (categories[type] || 0) + (acc.balance || 0);
-        }
-
-        // Sum up assets by type
-        for (const asset of assetsResult.rows as any[]) {
-          const type = asset.type || 'other';
-          const value = asset.current_value || asset.purchase_price || 0;
-          categories[type] = (categories[type] || 0) + value;
-        }
-
-        // Save snapshots for each non-zero category
-        let total = 0;
-        let categoriesUpdated = 0;
-
-        for (const [cat, val] of Object.entries(categories)) {
-          if (val !== 0) {
-            await db.execute({
-              sql: 'INSERT OR REPLACE INTO patrimoine_snapshots (date, user_id, category, total_value) VALUES (?, ?, ?, ?)',
-              args: [today, userId, cat, val]
-            });
-            categoriesUpdated++;
-            total += val;
-          }
-        }
-
-        // Save total snapshot
-        await db.execute({
-          sql: 'INSERT OR REPLACE INTO patrimoine_snapshots (date, user_id, category, total_value) VALUES (?, ?, ?, ?)',
-          args: [today, userId, 'total', total]
-        });
-
-        snapshotsCreated += categoriesUpdated + 1;
-        console.log(`✅ Created ${categoriesUpdated + 1} snapshots for user ${userId} (total: ${total.toFixed(2)})`);
+        // Shared with the dashboard's auto-snapshot so both convert balances
+        // the same way — crypto priced from native units, foreign fiat at the
+        // current EUR rate — and both record per-holding history.
+        const result = await createPatrimoineSnapshot(userId, today);
+        const written = Object.values(result.categories).filter(v => v !== 0).length + 1;
+        snapshotsCreated += written;
+        console.log(`✅ Created ${written} snapshots + ${result.holdings} holdings for user ${userId} (total: ${result.total.toFixed(2)})`);
 
       } catch (err: any) {
         console.error(`❌ Snapshot creation failed for user ${userId}:`, err.message);

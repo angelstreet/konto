@@ -49,6 +49,8 @@ export type GroupBy = 'asset' | 'type' | 'institution';
 
 export interface PatrimoineRow {
   id: string;
+  /** Matches holding_snapshots.holding_key, or null for synthetic rows. */
+  holdingKey: string | null;
   name: string;
   subtitle: string | null;
   typeKey: string;
@@ -123,6 +125,7 @@ export function buildPatrimoineRows({
 
       rows.push({
         id: `account-${a.id}`,
+        holdingKey: `account:${a.id}`,
         name: a.name,
         subtitle: a.bankName || TYPE_LABELS[typeKey] || null,
         typeKey,
@@ -145,6 +148,7 @@ export function buildPatrimoineRows({
     if (value !== 0) {
       rows.push({
         id: `asset-${asset.id}`,
+        holdingKey: `asset:${asset.id}`,
         name: asset.address || asset.name,
         subtitle: asset.propertyUsage
           ? PROPERTY_USAGE_LABELS[asset.propertyUsage] || null
@@ -165,6 +169,7 @@ export function buildPatrimoineRows({
     if (!showNet && asset.loanBalance) {
       rows.push({
         id: `asset-loan-${asset.id}`,
+        holdingKey: null,
         name: `Emprunt — ${asset.address || asset.name}`,
         subtitle: TYPE_LABELS.loan,
         typeKey: 'loan',

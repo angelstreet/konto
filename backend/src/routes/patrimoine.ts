@@ -8,6 +8,7 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          calcInvestmentDiff, calcInvDiff, getCryptoEurPrices, updateCryptoBalanceNative,
          getFiatEurRates, accountBalanceEur } from '../shared.js';
 import { estimatePropertyPrice } from '../services/propertyEstimation.js';
+import { createPatrimoineSnapshot } from '../services/snapshots.js';
 
 const router = new Hono();
 
@@ -250,39 +251,55 @@ router.post('/api/estimation/refresh-all', async (c) => {
  * @param date - ISO date string (YYYY-MM-DD), defaults to today
  * @returns Object with snapshot data
  */
-async function createPatrimoineSnapshot(userId: number, date?: string) {
-  const snapshotDate = date || new Date().toISOString().split('T')[0];
-
-  const accountsResult = await db.execute({ sql: 'SELECT * FROM bank_accounts WHERE hidden = 0 AND user_id = ?', args: [userId] });
-  const assetsResult = await db.execute({ sql: 'SELECT * FROM assets WHERE user_id = ?', args: [userId] });
-
-  const categories: Record<string, number> = { checking: 0, savings: 0, investment: 0, loan: 0, real_estate: 0, vehicle: 0, valuable: 0, other: 0 };
-  // Crypto balances are native units and foreign fiat needs converting, so both
-  // go through the shared helper to keep snapshots on the same basis as the dashboard.
-  const snapshotCryptoPrices = await getCryptoEurPrices();
-  const snapshotFiatRates = await getFiatEurRates();
-  for (const a of accountsResult.rows as any[]) {
-    const value = accountBalanceEur(a, snapshotCryptoPrices, snapshotFiatRates);
-    categories[a.type || 'checking'] = (categories[a.type || 'checking'] || 0) + value;
-  }
-  for (const a of assetsResult.rows as any[]) categories[a.type || 'other'] = (categories[a.type || 'other'] || 0) + (a.current_value || a.purchase_price || 0);
-
-  let total = 0;
-  for (const [cat, val] of Object.entries(categories)) {
-    if (val !== 0) {
-      await db.execute({ sql: 'INSERT OR REPLACE INTO patrimoine_snapshots (date, user_id, category, total_value) VALUES (?, ?, ?, ?)', args: [snapshotDate, userId, cat, val] });
-      total += val;
-    }
-  }
-  await db.execute({ sql: 'INSERT OR REPLACE INTO patrimoine_snapshots (date, user_id, category, total_value) VALUES (?, ?, ?, ?)', args: [snapshotDate, userId, 'total', total] });
-
-  return { ok: true, date: snapshotDate, categories, total };
-}
-
 router.post('/api/dashboard/snapshot', async (c) => {
   const userId = await getUserId(c);
   const result = await createPatrimoineSnapshot(userId);
   return c.json(result);
+});
+
+/**
+ * Baseline value per holding for a period, so the UI can show how each account
+ * or asset moved over 1m / 3m / 6m / 1y rather than only since acquisition.
+ *
+ * The baseline is the last snapshot at or before the period start; when a
+ * holding has no history that far back (recently added), the earliest snapshot
+ * it does have is used instead, and the response says so via `from`.
+ */
+router.get('/api/holdings/variation', async (c) => {
+  const userId = await getUserId(c);
+  const range = c.req.query('range') || '1m';
+
+  const DAYS: Record<string, number> = { '1w': 7, '1m': 30, '3m': 90, '6m': 180, '1y': 365 };
+  const daysBack = DAYS[range];
+  if (!daysBack) return c.json({ range, baselines: {}, unsupported: true });
+
+  const fromDate = new Date(Date.now() - daysBack * 86400000).toISOString().split('T')[0];
+
+  // Preferred baseline: the most recent snapshot at or before the period start.
+  const atOrBefore = await db.execute({
+    sql: `SELECT h.holding_key, h.value, h.date
+          FROM holding_snapshots h
+          WHERE h.user_id = ? AND h.date <= ?
+            AND h.date = (SELECT MAX(date) FROM holding_snapshots
+                          WHERE user_id = h.user_id AND holding_key = h.holding_key AND date <= ?)`,
+    args: [userId, fromDate, fromDate],
+  });
+
+  // Fallback for holdings that only started being tracked inside the window.
+  const after = await db.execute({
+    sql: `SELECT h.holding_key, h.value, h.date
+          FROM holding_snapshots h
+          WHERE h.user_id = ? AND h.date > ?
+            AND h.date = (SELECT MIN(date) FROM holding_snapshots
+                          WHERE user_id = h.user_id AND holding_key = h.holding_key AND date > ?)`,
+    args: [userId, fromDate, fromDate],
+  });
+
+  const baselines: Record<string, { value: number; date: string }> = {};
+  for (const r of after.rows as any[]) baselines[r.holding_key] = { value: r.value, date: r.date };
+  for (const r of atOrBefore.rows as any[]) baselines[r.holding_key] = { value: r.value, date: r.date };
+
+  return c.json({ range, from: fromDate, baselines });
 });
 
 router.get('/api/dashboard/history', async (c) => {
