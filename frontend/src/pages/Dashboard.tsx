@@ -69,7 +69,7 @@ const sizeClasses: Record<string, string> = { sm: 'text-sm', base: 'text-base', 
 export default function Dashboard() {
   const { t, i18n } = useTranslation();
   const { appendScope } = useFilter();
-  const { prefs, formatCurrency, convertToDisplay } = usePreferences();
+  const { prefs, formatCurrency } = usePreferences();
   const hideCrypto = !!prefs?.hide_crypto;
   const authFetch = useAuthFetch();
   const { data, loading } = useApi<DashboardData>(appendScope(`${API}/dashboard`));
@@ -96,7 +96,9 @@ export default function Dashboard() {
   }, [quoteText, i18n.language]);
 
   // Compute summary values
-  const convertAcc = (a: DashboardAccount) => convertToDisplay(a.balance, a.currency || 'EUR');
+  // /api/dashboard returns balances already converted to EUR; formatCurrency
+  // applies the display-currency conversion once at render time.
+  const convertAcc = (a: DashboardAccount) => a.balance;
   
   const accountsByType = data?.financial?.accountsByType || {};
   const checking = (accountsByType.checking || []).reduce((s: number, a: DashboardAccount) => s + convertAcc(a), 0);
@@ -275,7 +277,6 @@ export default function Dashboard() {
               assets={data.patrimoine.assets}
               showNet={showNet}
               hideCrypto={hideCrypto}
-              convert={convertToDisplay}
               formatCurrency={formatCurrency}
               hideAmounts={hideAmounts}
             />
@@ -284,7 +285,6 @@ export default function Dashboard() {
               assets={data.patrimoine.assets}
               showNet={showNet}
               hideCrypto={hideCrypto}
-              convert={convertToDisplay}
               formatCurrency={formatCurrency}
               hideAmounts={hideAmounts}
             />

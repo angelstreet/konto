@@ -48,7 +48,11 @@ function normalizePreferences(input: any): UserPreferences {
 }
 
 // Exchange rates cache (EUR-based: 1 EUR = X units)
-const RATES: Record<string, number> = { EUR: 1, USD: 1.08, GBP: 0.86, CHF: 0.94, CAD: 1.47, JPY: 162, XOF: 655.96 };
+/**
+ * Units of each currency per 1 EUR. Only a fallback — live ECB rates are
+ * fetched from /api/fx-rates on mount, since a hardcoded table drifts.
+ */
+const FALLBACK_RATES: Record<string, number> = { EUR: 1, USD: 1.08, GBP: 0.86, CHF: 0.94, CAD: 1.47, JPY: 162, XOF: 655.957 };
 
 const clerkEnabled = !!import.meta.env.VITE_CLERK_PUBLISHABLE_KEY;
 
@@ -64,6 +68,7 @@ async function getHeaders(getToken?: () => Promise<string | null>): Promise<Reco
 export function PreferencesProvider({ children }: { children: ReactNode }) {
   const [prefs, setPrefs] = useState<UserPreferences | null>(DEFAULT_PREFERENCES);
   const [loading, setLoading] = useState(true);
+  const [rates, setRates] = useState<Record<string, number>>(FALLBACK_RATES);
 
   let getToken: (() => Promise<string | null>) | undefined;
   if (clerkEnabled) {
@@ -93,6 +98,19 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => { fetchPrefs(); }, [fetchPrefs]);
 
+  // Live EUR reference rates; keeps the fallback for anything the feed omits.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API}/fx-rates`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(data => {
+        if (cancelled || !data?.rates || Object.keys(data.rates).length === 0) return;
+        setRates({ ...FALLBACK_RATES, ...data.rates });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
   const update = async (partial: Partial<UserPreferences>) => {
     const headers = await getHeaders(getTokenRef.current);
     try {
@@ -113,9 +131,9 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
     const displayCur = prefs?.display_currency || 'EUR';
     const from = fromCurrency || 'EUR';
     if (from === displayCur) return amount;
-    const inEur = from === 'EUR' ? amount : amount / (RATES[from] || 1);
-    return displayCur === 'EUR' ? inEur : inEur * (RATES[displayCur] || 1);
-  }, [prefs?.display_currency]);
+    const inEur = from === 'EUR' ? amount : amount / (rates[from] || 1);
+    return displayCur === 'EUR' ? inEur : inEur * (rates[displayCur] || 1);
+  }, [prefs?.display_currency, rates]);
 
   const formatCurrency = useCallback((amount: number, fromCurrency?: string) => {
     const displayCur = prefs?.display_currency || 'EUR';

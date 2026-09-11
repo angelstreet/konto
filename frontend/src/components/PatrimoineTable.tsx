@@ -97,7 +97,7 @@ function FilterChip({
  * PatrimoineBreakdown on the Synthèse page.
  */
 export default function PatrimoineTable({
-  accountsByType, assets, showNet, hideCrypto, convert, formatCurrency, hideAmounts,
+  accountsByType, assets, showNet, hideCrypto, formatCurrency, hideAmounts,
 }: Props) {
   const [side, setSide] = useState<Side>('actif');
   const [search, setSearch] = useState('');
@@ -108,8 +108,8 @@ export default function PatrimoineTable({
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
   const allRows = useMemo(
-    () => buildPatrimoineRows({ accountsByType, assets, showNet, hideCrypto, convert }),
-    [accountsByType, assets, showNet, hideCrypto, convert],
+    () => buildPatrimoineRows({ accountsByType, assets, showNet, hideCrypto }),
+    [accountsByType, assets, showNet, hideCrypto],
   );
 
   const sideRows = useMemo(() => allRows.filter(r => r.side === side && r.value > 0), [allRows, side]);
@@ -201,8 +201,10 @@ export default function PatrimoineTable({
 
   return (
     <div className="bg-surface rounded-xl border border-border p-4">
-      {/* Tabs */}
-      <div className="flex gap-6 border-b border-border mb-4">
+      {/* Tabs, filters and search share one row to keep the card compact */}
+      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border mb-4">
+        <div className="flex flex-wrap items-center gap-x-5 gap-y-1">
+        <div className="flex gap-5">
         {(['actif', 'passif'] as Side[]).map(s => {
           const active = side === s;
           const disabled = s === 'passif' && !hasPassif;
@@ -220,15 +222,13 @@ export default function PatrimoineTable({
             </button>
           );
         })}
-      </div>
-
-      {/* Filters */}
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div className="flex flex-wrap items-center gap-2">
+        </div>
+        <div className="flex flex-wrap items-center gap-2 py-1.5">
           <FilterChip label="Type" options={typeOptions} selected={types} onChange={setTypes} />
           <FilterChip label="Établissement" options={institutionOptions} selected={institutions} onChange={setInstitutions} />
         </div>
-        <div className="flex items-center gap-3">
+        </div>
+        <div className="flex items-center gap-3 py-1.5">
           <label className="flex items-center gap-2 text-xs text-muted cursor-pointer select-none">
             Grouper par type
             <button

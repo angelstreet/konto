@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import db from '../db.js';
-import { getUserId } from '../shared.js';
+import { getUserId, getFiatEurRates } from '../shared.js';
 
 
 const router = new Hono();
@@ -49,6 +49,21 @@ router.get('/api/preferences', async (c) => {
   } catch (e: any) {
     console.error('/api/preferences GET fallback:', e?.message || e);
     return c.json(DEFAULT_PREFERENCES);
+  }
+});
+
+/**
+ * Live EUR reference rates for the frontend's display-currency conversion,
+ * so it no longer relies on a hardcoded table that drifts out of date.
+ * Public: exchange rates are not user data.
+ */
+router.get('/api/fx-rates', async (c) => {
+  try {
+    const rates = await getFiatEurRates();
+    return c.json({ base: 'EUR', rates });
+  } catch (e: any) {
+    console.error('/api/fx-rates GET failed:', e?.message || e);
+    return c.json({ base: 'EUR', rates: {} });
   }
 });
 
