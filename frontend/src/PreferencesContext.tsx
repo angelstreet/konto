@@ -102,15 +102,18 @@ export function PreferencesProvider({ children }: { children: ReactNode }) {
   useEffect(() => { fetchPrefs(); }, [fetchPrefs]);
 
   // Live EUR reference rates; keeps the fallback for anything the feed omits.
+  // Needs the auth header like every other /api call — Clerk guards /api/*.
   useEffect(() => {
     let cancelled = false;
-    fetch(`${API}/fx-rates`)
-      .then(r => (r.ok ? r.json() : null))
-      .then(data => {
-        if (cancelled || !data?.rates || Object.keys(data.rates).length === 0) return;
-        setRates({ ...FALLBACK_RATES, ...data.rates });
-      })
-      .catch(() => {});
+    getHeaders(getTokenRef.current).then(headers =>
+      fetch(`${API}/fx-rates`, { headers })
+        .then(r => (r.ok ? r.json() : null))
+        .then(data => {
+          if (cancelled || !data?.rates || Object.keys(data.rates).length === 0) return;
+          setRates({ ...FALLBACK_RATES, ...data.rates });
+        })
+        .catch(() => {})
+    );
     return () => { cancelled = true; };
   }, []);
 
