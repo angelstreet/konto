@@ -10,6 +10,8 @@ import { useAmountVisibility } from '../AmountVisibilityContext';
 import ScopeSelect from '../components/ScopeSelect';
 import PatrimoineChart from '../components/PatrimoineChart';
 import DistributionDonut from '../components/DistributionDonut';
+import PatrimoineBreakdown from '../components/PatrimoineBreakdown';
+import PatrimoineTable from '../components/PatrimoineTable';
 import ExportPdfButton from '../components/ExportPdfButton';
 
 
@@ -20,6 +22,11 @@ interface DashboardAccount {
   type: string;
   subtype: string | null;
   currency: string;
+  bankName?: string | null;
+  nativeBalance?: number | null;
+  nativeCurrency?: string | null;
+  gain?: number | null;
+  gainPercent?: number | null;
 }
 
 interface DashboardAsset {
@@ -28,6 +35,11 @@ interface DashboardAsset {
   name: string;
   currentValue: number;
   loanBalance: number;
+  address?: string | null;
+  propertyUsage?: string | null;
+  acquisitionCost?: number | null;
+  gain?: number | null;
+  gainPercent?: number | null;
 }
 
 interface DashboardData {
@@ -254,6 +266,28 @@ export default function Dashboard() {
             >
               {speaking ? <VolumeX size={16} /> : <Volume2 size={16} />}
             </button>
+          </div>
+
+          {/* Detailed patrimoine breakdown */}
+          <div className="mt-6 space-y-4">
+            <PatrimoineBreakdown
+              accountsByType={accountsByType}
+              assets={data.patrimoine.assets}
+              showNet={showNet}
+              hideCrypto={hideCrypto}
+              convert={convertToDisplay}
+              formatCurrency={formatCurrency}
+              hideAmounts={hideAmounts}
+            />
+            <PatrimoineTable
+              accountsByType={accountsByType}
+              assets={data.patrimoine.assets}
+              showNet={showNet}
+              hideCrypto={hideCrypto}
+              convert={convertToDisplay}
+              formatCurrency={formatCurrency}
+              hideAmounts={hideAmounts}
+            />
           </div>
         </>
       ) : null}
