@@ -226,6 +226,20 @@ export async function initDatabase() {
       UNIQUE(date, user_id, category)
     );
 
+    CREATE TABLE IF NOT EXISTS holding_snapshots (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      date TEXT NOT NULL,
+      user_id INTEGER NOT NULL DEFAULT 1,
+      holding_key TEXT NOT NULL,
+      kind TEXT NOT NULL,
+      ref_id INTEGER NOT NULL,
+      name TEXT,
+      type TEXT,
+      value REAL NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      UNIQUE(date, user_id, holding_key)
+    );
+
     CREATE TABLE IF NOT EXISTS income_entries (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER NOT NULL DEFAULT 1 REFERENCES users(id),
@@ -613,6 +627,12 @@ export async function migrateDatabase() {
       details TEXT
     )
   `);
+  // Per-holding history lookups are always "this holding, around this date".
+  await db.execute(`
+    CREATE INDEX IF NOT EXISTS idx_holding_snapshots_lookup
+      ON holding_snapshots(user_id, holding_key, date)
+  `);
+
   await db.execute(`
     CREATE INDEX IF NOT EXISTS idx_audit_log_timestamp ON audit_log(timestamp)
   `);
