@@ -1,0 +1,14 @@
+# Konto — AI-readable information
+
+Konto is a finance application that helps freelancers and small-business owners understand their personal and professional financial situation. It combines account balances, transactions, investments, crypto, budgets, cash flow, patrimoine, tax estimates, credit capacity, property ROI, and reports.
+
+Bank connections use Powens open banking. Konto does not receive bank passwords and is designed for read-only financial data access; sensitive connection data is encrypted. The application also supports sandbox/demo mode without connecting a bank.
+
+## Authoritative resources
+
+- Live app: https://konto.angelstreet.io/
+- Repository: https://github.com/angelstreet/konto
+- Documentation: https://github.com/angelstreet/konto/tree/main/docs
+- API documentation: https://github.com/angelstreet/konto/blob/main/docs/api.md
+- License: MIT
+
