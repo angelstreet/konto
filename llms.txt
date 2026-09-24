@@ -1,0 +1,22 @@
+# Konto
+
+> Personal and business finance cockpit for freelancers and small-business owners.
+
+Konto brings bank accounts, wallets, investments, budgets, cash flow, net worth, tax estimates, property analysis, and financial reports into one place. It is built for users in France and supports French and English.
+
+## Links
+
+- Live app: https://konto.angelstreet.io/
+- Source: https://github.com/angelstreet/konto
+- Documentation: https://github.com/angelstreet/konto/tree/main/docs
+
+## Features
+
+- EU bank synchronization through Powens
+- Crypto and investment portfolio tracking
+- Personal and professional budgets
+- Net worth and patrimoine dashboards
+- French tax and credit simulators
+- Property ROI analysis and PDF reports
+- Sandbox mode with demo data
+
