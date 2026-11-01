@@ -155,6 +155,18 @@ router.get('/api/bank/reconnect-url/:accountId', async (c) => {
   return c.json(result);
 });
 
+// JSON form, for the app to call with its session. The redirect form below
+// cannot be opened straight from a notification: a browser navigation carries
+// no Authorization header, so the API answers 401. A link sent to the phone
+// therefore points at the app (/konto/accounts?reconnect=<id>), which is
+// already signed in and calls this.
+router.get('/api/bank/reconnect-connection-url/:connectionId', async (c) => {
+  const userId = await getUserId(c);
+  const result = await buildReconnectUrlForConnection(userId, c.req.param('connectionId'), c.req.query('lang') || 'fr');
+  if (!result) return c.json({ error: 'Connection not found' }, 404);
+  return c.json(result);
+});
+
 router.get('/api/bank/reconnect-connection/:connectionId', async (c) => {
   const userId = await getUserId(c);
   const result = await buildReconnectUrlForConnection(userId, c.req.param('connectionId'), c.req.query('lang') || 'fr');

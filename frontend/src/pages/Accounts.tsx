@@ -187,6 +187,30 @@ export default function Accounts() {
     window.open(`${API}/bank/webview?url=${encodeURIComponent(url)}`, '_blank');
   };
 
+  const reconnectConnection = async (connectionId: string, sameTab = false) => {
+    const res = await authFetch(`${API}/bank/reconnect-connection-url/${connectionId}?lang=${lang}`);
+    if (!res.ok) return;
+    const { url } = await res.json();
+    if (!url) return;
+    const target = `${API}/bank/webview?url=${encodeURIComponent(url)}`;
+    // From a notification the user is already in the only tab they want.
+    if (sameTab) window.location.href = target; else window.open(target, '_blank');
+  };
+
+  // ?reconnect=<powens connection id> — how a link sent to the phone gets here.
+  // The API cannot be opened directly by a tap (a navigation sends no
+  // Authorization header, so it 401s); the app is signed in, so it does it.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const target = params.get('reconnect');
+    if (!target) return;
+    params.delete('reconnect');
+    const rest = params.toString();
+    window.history.replaceState({}, '', window.location.pathname + (rest ? `?${rest}` : ''));
+    reconnectConnection(target, true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
 
 
   const [syncingId, setSyncingId] = useState<number | null>(null);
