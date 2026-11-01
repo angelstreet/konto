@@ -29,6 +29,7 @@
   "confirm_delete": "Confirm deletion",
   "confirm_delete_fiscal": "Delete this tax return?",
   "confirm_delete_account": "Delete this account and all its transactions?",
+  "delete_account_failed": "Delete failed — the account was not removed.",
   "edit": "Edit",
   "hide": "Hide",
   "show": "Show",

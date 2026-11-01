@@ -352,9 +352,18 @@ export default function Accounts() {
       message: t('confirm_delete_account'),
       onConfirm: async () => {
         setConfirmAction(null);
+        // The row was removed from the list before the request was sent and the
+        // result was never checked, so a failed delete looked like a successful
+        // one until refetchAll brought the account straight back — which is what
+        // happened for accounts holding positions, where the server answered 500.
         if (accounts) setAccounts(accounts.filter(a => a.id !== id));
-        await authFetch(`${API}/bank/accounts/${id}`, { method: 'DELETE' });
+        let ok = false;
+        try {
+          const res = await authFetch(`${API}/bank/accounts/${id}`, { method: 'DELETE' });
+          ok = res.ok;
+        } catch { ok = false; }
         refetchAll();
+        if (!ok) alert(t('delete_account_failed'));
       },
     });
   };

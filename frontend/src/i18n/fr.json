@@ -29,6 +29,7 @@
   "confirm_delete": "Confirmer la suppression",
   "confirm_delete_fiscal": "Supprimer cette déclaration fiscale ?",
   "confirm_delete_account": "Supprimer ce compte et toutes ses transactions ?",
+  "delete_account_failed": "Suppression impossible : le compte n'a pas été supprimé.",
   "edit": "Modifier",
   "hide": "Masquer",
   "show": "Afficher",
