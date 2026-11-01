@@ -58,7 +58,51 @@ export function classifyAccountUsage(powensUsage: string | undefined | null, com
   return companyId ? 'professional' : 'personal';
 }
 
-export function extractPowensBankMeta(acc: any): { bankId: string | null; bankName: string | null } {
+export type PowensBankMeta = { bankId: string | null; bankName: string | null };
+
+/**
+ * Institution per connection id, from `GET /users/me/connections?expand=connector`.
+ *
+ * Powens does not put the institution on the account object — an account only
+ * carries `id_connection` — which is why probing `acc.bank` / `acc.institution`
+ * returned null for every account and the UI fell back to showing a raw BIC.
+ * The connector's `uuid` is stable across API domains; its `id` is not, so uuid
+ * is preferred as the stored bank id.
+ *
+ * Returns an empty map on any failure: callers then fall back to the account
+ * fields, which is the old behaviour.
+ */
+export async function fetchPowensConnectorMap(token: string): Promise<Map<string, PowensBankMeta>> {
+  const map = new Map<string, PowensBankMeta>();
+  try {
+    const res = await fetch(`${POWENS_API}/users/me/connections?expand=connector`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!res.ok) return map;
+    const data = await res.json() as any;
+    for (const conn of data.connections || []) {
+      if (conn?.id == null) continue;
+      const connector = conn.connector || null;
+      const rawId = connector?.uuid ?? connector?.id ?? conn.id_connector ?? null;
+      const rawName = connector?.name ?? null;
+      map.set(String(conn.id), {
+        bankId: rawId == null ? null : String(rawId).trim() || null,
+        bankName: rawName == null ? null : String(rawName).trim() || null,
+      });
+    }
+  } catch {
+    // fall through with whatever was collected
+  }
+  return map;
+}
+
+export function extractPowensBankMeta(acc: any, connectorMap?: Map<string, PowensBankMeta>): PowensBankMeta {
+  // The connection is the only place Powens states the institution.
+  if (connectorMap && acc?.id_connection != null) {
+    const fromConnection = connectorMap.get(String(acc.id_connection));
+    if (fromConnection && (fromConnection.bankId || fromConnection.bankName)) return fromConnection;
+  }
+
   const bankObj = acc?.bank || acc?.institution || acc?.connector || null;
   const rawId = bankObj?.id ?? acc?.bank_id ?? acc?.institution_id ?? acc?.connector_id ?? acc?.parent_id ?? null;
   const rawName = bankObj?.name ?? acc?.bank_name ?? acc?.institution_name ?? acc?.connector_name ?? acc?.bank ?? null;

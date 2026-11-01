@@ -37,10 +37,31 @@
   `backend/src/jobs/`) re-syncs anything older than 7 days.
 - There is **no Powens webhook endpoint** in the backend. Adding one would make
   SCA detection immediate rather than waiting for a cron.
-- Known wart: `/api/bank-callback` inserts a fresh `bank_connections` row per
-  reconnect instead of reconciling onto the existing one, so one bank accumulates
-  several connections and duplicate `bank_accounts` rows under slightly different
-  `bank_name` spellings.
+#### Which connection a callback belongs to
+
+A Powens access token is scoped to the Powens *user*, so
+`GET /users/me/connections` returns **every** connection, not the one just
+added. `/api/bank-callback` used to take `connections[0]` and overwrite the
+`connection_id` the callback itself had supplied, which attached the new token
+to an arbitrary connection and left `provider_name` null. The callback's
+`connection_id` is authoritative; the list is only a fallback, and then the
+newest connection wins.
+
+Several `active` rows in `bank_connections` are normal — one per bank. Accounts
+are deduplicated by `(company_id, provider, provider_account_id)` or IBAN, so
+they do not multiply.
+
+#### Bank names
+
+The institution is **not on the account object**. A Powens account carries only
+`id_connection`; the institution lives on the connection, as
+`connection.connector.name` (fetch with `?expand=connector`).
+`extractPowensBankMeta()` used to probe `acc.bank` / `acc.institution` /
+`acc.connector`, none of which exist, so it always returned null and the UI fell
+back to a raw BIC like `CMCIFRPPXXX`. `fetchPowensConnectorMap(token)` builds
+`id_connection → { bankId, bankName }` and is passed to the extractor in every
+sync path; `connector.uuid` is stable across API domains and `connector.id` is
+not, so uuid is stored as `provider_bank_id`.
 
 ### 2. Manual Accounts
 **Status:** ✅ Live

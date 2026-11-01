@@ -358,6 +358,41 @@ router.get('/api/crypto/prices', async (c) => {
 });
 
 
+/**
+ * Coinbase reports one fiat value per ASSET in the portfolio breakdown, covering
+ * every wallet holding it — a plain "POL" wallet and a "Staked POL" one share a
+ * single spot position. Assigning that value to each wallet gave them both the
+ * full amount, which would double-count any token the price feed cannot quote.
+ *
+ * So apportion the asset's fiat value by each wallet's share of the asset's
+ * total quantity. Returns null when there is nothing to apportion, which leaves
+ * accountBalanceEur to fall back to a live price or to 0.
+ */
+function apportionAssetFiat(
+  fiatByAsset: Record<string, number>,
+  qtyByAsset: Record<string, number>,
+  currency: string,
+  balance: number,
+): number | null {
+  const assetFiat = fiatByAsset[currency];
+  if (assetFiat == null) return null;
+  const totalQty = qtyByAsset[currency];
+  if (!totalQty) return null;
+  return (assetFiat * balance) / totalQty;
+}
+
+/** Total quantity held per asset across every wallet, for apportionAssetFiat. */
+function sumQuantityByAsset(accounts: any[]): Record<string, number> {
+  const qtyByAsset: Record<string, number> = {};
+  for (const acc of accounts) {
+    const qty = parseFloat(acc.balance?.amount || '0');
+    if (!qty) continue;
+    const cur = acc.balance?.currency || acc.currency?.code || 'USD';
+    qtyByAsset[cur] = (qtyByAsset[cur] || 0) + qty;
+  }
+  return qtyByAsset;
+}
+
 // ========== COINBASE OAUTH2 ==========
 
 const COINBASE_CLIENT_ID = process.env.COINBASE_CLIENT_ID || '';
@@ -468,12 +503,13 @@ router.post('/api/coinbase/sync', async (c) => {
       nextPath = page.pagination?.next_uri || null;
     }
 
+    const qtyByAsset = sumQuantityByAsset(allAccounts);
     const syncedAccounts: any[] = [];
     for (const acc of allAccounts) {
       const balance = parseFloat(acc.balance?.amount || '0');
       if (balance === 0) continue;
       const currency = acc.balance?.currency || acc.currency?.code || 'USD';
-      const balanceNative = fiatByAsset[currency] || null;
+      const balanceNative = apportionAssetFiat(fiatByAsset, qtyByAsset, currency, balance);
       const rawName = acc.name || currency;
       const name = rawName.replace(/\s*Wallet$/i, '').replace(/^Portefeuille en\s*/i, '').replace(/\s*staké$/i, '').trim() || currency;
       const now = new Date().toISOString();
@@ -823,11 +859,12 @@ router.post('/api/coinbase/connect-apikey', async (c) => {
       nextPath = page.pagination?.next_uri || null;
     }
     const accounts = allCoinbaseAccounts.filter((a: any) => parseFloat(a.balance?.amount || '0') !== 0);
+    const qtyByAsset = sumQuantityByAsset(allCoinbaseAccounts);
     const syncedAccounts: any[] = [];
     for (const acc of accounts) {
       const balance = parseFloat(acc.balance?.amount || '0');
       const currency = acc.balance?.currency || acc.currency?.code || 'USD';
-      const balanceNative = fiatByAsset[currency] || null;
+      const balanceNative = apportionAssetFiat(fiatByAsset, qtyByAsset, currency, balance);
       // Clean wallet name: "PEPE Wallet" → "PEPE", "Portefeuille en XRP" → "XRP"
       const rawName = acc.name || currency;
       const name = rawName.replace(/\s*Wallet$/i, '').replace(/^Portefeuille en\s*/i, '').replace(/\s*staké$/i, '').trim() || currency;

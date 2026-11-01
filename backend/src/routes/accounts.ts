@@ -5,6 +5,7 @@ import { encrypt, decrypt } from '../crypto.js';
 import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, decryptDriveConn,
          POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI, POWENS_CONNECTOR_CAPABILITIES,
          classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
+         fetchPowensConnectorMap,
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
          calcInvestmentDiff, calcInvDiff, formatCurrencyFR, escapeHtml } from '../shared.js';
 import { categorizeTransaction } from '../categorizer.js';
@@ -186,18 +187,25 @@ router.get('/api/bank-callback', async (c) => {
     let providerName: string | null = null;
     let resolvedConnectionId: string | null = connectionId || null;
     try {
-      const connsRes = await fetch(`${POWENS_API}/users/me/connections`, {
+      const connsRes = await fetch(`${POWENS_API}/users/me/connections?expand=connector`, {
         headers: { 'Authorization': `Bearer ${accessToken}` },
       });
       if (connsRes.ok) {
         const connsData = await connsRes.json() as any;
         const conns = connsData.connections || [];
-        if (conns.length > 0) {
-          // Use first connection (most recent)
-          const conn = conns[0];
-          resolvedConnectionId = String(conn.id);
-          providerName = conn.institution?.name || conn.institution_name || conn.bank_name || null;
-          console.log('Powens connection details:', { connection_id: resolvedConnectionId, provider_name: providerName });
+        // The callback's connection_id is authoritative — this token can see every
+        // connection of the Powens user, so picking one from the list used to
+        // attach the new token to whichever connection happened to come first.
+        // Only fall back to the list when the callback gave us nothing, and then
+        // take the newest connection rather than the first.
+        const chosen = resolvedConnectionId
+          ? conns.find((x: any) => String(x.id) === String(resolvedConnectionId))
+          : conns.reduce((newest: any, x: any) => (!newest || Number(x.id) > Number(newest.id) ? x : newest), null);
+        if (chosen?.id != null) {
+          resolvedConnectionId = String(chosen.id);
+          providerName = chosen.connector?.name || chosen.institution?.name
+            || chosen.institution_name || chosen.bank_name || null;
+          console.log('Powens connection details:', { connection_id: resolvedConnectionId, provider_name: providerName, from_callback: !!connectionId });
         }
       }
     } catch (err) {
@@ -242,12 +250,13 @@ router.get('/api/bank-callback', async (c) => {
       });
       const accountsData = await accountsRes.json() as any;
       accounts = accountsData.accounts || [];
+      const connectorMap = await fetchPowensConnectorMap(accessToken);
 
       for (const acc of accounts) {
         const accType = classifyAccountType(acc.type, acc.name || acc.original_name || '');
         const accNumber = acc.number || acc.webid || null;
         const accIban = acc.iban || null;
-        const meta = extractPowensBankMeta(acc);
+        const meta = extractPowensBankMeta(acc, connectorMap);
         const storedBankName = meta.bankName || null;
 
         // Deduplicate: find existing account by (company_id, provider, provider_account_id) or by iban
@@ -356,9 +365,10 @@ router.post('/api/bank/sync', async (c) => {
       });
       const data = await res.json() as any;
       const accounts = data.accounts || [];
+      const connectorMap = await fetchPowensConnectorMap(token);
 
       for (const acc of accounts) {
-        const meta = extractPowensBankMeta(acc);
+        const meta = extractPowensBankMeta(acc, connectorMap);
         const storedBankName = meta.bankName || null;
         const accType = classifyAccountType(acc.type, acc.name || acc.original_name || '');
         const accNumber = acc.number || acc.webid || null;
@@ -859,9 +869,10 @@ router.post('/api/bank/sync-all', async (c) => {
 
       // Sync each account
       const connProviderName = conn.provider_name || null;
+      const connectorMap = await fetchPowensConnectorMap(token);
       for (const powensAcc of powensAccounts) {
         const providerId = String(powensAcc.id);
-        const meta = extractPowensBankMeta(powensAcc);
+        const meta = extractPowensBankMeta(powensAcc, connectorMap);
         // Use connection's provider_name as fallback when Powens doesn't return bank info in account response
         const bankNameFromMeta = meta.bankName || connProviderName;
         const storedBankName = bankNameFromMeta || null;

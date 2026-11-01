@@ -91,13 +91,13 @@ the price feed does not quote.
 
 - Added by migration in `db.ts`. Production had it added by hand, so fresh
   databases were missing the column entirely for a long time.
-- The Coinbase sync fills it from the portfolio breakdown, keyed by **asset
-  symbol**: `fiatByAsset[pos.asset]`. Two accounts of the same asset — "POL" and
-  "Staked POL", say — therefore receive the *same* value. Harmless while every
-  duplicated token has a live price (step 2 wins and each account is valued from
-  its own quantity), but it would double-count an unpriced token held in two
-  wallets. Fix it by keying on the account rather than the symbol if that comes
-  up.
+- The Coinbase sync fills it from the portfolio breakdown, which reports one
+  fiat value per **asset**, covering every wallet that holds it — a plain "POL"
+  wallet and a "Staked POL" one share a single spot position. That value is
+  apportioned by each wallet's share of the asset's total quantity
+  (`apportionAssetFiat` in `routes/crypto.ts`). It used to be assigned whole to
+  each wallet, which would have double-counted any unpriced token held in two
+  places.
 - `updateCryptoBalanceNative()` recomputes it as `balance * price` for tokens
   that have a price. It writes only `balance_native`.
 
