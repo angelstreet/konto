@@ -163,11 +163,22 @@ router.get('/api/bank/reconnect-url/:accountId', async (c) => {
  *
  * So an account disabled at the consent step can only be brought back here.
  */
-async function buildManageUrl(userId: number, lang: string): Promise<string | null> {
-  const connsRes = await db.execute({
-    sql: `SELECT * FROM bank_connections WHERE user_id = ? AND status = 'active' ORDER BY id DESC`,
-    args: [userId],
-  });
+async function buildManageUrl(userId: number, lang: string, connectionId?: string | null): Promise<string | null> {
+  // Each connection carries its own Powens access token, and a token only sees
+  // its own connection's institution — the manage webview opened with a CIC
+  // token lists CIC alone. So to manage a given bank, mint the code from that
+  // bank's connection.
+  const connsRes = connectionId
+    ? await db.execute({
+        sql: `SELECT * FROM bank_connections
+              WHERE user_id = ? AND powens_connection_id = ? AND status != 'replaced'
+              ORDER BY id DESC`,
+        args: [userId, connectionId],
+      })
+    : await db.execute({
+        sql: `SELECT * FROM bank_connections WHERE user_id = ? AND status = 'active' ORDER BY id DESC`,
+        args: [userId],
+      });
   const state = randomBytes(16).toString('hex');
   await db.execute({ sql: 'INSERT INTO oauth_states (state, user_id) VALUES (?, ?)', args: [state, userId] });
   await db.execute({ sql: "DELETE FROM oauth_states WHERE created_at < datetime('now', '-10 minutes')", args: [] });
@@ -211,7 +222,7 @@ router.get('/api/bank/manage', async (c) => {
   } else {
     userId = await getUserId(c);
   }
-  const url = await buildManageUrl(userId, c.req.query('lang') || 'fr');
+  const url = await buildManageUrl(userId, c.req.query('lang') || 'fr', c.req.query('connection_id') || null);
   if (!url) {
     return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">Impossible d'ouvrir la gestion des comptes</h1>
@@ -230,7 +241,9 @@ router.post('/api/bank/manage-token', async (c) => {
     args: [sha256(token), userId, String(days)],
   });
   const base = process.env.APP_URL || 'https://konto.angelstreet.io';
-  return c.json({ url: `${base}/api/bank/manage?t=${token}`, expires_in_days: days });
+  const cid = c.req.query('connection_id');
+  const suffix = cid ? `&connection_id=${encodeURIComponent(cid)}` : '';
+  return c.json({ url: `${base}/api/bank/manage?t=${token}${suffix}`, expires_in_days: days });
 });
 
 /**
