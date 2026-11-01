@@ -156,6 +156,84 @@ router.get('/api/bank/reconnect-url/:accountId', async (c) => {
 });
 
 /**
+ * The Powens "manage" webview: the only screen that lets the user **activate or
+ * deactivate accounts** on a connection. /reconnect does not — it only resumes
+ * a connection that stopped syncing, and returns immediately when there is
+ * nothing to resume, which looks like success while changing nothing.
+ *
+ * So an account disabled at the consent step can only be brought back here.
+ */
+async function buildManageUrl(userId: number, lang: string): Promise<string | null> {
+  const connsRes = await db.execute({
+    sql: `SELECT * FROM bank_connections WHERE user_id = ? AND status = 'active' ORDER BY id DESC`,
+    args: [userId],
+  });
+  const state = randomBytes(16).toString('hex');
+  await db.execute({ sql: 'INSERT INTO oauth_states (state, user_id) VALUES (?, ?)', args: [state, userId] });
+  await db.execute({ sql: "DELETE FROM oauth_states WHERE created_at < datetime('now', '-10 minutes')", args: [] });
+
+  const base = `https://webview.powens.com/${lang}/manage?domain=${POWENS_DOMAIN}`
+    + `&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}`;
+
+  for (const rawConn of connsRes.rows as any[]) {
+    const conn = decryptBankConn(rawConn);
+    for (const token of [conn.powens_token, await refreshPowensToken(conn.id)]) {
+      if (!token) continue;
+      try {
+        const codeRes = await fetch(`${POWENS_API}/auth/token/code`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!codeRes.ok) continue;
+        const codeData = await codeRes.json() as any;
+        if (codeData?.code) return `${base}&code=${codeData.code}`;
+      } catch { /* next token */ }
+    }
+  }
+  return null;
+}
+
+router.get('/api/bank/manage', async (c) => {
+  const t = c.req.query('t');
+  let userId: number;
+  if (t) {
+    const row = await db.execute({
+      sql: `SELECT id, user_id FROM reconnect_tokens
+            WHERE token_hash = ? AND powens_connection_id = 'manage'
+              AND used_at IS NULL AND expires_at > datetime('now') LIMIT 1`,
+      args: [sha256(t)],
+    });
+    if (row.rows.length === 0) {
+      return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+        <h1 style="color:#ef4444;">Lien expiré</h1><a href="/konto/accounts" style="color:#d4a812;">← Konto</a></body></html>`, 410);
+    }
+    userId = Number((row.rows[0] as any).user_id);
+    await db.execute({ sql: "UPDATE reconnect_tokens SET used_at = datetime('now') WHERE id = ?", args: [(row.rows[0] as any).id] });
+  } else {
+    userId = await getUserId(c);
+  }
+  const url = await buildManageUrl(userId, c.req.query('lang') || 'fr');
+  if (!url) {
+    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#ef4444;">Impossible d'ouvrir la gestion des comptes</h1>
+      <a href="/konto/accounts" style="color:#d4a812;">← Konto</a></body></html>`, 502);
+  }
+  return c.redirect(url, 302);
+});
+
+router.post('/api/bank/manage-token', async (c) => {
+  const userId = await getUserId(c);
+  const token = randomBytes(32).toString('hex');
+  const days = Math.min(Math.max(Number(c.req.query('days') || 7), 1), 30);
+  await db.execute({
+    sql: `INSERT INTO reconnect_tokens (token_hash, user_id, powens_connection_id, expires_at)
+          VALUES (?, ?, 'manage', datetime('now', '+' || ? || ' days'))`,
+    args: [sha256(token), userId, String(days)],
+  });
+  const base = process.env.APP_URL || 'https://konto.angelstreet.io';
+  return c.json({ url: `${base}/api/bank/manage?t=${token}`, expires_in_days: days });
+});
+
+/**
  * Mints a single-use link for re-approving one connection, for sending to a
  * phone. Needed because a notification opens in the messaging app's browser,
  * which carries no Konto session: a session-based link lands on a sign-in
