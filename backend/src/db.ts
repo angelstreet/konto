@@ -510,6 +510,24 @@ export async function migrateDatabase() {
     await db.execute("ALTER TABLE bank_accounts ADD COLUMN sca_required INTEGER NOT NULL DEFAULT 0");
   }
 
+  // Accounts the user deleted on purpose. Without this a delete does not stick:
+  // the provider keeps returning the account and the next sync re-inserts it.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS excluded_provider_accounts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      provider TEXT NOT NULL,
+      provider_account_id TEXT,
+      iban TEXT,
+      name TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  await db.execute(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_excluded_provider_account
+      ON excluded_provider_accounts(user_id, provider, provider_account_id)
+  `);
+
   // Which Powens connection owns this account (its `id_connection`). Lets the
   // app offer one reconnect link per connection, which matters because several
   // connections can share one institution name.

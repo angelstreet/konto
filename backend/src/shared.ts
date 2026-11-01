@@ -119,6 +119,44 @@ export async function fetchPowensConnectorMap(token: string): Promise<Map<string
 }
 
 /**
+ * The provider accounts this user deleted on purpose, as lookup keys. A delete
+ * has to be remembered: the provider keeps returning the account, so without a
+ * tombstone the next sync simply re-creates it and the deletion appears to be
+ * ignored.
+ *
+ * Keys are `provider|id:<provider_account_id>` and `provider|iban:<iban>`, so a
+ * re-keyed account is still recognised by its IBAN.
+ */
+export async function loadExcludedProviderAccounts(userId: number): Promise<Set<string>> {
+  const keys = new Set<string>();
+  try {
+    const res = await db.execute({
+      sql: 'SELECT provider, provider_account_id, iban FROM excluded_provider_accounts WHERE user_id = ?',
+      args: [userId],
+    });
+    for (const row of res.rows as any[]) {
+      if (row.provider_account_id) keys.add(`${row.provider}|id:${row.provider_account_id}`);
+      if (row.iban) keys.add(`${row.provider}|iban:${row.iban}`);
+    }
+  } catch {
+    // table missing on an unmigrated database — nothing is excluded
+  }
+  return keys;
+}
+
+/** True when this provider account was deleted by the user and must not return. */
+export function isProviderAccountExcluded(
+  excluded: Set<string>,
+  provider: string,
+  providerAccountId: string | null | undefined,
+  iban: string | null | undefined,
+): boolean {
+  if (providerAccountId && excluded.has(`${provider}|id:${providerAccountId}`)) return true;
+  if (iban && excluded.has(`${provider}|iban:${iban}`)) return true;
+  return false;
+}
+
+/**
  * Records which Powens connection owns each account, from the account's own
  * `id_connection`. Needed so the app can offer one reconnect link per
  * connection: several connections can sit behind one institution name, and a

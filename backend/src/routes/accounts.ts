@@ -6,6 +6,7 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI, POWENS_CONNECTOR_CAPABILITIES,
          classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
          fetchPowensConnectorMap, persistPowensConnectionInfo, persistPowensAccountConnections,
+         loadExcludedProviderAccounts, isProviderAccountExcluded,
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
          calcInvestmentDiff, calcInvDiff, formatCurrencyFR, escapeHtml } from '../shared.js';
 import { categorizeTransaction } from '../categorizer.js';
@@ -329,11 +330,13 @@ router.get('/api/bank-callback', async (c) => {
       accounts = accountsData.accounts || [];
       const connectorMap = await fetchPowensConnectorMap(accessToken);
       await persistPowensConnectionInfo(userId, connectorMap);
+      const excludedOnConnect = await loadExcludedProviderAccounts(userId);
 
       for (const acc of accounts) {
         const accType = classifyAccountType(acc.type, acc.name || acc.original_name || '');
         const accNumber = acc.number || acc.webid || null;
         const accIban = acc.iban || null;
+        if (isProviderAccountExcluded(excludedOnConnect, 'powens', String(acc.id), accIban)) continue;
         const meta = extractPowensBankMeta(acc, connectorMap);
         const storedBankName = meta.bankName || null;
 
@@ -465,6 +468,7 @@ router.post('/api/bank/sync', async (c) => {
   // Powens accounts seen this run, so the account -> connection links can be
   // written once the accounts themselves exist.
   const pendingConnectionLinks: any[] = [];
+  const excludedAccounts = await loadExcludedProviderAccounts(userId);
 
   for (const rawConn of connections.rows as any[]) {
     const conn = decryptBankConn(rawConn);
@@ -489,6 +493,7 @@ router.post('/api/bank/sync', async (c) => {
         const accType = classifyAccountType(acc.type, acc.name || acc.original_name || '');
         const accNumber = acc.number || acc.webid || null;
         const accIban = acc.iban || null;
+        if (isProviderAccountExcluded(excludedAccounts, 'powens', String(acc.id), accIban)) continue;
         // Deduplicate: find by (company_id, provider, provider_account_id) or by iban
         const existingId = await findBankAccountByProviderId(userId, null, 'powens', String(acc.id), accIban);
         let bankAccountId: number;
@@ -633,8 +638,46 @@ router.patch('/api/bank/accounts/:id', async (c) => {
 router.delete('/api/bank/accounts/:id', async (c) => {
   const userId = await getUserId(c);
   const id = c.req.param('id');
+
+  // Remember the deletion before performing it. A provider-sourced account is
+  // returned by the provider on every sync, so deleting the row alone just
+  // re-creates it minutes later — the deletion has to be recorded to stick.
+  const accRes = await db.execute({
+    sql: 'SELECT provider, provider_account_id, iban, COALESCE(custom_name, name) AS name FROM bank_accounts WHERE id = ? AND user_id = ?',
+    args: [id, userId],
+  });
+  const acc = accRes.rows[0] as any;
+  if (acc && acc.provider && acc.provider !== 'manual' && (acc.provider_account_id || acc.iban)) {
+    await db.execute({
+      sql: `INSERT OR REPLACE INTO excluded_provider_accounts (user_id, provider, provider_account_id, iban, name)
+            VALUES (?, ?, ?, ?, ?)`,
+      args: [userId, acc.provider, acc.provider_account_id ?? null, acc.iban ?? null, acc.name ?? null],
+    });
+  }
+
   await db.execute({ sql: 'DELETE FROM transactions WHERE bank_account_id = ? AND bank_account_id IN (SELECT id FROM bank_accounts WHERE user_id = ?)', args: [id, userId] });
   await db.execute({ sql: 'DELETE FROM bank_accounts WHERE id = ? AND user_id = ?', args: [id, userId] });
+  return c.json({ ok: true, excluded: !!acc && acc.provider !== 'manual' });
+});
+
+// What the user has deleted, and a way back — otherwise a mistaken delete is
+// permanent and invisible.
+router.get('/api/bank/excluded', async (c) => {
+  const userId = await getUserId(c);
+  const res = await db.execute({
+    sql: 'SELECT id, provider, provider_account_id, iban, name, created_at FROM excluded_provider_accounts WHERE user_id = ? ORDER BY created_at DESC',
+    args: [userId],
+  });
+  return c.json(res.rows);
+});
+
+router.delete('/api/bank/excluded/:id', async (c) => {
+  const userId = await getUserId(c);
+  await db.execute({
+    sql: 'DELETE FROM excluded_provider_accounts WHERE id = ? AND user_id = ?',
+    args: [c.req.param('id'), userId],
+  });
+  // It reappears on the next sync, which is the point.
   return c.json({ ok: true });
 });
 
@@ -969,6 +1012,7 @@ router.post('/api/bank/sync-all', async (c) => {
   let scaConnections: number[] = [];
   let errors = 0;
   const pendingConnectionLinks: any[] = [];
+  const excludedAccounts = await loadExcludedProviderAccounts(userId);
 
   for (const conn of connections) {
     let token = conn.powens_token;
@@ -1019,6 +1063,7 @@ router.post('/api/bank/sync-all', async (c) => {
       pendingConnectionLinks.push(...powensAccounts);
       for (const powensAcc of powensAccounts) {
         const providerId = String(powensAcc.id);
+        if (isProviderAccountExcluded(excludedAccounts, 'powens', providerId, powensAcc.iban || null)) continue;
         const meta = extractPowensBankMeta(powensAcc, connectorMap);
         // Use connection's provider_name as fallback when Powens doesn't return bank info in account response
         const bankNameFromMeta = meta.bankName || connProviderName;
