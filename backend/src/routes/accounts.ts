@@ -56,11 +56,20 @@ router.get('/api/bank/webview', (c) => {
   return c.redirect(target, 302);
 });
 
-// Reconnect a specific SCA-blocked connection
-router.get('/api/bank/reconnect-url/:accountId', async (c) => {
-  const accountId = c.req.param('accountId');
-  const lang = c.req.query('lang') || 'fr';
-  const userId = await getUserId(c);
+/**
+ * Mints a Powens webview URL for re-approving the connection that owns this
+ * account. Shared by the JSON route and the redirect route below; returns null
+ * when the account is not this user's.
+ *
+ * The URL carries a short-lived Powens code and a `state` row that is dropped
+ * after 10 minutes, so it has to be minted per request — it cannot be stored
+ * and sent later.
+ */
+async function buildReconnectUrl(
+  userId: number,
+  accountId: string,
+  lang: string,
+): Promise<{ url: string; connection_id?: string } | null> {
   const state = randomBytes(16).toString('hex');
   await db.execute({ sql: 'INSERT INTO oauth_states (state, user_id) VALUES (?, ?)', args: [state, userId] });
   await db.execute({ sql: "DELETE FROM oauth_states WHERE created_at < datetime('now', '-10 minutes')", args: [] });
@@ -69,7 +78,7 @@ router.get('/api/bank/reconnect-url/:accountId', async (c) => {
     sql: 'SELECT provider_account_id FROM bank_accounts WHERE id = ? AND user_id = ?',
     args: [accountId, userId]
   });
-  if (accRes.rows.length === 0) return c.json({ error: 'Account not found' }, 404);
+  if (accRes.rows.length === 0) return null;
   const providerAccountId = (accRes.rows[0] as any).provider_account_id;
 
   // Find which connection owns this account
@@ -93,18 +102,46 @@ router.get('/api/bank/reconnect-url/:accountId', async (c) => {
         if (!codeRes.ok) {
           // Fallback: use token directly
           const url = `https://webview.powens.com/${lang}/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&token=${conn.powens_token}&state=${state}`;
-          return c.json({ url, connection_id: conn.powens_connection_id });
+          return { url, connection_id: conn.powens_connection_id };
         }
         const codeData = await codeRes.json() as any;
         const url = `https://webview.powens.com/${lang}/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&code=${codeData.code}&state=${state}`;
-        return c.json({ url, connection_id: conn.powens_connection_id });
+        return { url, connection_id: conn.powens_connection_id };
       }
     } catch {}
   }
 
   // Fallback to generic connect
   const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}${POWENS_CONNECTOR_CAPABILITIES ? `&connector_capabilities=${POWENS_CONNECTOR_CAPABILITIES}` : ''}`;
-  return c.json({ url });
+  return { url };
+}
+
+// Reconnect a specific SCA-blocked connection
+router.get('/api/bank/reconnect-url/:accountId', async (c) => {
+  const userId = await getUserId(c);
+  const result = await buildReconnectUrl(userId, c.req.param('accountId'), c.req.query('lang') || 'fr');
+  if (!result) return c.json({ error: 'Account not found' }, 404);
+  return c.json(result);
+});
+
+// Stable, shareable entry point for re-approving a bank.
+//
+// /api/bank/reconnect-url/:accountId returns a Powens webview URL that carries a
+// short-lived code and a `state` row that is deleted after 10 minutes, so a URL
+// pasted into a notification is usually dead by the time it is tapped. This
+// route mints a fresh one per request and redirects, so a link sent to the phone
+// keeps working. It relies on the normal session, so it is not a secret URL.
+router.get('/api/bank/reconnect/:accountId', async (c) => {
+  const userId = await getUserId(c);
+  const result = await buildReconnectUrl(userId, c.req.param('accountId'), c.req.query('lang') || 'fr');
+  if (!result?.url) {
+    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#ef4444;">Could not start the reconnection</h1>
+      <p>Open Konto and use the reconnect button on the account instead.</p>
+      <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`, 404);
+  }
+  if (!result.url.startsWith('https://webview.powens.com/')) return c.redirect('/konto/accounts', 302);
+  return c.redirect(result.url, 302);
 });
 
 // --- Powens: OAuth callback ---
