@@ -460,6 +460,67 @@ router.get('/api/bank/connections', async (c) => {
   return c.json(result.rows);
 });
 
+/**
+ * What the provider actually sends us, per connection — read-only, writes
+ * nothing. Uses `?all`, which includes accounts Powens omits by default
+ * (disabled ones, and accounts left out of the consent), so a bank account the
+ * user can see but Konto cannot is diagnosable without guessing.
+ */
+router.get('/api/bank/provider-accounts', async (c) => {
+  const userId = await getUserId(c);
+  const connsRes = await db.execute({
+    sql: "SELECT * FROM bank_connections WHERE user_id = ? AND status != 'replaced'",
+    args: [userId],
+  });
+
+  const out: any[] = [];
+  for (const rawConn of connsRes.rows as any[]) {
+    const conn = decryptBankConn(rawConn);
+    let reported: any[] | null = null;
+    let error: string | null = null;
+    for (const token of [conn.powens_token, await refreshPowensToken(conn.id)]) {
+      if (!token) continue;
+      try {
+        const res = await fetch(`${POWENS_API}/users/me/accounts?all`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) { error = `HTTP ${res.status}`; continue; }
+        const data = await res.json() as any;
+        reported = data.accounts || [];
+        error = null;
+        break;
+      } catch (err: any) {
+        error = err?.message || 'fetch failed';
+      }
+    }
+
+    const known = await db.execute({
+      sql: `SELECT provider_account_id FROM bank_accounts
+            WHERE user_id = ? AND provider = 'powens' AND provider_connection_id = ?`,
+      args: [userId, conn.powens_connection_id],
+    });
+    const knownIds = new Set((known.rows as any[]).map(r => String(r.provider_account_id)));
+
+    out.push({
+      connection_id: conn.powens_connection_id,
+      provider_name: conn.provider_name,
+      error,
+      accounts: (reported || [])
+        .filter((a: any) => String(a.id_connection ?? conn.powens_connection_id) === String(conn.powens_connection_id))
+        .map((a: any) => ({
+          id: a.id,
+          name: a.name || a.original_name || null,
+          type: a.type || null,
+          disabled: a.disabled ?? null,
+          deleted: a.deleted ?? null,
+          balance: a.balance ?? null,
+          stored_in_konto: knownIds.has(String(a.id)),
+        })),
+    });
+  }
+  return c.json(out);
+});
+
 // --- Sync all accounts ---
 router.post('/api/bank/sync', async (c) => {
   const userId = await getUserId(c);
