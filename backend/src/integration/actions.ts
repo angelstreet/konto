@@ -1,5 +1,6 @@
 import db from '../db.js';
 import { categorizeTransaction } from '../categorizer.js';
+import { getCryptoEurPrices, getFiatEurRates, accountBalanceEur } from '../shared.js';
 import { kontoDeeplink, kontoLoanDeeplink } from './deeplinks.js';
 
 export type KontoIntegrationActionId =
@@ -77,10 +78,10 @@ async function getSummary(userId: number) {
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
   const prevMonthStart = new Date(now.getFullYear(), now.getMonth() - 3, 1).toISOString().split('T')[0];
   const [accountsRes, investmentsRes, assetsRes, loansRes, txsRes, subTxsRes] = await Promise.all([
-    db.execute({ sql: `SELECT balance, type FROM bank_accounts WHERE user_id = ? AND hidden = 0`, args: [userId] }),
+    db.execute({ sql: `SELECT balance, balance_native, currency, type FROM bank_accounts WHERE user_id = ? AND hidden = 0`, args: [userId] }),
     db.execute({ sql: `SELECT i.valuation, i.code_type as asset_class, i.isin_code as code FROM investments i JOIN bank_accounts ba ON i.bank_account_id = ba.id WHERE ba.user_id = ?`, args: [userId] }),
     db.execute({ sql: `SELECT current_value, purchase_price FROM assets WHERE user_id = ?`, args: [userId] }),
-    db.execute({ sql: `SELECT balance FROM bank_accounts WHERE user_id = ? AND type = 'loan'`, args: [userId] }),
+    db.execute({ sql: `SELECT balance, balance_native, currency FROM bank_accounts WHERE user_id = ? AND type = 'loan'`, args: [userId] }),
     db.execute({ sql: `SELECT t.amount, t.label FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE ba.user_id = ? AND t.date >= ?`, args: [userId, monthStart] }),
     db.execute({ sql: `SELECT t.amount, t.label FROM transactions t JOIN bank_accounts ba ON t.bank_account_id = ba.id WHERE ba.user_id = ? AND t.amount < 0 AND t.date >= ?`, args: [userId, prevMonthStart] }),
   ]);
@@ -89,10 +90,14 @@ async function getSummary(userId: number) {
   const investments = investmentsRes.rows as any[];
   const assets = assetsRes.rows as any[];
   const loans = loansRes.rows as any[];
-  const totalBalance = accounts.filter((a) => a.type !== 'loan').reduce((s: number, a: any) => s + (a.balance || 0), 0);
+  // Accounts are stored in their own unit (EUR, CHF, BTC, PEPE…). Summing raw
+  // balances would add token quantities to euros, so convert each one first.
+  const [summaryCryptoPrices, summaryFiatRates] = await Promise.all([getCryptoEurPrices(), getFiatEurRates()]);
+  const toEur = (a: any) => accountBalanceEur(a, summaryCryptoPrices, summaryFiatRates);
+  const totalBalance = accounts.filter((a) => a.type !== 'loan').reduce((s: number, a: any) => s + toEur(a), 0);
   const totalInvestments = investments.reduce((s: number, i: any) => s + (i.valuation || 0), 0);
   const totalAssets = assets.reduce((s: number, a: any) => s + (a.current_value || a.purchase_price || 0), 0);
-  const totalLoans = loans.reduce((s: number, l: any) => s + (l.balance || 0), 0);
+  const totalLoans = loans.reduce((s: number, l: any) => s + toEur(l), 0);
   const patrimoineNet = totalBalance + totalInvestments + totalAssets + totalLoans;
 
   let income = 0;

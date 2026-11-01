@@ -1,5 +1,9 @@
 import { createHash, randomBytes } from 'crypto';
 import db, { ensureUser } from './db.js';
+// Pure currency arithmetic lives in money.ts (no db, unit-testable); re-exported
+// here so the many existing `from '../shared.js'` importers keep working.
+import { FIAT_EUR_FALLBACK, FIAT_CURRENCIES, accountBalanceEur } from './money.js';
+export { FIAT_CURRENCIES, accountBalanceEur };
 import { encrypt, decrypt } from './crypto.js';
 
 // --- API Key Helpers ---
@@ -310,7 +314,9 @@ export function escapeHtml(s: string) {
 }
 
 // --- Crypto EUR prices (cached 5 min) ---
-const CG_MAP: Record<string, string> = { BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple', POL: 'matic-network', BNB: 'binancecoin', AVAX: 'avalanche-2' };
+// CoinGecko ids. POL is 'polygon-ecosystem-token'; 'matic-network' is the old
+// pre-migration MATIC and trades ~37% above POL, so it overvalued the holding.
+const CG_MAP: Record<string, string> = { BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple', POL: 'polygon-ecosystem-token', BNB: 'binancecoin', AVAX: 'avalanche-2' };
 let _cryptoPriceCache: { prices: Record<string, number>; ts: number } | null = null;
 const CACHE_TTL = 5 * 60 * 1000; // 5 min
 
@@ -359,16 +365,6 @@ export async function getCryptoEurPrices(): Promise<Record<string, number>> {
 
 // --- Fiat EUR rates (cached 12h — the ECB publishes once per working day) ---
 
-/**
- * Units of each currency per 1 EUR. Used when the live feed is unavailable.
- * XOF is pegged to the euro at a fixed parity and is never quoted by the ECB.
- */
-const FIAT_EUR_FALLBACK: Record<string, number> = {
-  EUR: 1, USD: 1.08, GBP: 0.86, CHF: 0.94, CAD: 1.47, JPY: 162, XOF: 655.957,
-};
-
-/** Currencies treated as fiat; anything else is looked up as a crypto asset. */
-export const FIAT_CURRENCIES = new Set(Object.keys(FIAT_EUR_FALLBACK));
 
 let _fiatRateCache: { rates: Record<string, number>; ts: number } | null = null;
 const FIAT_CACHE_TTL = 12 * 60 * 60 * 1000; // 12h
@@ -422,30 +418,6 @@ export async function getFiatEurRates(): Promise<Record<string, number>> {
   }
 }
 
-/**
- * A bank account's balance converted to EUR — the single source of truth for
- * every total in the app.
- *
- * Fiat balances are divided by their per-EUR rate. Crypto balances are stored
- * in native units, so they are priced live, falling back to the last EUR value
- * persisted in balance_native.
- */
-export function accountBalanceEur(
-  account: any,
-  cryptoPrices: Record<string, number>,
-  fiatRates: Record<string, number>,
-): number {
-  const cur = account.currency || 'EUR';
-  const balance = account.balance || 0;
-
-  if (FIAT_CURRENCIES.has(cur)) {
-    const rate = fiatRates[cur];
-    return rate && rate > 0 ? balance / rate : balance;
-  }
-  if (cryptoPrices[cur]) return balance * cryptoPrices[cur];
-  if (account.balance_native != null && account.balance_native !== 0) return account.balance_native;
-  return 0;
-}
 
 /** Update balance_native (EUR) for all crypto accounts that have a known price */
 export async function updateCryptoBalanceNative(userId: number, prices: Record<string, number>) {
