@@ -675,6 +675,22 @@ router.get('/api/bank/provider-accounts', async (c) => {
       }
     }
 
+    // What the SYNC sees: the plain listing, no ?all. If an account is enabled
+    // yet absent here, no amount of syncing will ever store it.
+    let plainIds: string[] = [];
+    try {
+      for (const token of [conn.powens_token, await refreshPowensToken(conn.id)]) {
+        if (!token) continue;
+        const r = await fetch(`${POWENS_API}/users/me/accounts`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!r.ok) continue;
+        const d = await r.json() as any;
+        plainIds = (d.accounts || []).map((a: any) => String(a.id));
+        break;
+      }
+    } catch { /* leave empty */ }
+
     const known = await db.execute({
       sql: `SELECT provider_account_id FROM bank_accounts
             WHERE user_id = ? AND provider = 'powens' AND provider_connection_id = ?`,
@@ -699,6 +715,7 @@ router.get('/api/bank/provider-accounts', async (c) => {
           disabled: a.disabled ?? null,
           deleted: a.deleted ?? null,
           balance: a.balance ?? null,
+          visible_to_sync: plainIds.includes(String(a.id)),
           stored_in_konto: knownIds.has(String(a.id)),
         })),
     });
