@@ -91,7 +91,20 @@ async function buildReconnectUrl(
   // reconnect anything: it creates a NEW connection. That is how one bank ended
   // up behind nine connections.
   if (!providerConnectionId) return null;
+  return buildReconnectUrlForConnection(userId, String(providerConnectionId), lang);
+}
 
+/**
+ * Mints the reconnect webview URL for a connection directly. Needed because a
+ * connection can hold zero stored accounts — it has never synced, or its
+ * accounts were removed — and then there is no account to hang a link on, which
+ * is exactly the connection most likely to need re-approving.
+ */
+async function buildReconnectUrlForConnection(
+  userId: number,
+  providerConnectionId: string,
+  lang: string,
+): Promise<{ url: string; connection_id?: string } | null> {
   const connRes = await db.execute({
     sql: `SELECT * FROM bank_connections
           WHERE user_id = ? AND powens_connection_id = ? AND status != 'replaced'
@@ -140,6 +153,17 @@ router.get('/api/bank/reconnect-url/:accountId', async (c) => {
   const result = await buildReconnectUrl(userId, c.req.param('accountId'), c.req.query('lang') || 'fr');
   if (!result) return c.json({ error: 'Account not found' }, 404);
   return c.json(result);
+});
+
+router.get('/api/bank/reconnect-connection/:connectionId', async (c) => {
+  const userId = await getUserId(c);
+  const result = await buildReconnectUrlForConnection(userId, c.req.param('connectionId'), c.req.query('lang') || 'fr');
+  if (!result?.url || !result.url.startsWith('https://webview.powens.com/')) {
+    return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+      <h1 style="color:#ef4444;">Could not start the reconnection</h1>
+      <a href="/konto/accounts" style="color:#d4a812;">← Back to Konto</a></body></html>`, 404);
+  }
+  return c.redirect(result.url, 302);
 });
 
 // Stable, shareable entry point for re-approving a bank.
