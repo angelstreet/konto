@@ -833,6 +833,104 @@ router.post('/api/bank/refresh-connection', async (c) => {
   return c.json({ attempted: results.length, refreshed: results.filter(r => r.ok).length, results });
 });
 
+/**
+ * Merges duplicate rows created when a provider re-issues account ids.
+ *
+ * Reconnecting made Powens hand out new ids for accounts Konto already had.
+ * Matching is by provider_account_id, so every one was inserted again — 19
+ * accounts became 40 and the loans counted twice.
+ *
+ * Deleting is the wrong tool: dropping the new row leaves the original with a
+ * stale id that no longer syncs (and duplicates again next time), dropping the
+ * original throws away its transactions, and the normal delete route writes a
+ * tombstone — which would block the very id being adopted. So instead the
+ * oldest row of each group keeps its history and adopts the newest row's
+ * provider ids, and the newer rows are removed without tombstones.
+ *
+ * `?drop_connections=12` first discards rows belonging to a stale duplicate
+ * connection, so the survivor is chosen from the live one.
+ * `?dry=1` reports the plan and changes nothing.
+ */
+router.post('/api/bank/merge-duplicates', async (c) => {
+  const userId = await getUserId(c);
+  const dry = c.req.query('dry') === '1';
+  const dropConns = (c.req.query('drop_connections') || '').split(',').map(x => x.trim()).filter(Boolean);
+
+  const res = await db.execute({
+    sql: `SELECT id, provider_account_id, provider_connection_id, name, custom_name,
+                 type, balance, iban, account_number
+          FROM bank_accounts WHERE user_id = ? AND provider = 'powens' ORDER BY id`,
+    args: [userId],
+  });
+  let rows = res.rows as any[];
+
+  const dropped: any[] = [];
+  if (dropConns.length) {
+    const keep: any[] = [];
+    for (const r of rows) {
+      if (dropConns.includes(String(r.provider_connection_id))) dropped.push(r); else keep.push(r);
+    }
+    rows = keep;
+  }
+
+  const key = (r: any) => [
+    String(r.name || '').trim().toLowerCase(),
+    r.type || '',
+    r.iban || '',
+    r.account_number || '',
+  ].join('|');
+
+  const groups = new Map<string, any[]>();
+  for (const r of rows) {
+    const k = key(r);
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k)!.push(r);
+  }
+
+  const merges: any[] = [];
+  for (const [, group] of groups) {
+    if (group.length < 2) continue;
+    const survivor = group[0];                 // lowest id — the one with history
+    const newest = group[group.length - 1];    // newest provider ids
+    merges.push({
+      keep: survivor.id,
+      name: survivor.custom_name || survivor.name,
+      adopts_provider_account_id: newest.provider_account_id,
+      adopts_connection: newest.provider_connection_id,
+      removes: group.slice(1).map((r: any) => r.id),
+    });
+  }
+
+  if (!dry) {
+    for (const m of merges) {
+      await db.execute({
+        sql: `UPDATE bank_accounts SET provider_account_id = ?, provider_connection_id = ?
+              WHERE id = ? AND user_id = ?`,
+        args: [m.adopts_provider_account_id, m.adopts_connection, m.keep, userId],
+      });
+      for (const id of m.removes) {
+        await db.execute({ sql: 'DELETE FROM transactions WHERE bank_account_id = ?', args: [id] });
+        await db.execute({ sql: 'DELETE FROM investments WHERE bank_account_id = ?', args: [id] });
+        await db.execute({ sql: 'UPDATE assets SET linked_loan_account_id = NULL WHERE linked_loan_account_id = ? AND user_id = ?', args: [id, userId] });
+        await db.execute({ sql: 'DELETE FROM bank_accounts WHERE id = ? AND user_id = ?', args: [id, userId] });
+      }
+    }
+    for (const r of dropped) {
+      await db.execute({ sql: 'DELETE FROM transactions WHERE bank_account_id = ?', args: [r.id] });
+      await db.execute({ sql: 'DELETE FROM investments WHERE bank_account_id = ?', args: [r.id] });
+      await db.execute({ sql: 'UPDATE assets SET linked_loan_account_id = NULL WHERE linked_loan_account_id = ? AND user_id = ?', args: [r.id, userId] });
+      await db.execute({ sql: 'DELETE FROM bank_accounts WHERE id = ? AND user_id = ?', args: [r.id, userId] });
+    }
+  }
+
+  return c.json({
+    dry,
+    dropped_connection_rows: dropped.map(r => ({ id: r.id, name: r.custom_name || r.name, connection: r.provider_connection_id })),
+    merges,
+    rows_removed: merges.reduce((n, m) => n + m.removes.length, 0) + dropped.length,
+  });
+});
+
 // --- Sync all accounts ---
 router.post('/api/bank/sync', async (c) => {
   const userId = await getUserId(c);
