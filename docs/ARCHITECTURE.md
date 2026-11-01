@@ -250,6 +250,25 @@ All endpoints are prefixed with `/api/`.
 | currency | TEXT | Currency or token code (default: EUR) |
 | provider_bank_id / provider_bank_name | TEXT | Powens institution metadata |
 
+### `excluded_provider_accounts`
+Accounts the user deleted on purpose. Without it a delete does not stick: the
+provider keeps returning the account and the next sync re-creates it.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| user_id | INTEGER FK→users | Owner |
+| provider | TEXT | `powens`, `coinbase`, … |
+| provider_account_id | TEXT | Provider's id for the account |
+| iban | TEXT | Fallback key when the provider re-keys an account |
+| name | TEXT | What it was called, so the exclusion list is readable |
+
+`GET /api/bank/excluded` lists them; `DELETE /api/bank/excluded/:id` removes a
+tombstone and the account returns on the next sync.
+
+**Deleting an account** must clear `transactions` and `investments` first —
+neither has `ON DELETE CASCADE` — and unlink any asset referencing it through
+`linked_loan_account_id`.
+
 ### `transactions`
 | Column | Type | Description |
 |--------|------|-------------|
