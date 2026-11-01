@@ -711,8 +711,16 @@ router.get('/api/bank/provider-accounts', async (c) => {
  *
  * An account left out of the consent is returned by `?all` with a `disabled`
  * timestamp and omitted from the normal listing, so it never syncs. The manage
- * webview can re-tick it, but Powens also exposes it directly:
- * `PUT /users/me/accounts/{id}` with `disabled: null`.
+ * webview can re-tick it, but Powens also exposes it directly, per its Bank
+ * accounts reference ("Life cycle"):
+ *   POST /users/me/accounts/{id}?all   body {"disabled": false}
+ * The `?all` flag is required even on the single-resource path — without it a
+ * disabled account does not resolve and the API answers notFound before it
+ * reads the body. Powens notes this call "represents the PSU's consent", so
+ * only make it on the account holder's own instruction.
+ *
+ * Disabling an account deletes its transactions and investments; enabling does
+ * not restore them, the next sync repopulates.
  *
  * POST /api/bank/enable-accounts            → every disabled account
  * POST /api/bank/enable-accounts?ids=64,67  → only those
@@ -748,10 +756,10 @@ router.post('/api/bank/enable-accounts', async (c) => {
       if (!acc?.disabled) continue;
       if (only.length && !only.includes(String(acc.id))) continue;
       try {
-        const put = await fetch(`${POWENS_API}/users/me/accounts/${acc.id}`, {
-          method: 'PUT',
+        const put = await fetch(`${POWENS_API}/users/me/accounts/${acc.id}?all`, {
+          method: 'POST',
           headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-          body: JSON.stringify({ disabled: null }),
+          body: JSON.stringify({ disabled: false }),
         });
         const text = await put.text();
         results.push({
