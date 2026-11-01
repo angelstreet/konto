@@ -14,6 +14,7 @@ async function loadBitcoinModules() {
 import { Hono } from 'hono';
 import db from '../db.js';
 import { encrypt, decrypt } from '../crypto.js';
+import { isExcludedProviderAccount } from '../shared.js';
 import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, decryptDriveConn,
          POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI,
          classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
@@ -443,7 +444,8 @@ router.get('/api/coinbase-callback', async (c) => {
       for (const acc of accounts) {
         const balance = parseFloat(acc.balance?.amount || '0');
         const currency = acc.balance?.currency || acc.currency?.code || 'USD';
-        const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
+        if (await isExcludedProviderAccount(userId, 'coinbase', String(acc.id), null)) continue;
+    const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
         if (existing.rows.length === 0) {
           await db.execute({
             sql: `INSERT INTO bank_accounts (user_id, company_id, provider, provider_account_id, name, bank_name, balance, type, usage, subtype, currency, last_sync) VALUES (?, ?, 'coinbase', ?, ?, 'Coinbase', ?, 'investment', 'personal', 'crypto', ?, ?)`,
@@ -513,7 +515,8 @@ router.post('/api/coinbase/sync', async (c) => {
       const rawName = acc.name || currency;
       const name = rawName.replace(/\s*Wallet$/i, '').replace(/^Portefeuille en\s*/i, '').replace(/\s*staké$/i, '').trim() || currency;
       const now = new Date().toISOString();
-      const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
+      if (await isExcludedProviderAccount(userId, 'coinbase', String(acc.id), null)) continue;
+    const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
       let dbId: number;
       if (existing.rows.length === 0) {
         const ins = await db.execute({
@@ -558,6 +561,7 @@ router.post('/api/coinbase/sync', async (c) => {
   for (const acc of (accData.data || [])) {
     const balance = parseFloat(acc.balance?.amount || '0');
     const currency = acc.balance?.currency || acc.currency?.code || 'USD';
+    if (await isExcludedProviderAccount(userId, 'coinbase', String(acc.id), null)) continue;
     const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
     if (existing.rows.length > 0) {
       await db.execute({ sql: 'UPDATE bank_accounts SET balance = ?, currency = ?, last_sync = ? WHERE id = ?', args: [balance, currency, new Date().toISOString(), existing.rows[0].id as number] });
@@ -869,7 +873,8 @@ router.post('/api/coinbase/connect-apikey', async (c) => {
       const rawName = acc.name || currency;
       const name = rawName.replace(/\s*Wallet$/i, '').replace(/^Portefeuille en\s*/i, '').replace(/\s*staké$/i, '').trim() || currency;
       const now = new Date().toISOString();
-      const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
+      if (await isExcludedProviderAccount(userId, 'coinbase', String(acc.id), null)) continue;
+    const existing = await db.execute({ sql: "SELECT id FROM bank_accounts WHERE provider = 'coinbase' AND provider_account_id = ?", args: [acc.id] });
       let dbId: number;
       if (existing.rows.length === 0) {
         const ins = await db.execute({

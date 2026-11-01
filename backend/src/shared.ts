@@ -144,6 +144,33 @@ export async function loadExcludedProviderAccounts(userId: number): Promise<Set<
   return keys;
 }
 
+/**
+ * Single-account form of the exclusion check, for sync loops that do not load
+ * the whole set up front. One indexed lookup per account — cheap, and it cannot
+ * be forgotten the way a preloaded set can when a new sync path is added.
+ */
+export async function isExcludedProviderAccount(
+  userId: number,
+  provider: string,
+  providerAccountId: string | null | undefined,
+  iban: string | null | undefined,
+): Promise<boolean> {
+  if (!providerAccountId && !iban) return false;
+  try {
+    const res = await db.execute({
+      sql: `SELECT 1 FROM excluded_provider_accounts
+            WHERE user_id = ? AND provider = ?
+              AND ((provider_account_id IS NOT NULL AND provider_account_id = ?)
+                OR (iban IS NOT NULL AND iban = ?))
+            LIMIT 1`,
+      args: [userId, provider, providerAccountId ?? null, iban ?? null],
+    });
+    return res.rows.length > 0;
+  } catch {
+    return false;
+  }
+}
+
 /** True when this provider account was deleted by the user and must not return. */
 export function isProviderAccountExcluded(
   excluded: Set<string>,
