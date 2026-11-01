@@ -7,6 +7,15 @@
 - Covers: BNP, Crédit Mutuel/CIC, Société Générale, LCL, Caisse d'Épargne, La Banque Postale, etc.
 - NOT covered: Revolut, Yuh, eToro, Coinbase, crypto wallets
 - Sandbox: `konto-sandbox.biapi.pro` (client_id: 91825215)
+- **Check which domain production actually uses.** Read it from a minted
+  reconnect URL's `domain` parameter rather than from the environment (Vercel
+  returns the value sealed, which is how it should stay). On 1 Nov 2026 it was
+  a sandbox domain belonging to another app, which is worth confirming with
+  Powens: a sandbox catalogue carries a fraction of the connectors.
+- The connector catalogue is public per domain and needs no auth:
+  `GET https://<domain>/2.0/connectors?limit=1000`. Each entry's
+  `auth_mechanism` tells you how much of a renewal can be automated (see
+  below), and `uuid` is the id that is stable across domains.
 - Env: `POWENS_CLIENT_ID`, `POWENS_CLIENT_SECRET`, `POWENS_DOMAIN`,
   `POWENS_REDIRECT_URI` (else `${APP_URL}/api/bank-callback`),
   `POWENS_CONNECTOR_CAPABILITIES` (empty = no filter).
