@@ -505,8 +505,12 @@ router.get('/api/bank/provider-accounts', async (c) => {
       connection_id: conn.powens_connection_id,
       provider_name: conn.provider_name,
       error,
+      // Attribute strictly by id_connection. Defaulting a missing one to the
+      // current connection made every unattributed account appear under
+      // whichever connection was listed first.
       accounts: (reported || [])
-        .filter((a: any) => String(a.id_connection ?? conn.powens_connection_id) === String(conn.powens_connection_id))
+        .filter((a: any) => a.id_connection != null
+          && String(a.id_connection) === String(conn.powens_connection_id))
         .map((a: any) => ({
           id: a.id,
           name: a.name || a.original_name || null,
