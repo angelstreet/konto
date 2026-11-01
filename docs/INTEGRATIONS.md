@@ -7,6 +7,40 @@
 - Covers: BNP, Crédit Mutuel/CIC, Société Générale, LCL, Caisse d'Épargne, La Banque Postale, etc.
 - NOT covered: Revolut, Yuh, eToro, Coinbase, crypto wallets
 - Sandbox: `konto-sandbox.biapi.pro` (client_id: 91825215)
+- Env: `POWENS_CLIENT_ID`, `POWENS_CLIENT_SECRET`, `POWENS_DOMAIN`,
+  `POWENS_REDIRECT_URI` (else `${APP_URL}/api/bank-callback`),
+  `POWENS_CONNECTOR_CAPABILITIES` (empty = no filter).
+
+#### Connecting, and the consent clock
+
+| Endpoint | What it does |
+|---|---|
+| `GET /api/bank/connect-url` | Builds the `webview.powens.com/<lang>/connect` URL and stores a one-time `state` (10-min expiry) |
+| `GET /api/bank/webview?url=` | 302 to the webview — Powens sends `X-Frame-Options: DENY`, so it cannot be iframed |
+| `GET /api/bank/reconnect-url/:accountId` | Finds the connection owning that account, mints a short-lived Powens code and returns the `/reconnect` webview URL |
+| `GET /api/bank-callback` | Exchanges the code, stores tokens encrypted, registers accounts |
+| `POST /api/bank/sync`, `/api/bank/sync-all`, `/api/bank/accounts/:id/sync` | Pull balances and transactions |
+
+- PSD2 requires the account holder to authenticate with their own bank to create
+  **and to renew** consent (every ~90–180 days). No token, API or agent can do it
+  for them. Everything between renewals is server-side and needs no user action.
+- Opening the webview **on the phone** lets a PSD2 redirect connector hand off
+  app-to-app, so the approval happens in the bank's own app rather than by typing
+  bank credentials into the webview.
+- When consent lapses, Powens reports `SCARequired`. The app marks
+  `bank_accounts.sca_required = 1` and keeps serving cached data; the UI shows a
+  re-auth badge, and `/api/bank/accounts` returns `connection_expired` when the
+  user has no active connection left. Nothing notifies the user — they have to
+  notice the badge.
+- Access tokens last about an hour; `refreshPowensToken()` renews them from the
+  stored refresh token, and the `refresh-stale-connections` cron (see
+  `backend/src/jobs/`) re-syncs anything older than 7 days.
+- There is **no Powens webhook endpoint** in the backend. Adding one would make
+  SCA detection immediate rather than waiting for a cron.
+- Known wart: `/api/bank-callback` inserts a fresh `bank_connections` row per
+  reconnect instead of reconciling onto the existing one, so one bank accumulates
+  several connections and duplicate `bank_accounts` rows under slightly different
+  `bank_name` spellings.
 
 ### 2. Manual Accounts
 **Status:** ✅ Live
@@ -47,6 +81,12 @@ Supports 10 networks. **One-click MetaMask connect** — same address (e.g. Meta
 **Status:** ✅ Live
 - CoinGecko free API (EUR + USD + 24h change)
 - No API key required
+- `CG_MAP` in `backend/src/shared.ts` maps currency code → CoinGecko id, and only
+  those tokens get a live price; the rest fall back to `balance_native`.
+- POL must be `polygon-ecosystem-token`. `matic-network` is the pre-migration
+  MATIC and trades well above POL. Check the id when adding a token —
+  `/api/v3/coins/list` shows several entries per symbol.
+- Cached 5 min in memory and in `kv_cache`, so Vercel cold starts have a value.
 
 ## Ready to Activate (needs credentials)
 
@@ -73,6 +113,13 @@ Supports 10 networks. **One-click MetaMask connect** — same address (e.g. Meta
 - Syncs all wallets with non-zero balances
 - Auto-refresh tokens
 - Currency per wallet (BTC, ETH, etc.)
+
+**Balances:** `POST /api/coinbase/sync` writes the token quantity to `balance`
+and Coinbase's own EUR valuation to `balance_native`. It is the authoritative
+repair path if crypto balances are ever corrupted — it overwrites both columns
+for every wallet. See [MONEY.md](MONEY.md) for how those columns are read, and
+for the `fiatByAsset` symbol-keying caveat when the same asset appears in two
+wallets (e.g. "POL" and "Staked POL").
 
 ## Research Results
 

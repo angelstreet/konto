@@ -19,22 +19,31 @@ Scopes: `personal` (own data, free) | `analytics` (cross-user insights, pro)
 
 ### GET /api/v1/summary
 Complete financial overview. Best for agent quick answers.
+Every amount is in **EUR** (see [MONEY.md](MONEY.md)). Figures below are made up.
 ```json
 {
   "patrimoine_net": 270000,
-  "accounts": { "count": 28, "total_balance": 120000 },
-  "investments": { "count": 76, "total_value": 90000 },
-  "assets": { "count": 4, "total_value": 400000 },
-  "loans": { "count": 2, "total_remaining": -250000 },
+  "accounts": { "count": 12, "total_balance": 120000 },
+  "investments": { "count": 20, "total_value": 90000 },
+  "assets": { "count": 2, "total_value": 400000 },
+  "loans": { "count": 1, "total_remaining": -250000 },
   "monthly": { "income": 6000, "expenses": -4200, "savings": 1800 },
-  "subscriptions": { "count": 32, "monthly": -120 },
+  "subscriptions": { "count": 8, "monthly": -120 },
   "top_expense_categories": [{ "name": "logement", "icon": "🏠", "pct": 32 }],
   "crypto_holdings": [{ "code": "BTC", "value": 9000 }]
 }
 ```
+`patrimoine_net` = accounts + assets at gross value − loans. `investments` is a
+**breakdown of the investment accounts already inside `accounts.total_balance`**,
+not value on top of it — do not add it.
 
 ### GET /api/v1/accounts
-List bank accounts. Fields: id, name, bank_name, balance, type (checking|savings|investment|loan), usage (personal|professional).
+List bank accounts. Fields: id, name, bank_name, balance, currency, native_balance,
+native_currency, type (checking|savings|investment|loan), usage (personal|professional).
+
+`balance` is always converted to EUR; `native_balance` + `native_currency` are the
+raw stored amount, which for a crypto wallet is a token quantity (see
+[MONEY.md](MONEY.md)).
 
 ### GET /api/v1/transactions?months=6&category=logement
 Transactions with auto-categorization. Params: months (default 6), category, min_amount, max_amount.
@@ -160,3 +169,19 @@ Update per-user integration settings. Smoobu API key is AES-256-GCM encrypted be
 ## Notes
 - All amounts in EUR. Crypto in native units with EUR valuation.
 - Dates: ISO 8601 (YYYY-MM-DD)
+
+---
+
+## Caching
+
+The backend keeps a **60-second in-memory GET cache per user+URL** over
+`/api/dashboard`, `/api/bank/accounts`, `/api/investments`, `/api/transactions`,
+`/api/analytics`, `/api/loans`, `/api/assets` and friends (`CACHED_PREFIXES` in
+`backend/src/index.ts`). Any write by that user clears their entries.
+
+`/api/v1/*` is **not** cached. So for up to a minute after a change, `/api/v1/summary`
+and `/api/dashboard` can disagree. When testing by hand, bust it:
+
+```bash
+curl "$URL/api/dashboard?cb=$(date +%s)"
+```

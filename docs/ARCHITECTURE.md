@@ -4,6 +4,12 @@
 
 Konto is a monorepo with two workspaces: `frontend` (React SPA) and `backend` (Hono API). The frontend communicates with the backend via REST API. Data is stored in Turso (libSQL/SQLite).
 
+**Before touching any code that sums, converts or displays an amount, read
+[MONEY.md](MONEY.md).** Account balances are stored in each account's own unit
+(euros, CHF, or a raw token quantity), there is one shared net-worth definition,
+and the responses are cached for 60 seconds — all three have caused wrong
+numbers in production.
+
 ## Frontend
 
 ### Pages & Routes
@@ -232,14 +238,17 @@ All endpoints are prefixed with `/api/`.
 | bank_name | TEXT | Bank/provider name |
 | account_number | TEXT | Account number |
 | iban | TEXT | IBAN |
-| balance | REAL | Current balance |
+| balance | REAL | Balance **in the account's own unit** — euros, CHF, or a token quantity. Never sum this column; see [MONEY.md](MONEY.md) |
+| balance_native | REAL | EUR value the provider reported, used for tokens with no live price |
 | hidden | INTEGER | Hidden from dashboard |
 | last_sync | TEXT | Last sync timestamp |
+| sca_required | INTEGER | Bank consent needs re-authentication |
 | type | TEXT | `checking`, `savings`, `investment`, `loan` |
 | usage | TEXT | `personal` or `professional` |
 | blockchain_address | TEXT | Wallet address |
 | blockchain_network | TEXT | `bitcoin`, `ethereum`, `solana` |
-| currency | TEXT | Currency code (default: EUR) |
+| currency | TEXT | Currency or token code (default: EUR) |
+| provider_bank_id / provider_bank_name | TEXT | Powens institution metadata |
 
 ### `transactions`
 | Column | Type | Description |

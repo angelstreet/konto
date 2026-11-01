@@ -125,10 +125,21 @@ konto/
 │       ├── index.ts    # Routes & business logic
 │       ├── db.ts       # Database schema & migrations
 │       └── jobs/       # Background jobs (sync, rotation)
-├── docs/               # API & architecture docs
+├── docs/               # API & architecture docs (read MONEY.md before touching totals)
 ├── tests/              # E2E tests (Vitest + Puppeteer)
 └── .env.example        # Environment template
 ```
+
+## Documentation
+
+| Doc | What it covers |
+|---|---|
+| [docs/MONEY.md](docs/MONEY.md) | **Currencies, balances and totals.** Read first before changing anything that sums or converts an amount |
+| [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Routes, endpoints, database schema, security |
+| [docs/api.md](docs/api.md) | Public API reference (`/api/v1/*`) and response caching |
+| [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) | Powens, Coinbase, blockchain, Drive — and what has no API |
+| [docs/AUTHENTICATION.md](docs/AUTHENTICATION.md) | Clerk in production, local fallback |
+| [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md) | Push to `main` → Vercel |
 
 ## Deployment
 
