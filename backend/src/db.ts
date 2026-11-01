@@ -455,35 +455,13 @@ export async function migrateDatabase() {
     await db.execute("ALTER TABLE assets ADD COLUMN usage TEXT NOT NULL DEFAULT 'personal'");
   }
 
-  // One-time fix: a bug incorrectly stored EUR values in crypto balance fields
-  // Detect and revert by dividing by current EUR price
-  try {
-    const cryptoAccounts = await db.execute("SELECT id, balance, currency FROM bank_accounts WHERE subtype = 'crypto' AND balance > 100");
-    if (cryptoAccounts.rows.length > 0) {
-      const currencies = [...new Set(cryptoAccounts.rows.map((r: any) => r.currency).filter(Boolean))];
-      const cgMap: Record<string, string> = { BTC: 'bitcoin', ETH: 'ethereum', SOL: 'solana', XRP: 'ripple', POL: 'matic-network', BNB: 'binancecoin', AVAX: 'avalanche-2' };
-      const ids = currencies.map(c => cgMap[c as string]).filter(Boolean);
-      if (ids.length > 0) {
-        const res = await fetch(`https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=eur`);
-        const prices = await res.json() as Record<string, { eur?: number }>;
-        const eurPrices: Record<string, number> = {};
-        for (const [code, cgId] of Object.entries(cgMap)) {
-          if (prices[cgId]?.eur) eurPrices[code] = prices[cgId].eur;
-        }
-        for (const row of cryptoAccounts.rows as any[]) {
-          const price = eurPrices[row.currency];
-          if (price && row.balance > price * 0.5) {
-            // Balance looks like EUR (e.g. 42829 for BTC) — convert back to native
-            const native = row.balance / price;
-            await db.execute({ sql: 'UPDATE bank_accounts SET balance = ? WHERE id = ?', args: [native, row.id] });
-            console.log(`[db-fix] Reverted crypto balance for account ${row.id}: ${row.balance} → ${native} ${row.currency}`);
-          }
-        }
-      }
-    }
-  } catch (e) {
-    console.warn('[db-fix] Crypto balance fix skipped:', e);
-  }
+  // NOTE: a "one-time" crypto balance repair used to live here. It divided every
+  // crypto balance above 100 by its live EUR price, but migrateDatabase() runs on
+  // every boot (and on every Vercel cold start), so it re-applied itself forever:
+  // one POL account was divided by ~0.01 on each run until its balance reached 6.2e18
+  // and patrimoine_net read 162 billion euros. Balances are native token quantities;
+  // converting them to EUR is accountBalanceEur()'s job at read time, never a write.
+  // Do not reintroduce a price-based rewrite of bank_accounts.balance.
 
   // Add subtype column to bank_accounts (for investment sub-classification)
   try {
@@ -508,6 +486,16 @@ export async function migrateDatabase() {
     await db.execute("SELECT sca_required FROM bank_accounts LIMIT 1");
   } catch {
     await db.execute("ALTER TABLE bank_accounts ADD COLUMN sca_required INTEGER NOT NULL DEFAULT 0");
+  }
+
+  // The EUR value a provider reported for a crypto holding. balance stays in
+  // native token units; this is the fallback accountBalanceEur() uses for tokens
+  // the price feed does not quote (PEPE, SHIB, FLR…). Production had this column
+  // added by hand, so fresh databases were missing it entirely.
+  try {
+    await db.execute("SELECT balance_native FROM bank_accounts LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE bank_accounts ADD COLUMN balance_native REAL");
   }
 
   // Powens institution metadata for robust bank-level grouping

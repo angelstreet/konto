@@ -1304,8 +1304,10 @@ router.get('/api/dashboard', async (c) => {
   let personalBalance = 0, proBalance = 0;
   for (const a of accounts) {
     if (a.type === 'loan') continue;
-    if (a.usage === 'professional') proBalance += (a.balance || 0);
-    else personalBalance += (a.balance || 0);
+    // Same rule as brutBalance above: never sum a raw balance, it may be in BTC.
+    const eur = accountBalanceEur(a, eurPrices, fiatRates);
+    if (a.usage === 'professional') proBalance += eur;
+    else personalBalance += eur;
   }
 
   let assetWhere = 'a.user_id = ?';
