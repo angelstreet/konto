@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { createClerkClient } from '@clerk/backend';
 import db from '../db.js';
 import { encrypt, decrypt } from '../crypto.js';
+import { serializeSmoobuCredentials } from '../smoobu-client.js';
 import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, decryptDriveConn,
          POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI,
          classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
@@ -142,7 +143,11 @@ router.put('/api/settings/integrations', async (c) => {
   const userId = await getUserId(c);
   const body = await c.req.json();
   if (body.smoobu_api_key !== undefined) {
-    const encrypted = body.smoobu_api_key ? encrypt(body.smoobu_api_key) : null;
+    // New Smoobu keys come with a secret (HMAC-signed requests); stored together as JSON.
+    const stored = body.smoobu_api_key
+      ? serializeSmoobuCredentials({ keyId: String(body.smoobu_api_key).trim(), secret: body.smoobu_api_secret ? String(body.smoobu_api_secret).trim() : undefined })
+      : null;
+    const encrypted = stored ? encrypt(stored) : null;
     await db.execute({
       sql: `INSERT INTO user_preferences (user_id, smoobu_api_key) VALUES (?, ?)
             ON CONFLICT(user_id) DO UPDATE SET smoobu_api_key = excluded.smoobu_api_key, updated_at = datetime('now')`,

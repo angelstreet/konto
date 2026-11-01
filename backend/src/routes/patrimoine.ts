@@ -8,6 +8,7 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          calcInvestmentDiff, calcInvDiff, getCryptoEurPrices, updateCryptoBalanceNative,
          getFiatEurRates, accountBalanceEur } from '../shared.js';
 import { netWorthEur } from '../money.js';
+import { parseSmoobuCredentials, smoobuFetch } from '../smoobu-client.js';
 import { estimatePropertyPrice } from '../services/propertyEstimation.js';
 import { createPatrimoineSnapshot } from '../services/snapshots.js';
 
@@ -882,7 +883,6 @@ router.get('/api/kozy/properties', async (c) => {
 
 // ========== PROPERTY ROI — Smoobu Revenue vs Bank Costs ==========
 
-const SMOOBU_API = 'https://login.smoobu.com/api';
 
 // Property cost matching patterns (label keywords → apartment ID)
 const PROPERTY_COST_PATTERNS: { apartmentId: number; patterns: string[] }[] = [
@@ -895,7 +895,8 @@ router.get('/api/properties/roi', async (c) => {
   const userId = await getUserId(c);
   const prefsRow = await db.execute({ sql: 'SELECT smoobu_api_key FROM user_preferences WHERE user_id = ?', args: [userId] });
   const encryptedKey = (prefsRow.rows[0] as any)?.smoobu_api_key;
-  const SMOOBU_API_KEY = encryptedKey ? decrypt(encryptedKey) : null;
+  const storedKey = encryptedKey ? decrypt(encryptedKey) : null;
+  const smoobuCreds = storedKey ? parseSmoobuCredentials(storedKey) : null;
 
   const yearParam = c.req.query('year');
   const monthsParam = parseInt(c.req.query('months') || '6');
@@ -915,8 +916,8 @@ router.get('/api/properties/roi', async (c) => {
   // Fetch Smoobu apartments (skip if no API key)
   let apartments: any[] = [];
   let allBookings: any[] = [];
-  if (SMOOBU_API_KEY) {
-    const aptRes = await fetch(`${SMOOBU_API}/apartments`, { headers: { 'Api-Key': SMOOBU_API_KEY } });
+  if (smoobuCreds) {
+    const aptRes = await smoobuFetch(smoobuCreds, '/api/apartments');
     const aptData = await aptRes.json() as any;
     apartments = aptData.apartments || [];
 
@@ -924,9 +925,7 @@ router.get('/api/properties/roi', async (c) => {
     let page = 1;
     let pageCount = 1;
     while (page <= pageCount) {
-      const bkRes = await fetch(`${SMOOBU_API}/reservations?from=${fromStr}&to=${toStr}&pageSize=100&page=${page}`, {
-        headers: { 'Api-Key': SMOOBU_API_KEY }
-      });
+      const bkRes = await smoobuFetch(smoobuCreds, `/api/reservations?from=${fromStr}&to=${toStr}&pageSize=100&page=${page}`);
       const bkData = await bkRes.json() as any;
       allBookings.push(...(bkData.bookings || []));
       pageCount = bkData.page_count || 1;

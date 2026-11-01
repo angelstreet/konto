@@ -39,6 +39,7 @@ export default function Settings() {
 
   // Integrations (Smoobu)
   const [smoobuKey, setSmoobuKey] = useState('');
+  const [smoobuSecret, setSmoobuSecret] = useState('');
   const [smoobuSaved, setSmoobuSaved] = useState(false);
   const [smoobuHasKey, setSmoobuHasKey] = useState(false);
   const [showIntegrations, setShowIntegrations] = useState(false);
@@ -52,10 +53,11 @@ export default function Settings() {
   const saveSmoobu = async () => {
     await authFetch(`${API}/settings/integrations`, {
       method: 'PUT',
-      body: JSON.stringify({ smoobu_api_key: smoobuKey || null }),
+      body: JSON.stringify({ smoobu_api_key: smoobuKey || null, smoobu_api_secret: smoobuSecret || null }),
     });
     setSmoobuHasKey(!!smoobuKey);
     setSmoobuKey('');
+    setSmoobuSecret('');
     setSmoobuSaved(true);
     setTimeout(() => setSmoobuSaved(false), 2000);
   };
@@ -391,9 +393,16 @@ export default function Settings() {
               <div className="flex gap-2">
                 <input
                   type="password"
-                  placeholder={smoobuHasKey ? '••••••••' : 'Coller votre clé API'}
+                  placeholder={smoobuHasKey ? '••••••••' : 'usr_live_...'}
                   value={smoobuKey}
                   onChange={e => setSmoobuKey(e.target.value)}
+                  className="flex-1 bg-surface-hover border border-border rounded px-3 py-1.5 text-sm"
+                />
+                <input
+                  type="password"
+                  placeholder="Secret"
+                  value={smoobuSecret}
+                  onChange={e => setSmoobuSecret(e.target.value)}
                   className="flex-1 bg-surface-hover border border-border rounded px-3 py-1.5 text-sm"
                 />
                 <button
