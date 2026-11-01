@@ -510,6 +510,24 @@ export async function migrateDatabase() {
     await db.execute("ALTER TABLE bank_accounts ADD COLUMN sca_required INTEGER NOT NULL DEFAULT 0");
   }
 
+  // Single-use links for re-approving one bank connection. A notification is
+  // opened in whatever browser the messaging app uses, which has no Konto
+  // session — so a link that needs one is useless there. These carry their own
+  // authority, deliberately narrow: they mint a Powens reconnect URL for one
+  // connection and nothing else, and expire.
+  await db.execute(`
+    CREATE TABLE IF NOT EXISTS reconnect_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      token_hash TEXT NOT NULL UNIQUE,
+      user_id INTEGER NOT NULL REFERENCES users(id),
+      powens_connection_id TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    )
+  `);
+  await db.execute("CREATE INDEX IF NOT EXISTS idx_reconnect_tokens_hash ON reconnect_tokens(token_hash)");
+
   // Accounts the user deleted on purpose. Without this a delete does not stick:
   // the provider keeps returning the account and the next sync re-inserts it.
   await db.execute(`

@@ -155,6 +155,38 @@ router.get('/api/bank/reconnect-url/:accountId', async (c) => {
   return c.json(result);
 });
 
+/**
+ * Mints a single-use link for re-approving one connection, for sending to a
+ * phone. Needed because a notification opens in the messaging app's browser,
+ * which carries no Konto session: a session-based link lands on a sign-in
+ * screen and the redirect afterwards drops the query string.
+ *
+ * The token authorises exactly one thing — mint a Powens reconnect URL for
+ * this connection — and expires. It exposes no data, and the re-approval still
+ * happens at the bank with the user's own credentials.
+ */
+router.post('/api/bank/reconnect-token/:connectionId', async (c) => {
+  const userId = await getUserId(c);
+  const connectionId = c.req.param('connectionId');
+  const conn = await db.execute({
+    sql: `SELECT id FROM bank_connections WHERE user_id = ? AND powens_connection_id = ? AND status != 'replaced' LIMIT 1`,
+    args: [userId, connectionId],
+  });
+  if (conn.rows.length === 0) return c.json({ error: 'Connection not found' }, 404);
+
+  const token = randomBytes(32).toString('hex');
+  const days = Math.min(Math.max(Number(c.req.query('days') || 7), 1), 30);
+  await db.execute({
+    sql: `INSERT INTO reconnect_tokens (token_hash, user_id, powens_connection_id, expires_at)
+          VALUES (?, ?, ?, datetime('now', '+' || ? || ' days'))`,
+    args: [sha256(token), userId, connectionId, String(days)],
+  });
+  await db.execute({ sql: "DELETE FROM reconnect_tokens WHERE expires_at < datetime('now')", args: [] });
+
+  const base = process.env.APP_URL || 'https://konto.angelstreet.io';
+  return c.json({ url: `${base}/api/bank/reconnect-connection/${connectionId}?t=${token}`, expires_in_days: days });
+});
+
 // JSON form, for the app to call with its session. The redirect form below
 // cannot be opened straight from a notification: a browser navigation carries
 // no Authorization header, so the API answers 401. A link sent to the phone
@@ -168,8 +200,30 @@ router.get('/api/bank/reconnect-connection-url/:connectionId', async (c) => {
 });
 
 router.get('/api/bank/reconnect-connection/:connectionId', async (c) => {
-  const userId = await getUserId(c);
-  const result = await buildReconnectUrlForConnection(userId, c.req.param('connectionId'), c.req.query('lang') || 'fr');
+  const connectionId = c.req.param('connectionId');
+  // A single-use token stands in for a session, so the link works from a
+  // notification. Consumed on use.
+  const t = c.req.query('t');
+  let userId: number;
+  if (t) {
+    const row = await db.execute({
+      sql: `SELECT id, user_id FROM reconnect_tokens
+            WHERE token_hash = ? AND powens_connection_id = ?
+              AND used_at IS NULL AND expires_at > datetime('now') LIMIT 1`,
+      args: [sha256(t), connectionId],
+    });
+    if (row.rows.length === 0) {
+      return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
+        <h1 style="color:#ef4444;">Lien expiré</h1>
+        <p>Ouvrez Konto et relancez la reconnexion depuis la page Comptes.</p>
+        <a href="/konto/accounts" style="color:#d4a812;">← Konto</a></body></html>`, 410);
+    }
+    userId = Number((row.rows[0] as any).user_id);
+    await db.execute({ sql: "UPDATE reconnect_tokens SET used_at = datetime('now') WHERE id = ?", args: [(row.rows[0] as any).id] });
+  } else {
+    userId = await getUserId(c);
+  }
+  const result = await buildReconnectUrlForConnection(userId, connectionId, c.req.query('lang') || 'fr');
   if (!result?.url || !result.url.startsWith('https://webview.powens.com/')) {
     return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#ef4444;">Could not start the reconnection</h1>

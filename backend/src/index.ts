@@ -251,6 +251,12 @@ app.use('/api/*', async (c, next) => {
   const path = c.req.path;
   if (path === '/api/health' || path === '/api/bank-callback' || path === '/api/coinbase-callback' || path === '/api/preferences' || path === '/api/bank/webview') return next();
 
+  // A reconnect link carrying its own single-use token authenticates itself —
+  // it has to, because it is opened from a notification in a browser with no
+  // Konto session. The route validates the token and 410s if it is spent,
+  // expired, or not for that connection.
+  if (path.startsWith('/api/bank/reconnect-connection/') && c.req.query('t')) return next();
+
   // OAuth endpoints are public (auth is done via the consent flow)
   if (path.startsWith('/api/oauth/')) return next();
 
