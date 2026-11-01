@@ -655,9 +655,19 @@ router.delete('/api/bank/accounts/:id', async (c) => {
     });
   }
 
+  if (!acc) return c.json({ error: 'Account not found' }, 404);
+
+  // Children first. transactions and investments reference bank_accounts
+  // without ON DELETE CASCADE, so leaving either behind fails the delete on a
+  // foreign key — which is what happened to an investment account holding
+  // positions: the tombstone was written and the row survived.
   await db.execute({ sql: 'DELETE FROM transactions WHERE bank_account_id = ? AND bank_account_id IN (SELECT id FROM bank_accounts WHERE user_id = ?)', args: [id, userId] });
+  await db.execute({ sql: 'DELETE FROM investments WHERE bank_account_id = ? AND bank_account_id IN (SELECT id FROM bank_accounts WHERE user_id = ?)', args: [id, userId] });
+  // An asset may point at this account as its loan; unlink rather than delete it.
+  await db.execute({ sql: 'UPDATE assets SET linked_loan_account_id = NULL WHERE linked_loan_account_id = ? AND user_id = ?', args: [id, userId] });
+
   await db.execute({ sql: 'DELETE FROM bank_accounts WHERE id = ? AND user_id = ?', args: [id, userId] });
-  return c.json({ ok: true, excluded: !!acc && acc.provider !== 'manual' });
+  return c.json({ ok: true, excluded: acc.provider !== 'manual' });
 });
 
 // What the user has deleted, and a way back — otherwise a mistaken delete is
