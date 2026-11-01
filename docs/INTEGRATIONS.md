@@ -27,6 +27,8 @@
 | `GET /api/bank/connect-url` | Builds the `webview.powens.com/<lang>/connect` URL and stores a one-time `state` (10-min expiry) |
 | `GET /api/bank/webview?url=` | 302 to the webview — Powens sends `X-Frame-Options: DENY`, so it cannot be iframed |
 | `GET /api/bank/reconnect-url/:accountId` | Finds the connection owning that account, mints a short-lived Powens code and returns the `/reconnect` webview URL as JSON |
+| `GET /konto/accounts?reconnect=<connection id>` | **What a link sent to a phone must use.** The app is signed in; it mints the URL and navigates. Linking to an `/api/bank/...` route from a notification returns `Unauthorized`, because a tap carries no Authorization header |
+| `GET /api/bank/reconnect-connection/:connectionId` | Redirects to the webview for a connection, including one with no stored accounts |
 | `GET /api/bank/reconnect/:accountId` | Same, but **302s** to the webview. The minted URL dies in ~10 min, so a link pasted into a notification goes stale; this one mints a fresh URL per request, so a stable link can be sent to the phone |
 | `GET /api/bank-callback` | Exchanges the code, stores tokens encrypted, registers accounts |
 | `POST /api/bank/sync`, `/api/bank/sync-all`, `/api/bank/accounts/:id/sync` | Pull balances and transactions |
