@@ -77,6 +77,23 @@ Several `active` rows in `bank_connections` are normal — one per bank. Account
 are deduplicated by `(company_id, provider, provider_account_id)` or IBAN, so
 they do not multiply.
 
+Connections, however, used to. `buildReconnectUrl` identified the owning
+connection by probing each connection's token against `/users/me/accounts`;
+because a token is user-scoped, every token lists every account and the first
+row always matched, and when no token worked the function fell through to a
+generic `/connect` — which creates a new connection rather than repairing one.
+Every failed reconnect therefore added a duplicate. It now resolves the owner
+through `bank_accounts.provider_connection_id` and has no `/connect` fallback:
+if the connection cannot be identified, `/api/bank/reconnect/:id` answers 404.
+
+Checking a reconnect link is worth doing after any change here — the `location`
+header must be `/reconnect` carrying that account's own `connection_id`:
+
+```bash
+curl -s -o /dev/null -D - --max-redirs 0 \
+  -H "Authorization: Bearer $KONTO_API_KEY" "$KONTO_URL/api/bank/reconnect/<id>"
+```
+
 #### Bank names
 
 The institution is **not on the account object**. A Powens account carries only
