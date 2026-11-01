@@ -487,6 +487,14 @@ export async function migrateDatabase() {
   } catch {
     await db.execute("ALTER TABLE bank_connections ADD COLUMN provider_state TEXT");
   }
+  // How the connector authenticates: 'decoupled' means a renewal can be driven
+  // from the server (bank pushes to its app, we send {resume:true}); 'webauth'
+  // means Powens requires a browser, so a one-tap link is the floor.
+  try {
+    await db.execute("SELECT provider_auth_mechanism FROM bank_connections LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE bank_connections ADD COLUMN provider_auth_mechanism TEXT");
+  }
 
   // Add powens_refresh_token to bank_connections for automatic token refresh
   try {

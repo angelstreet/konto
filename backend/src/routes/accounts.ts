@@ -385,6 +385,7 @@ router.get('/api/bank/connections', async (c) => {
   const result = await db.execute({
     sql: `SELECT bc.id, bc.powens_connection_id, bc.provider_name, bc.status,
                  bc.created_at, bc.consent_expires_at, bc.provider_state,
+                 bc.provider_auth_mechanism,
                  (SELECT ba.id FROM bank_accounts ba
                    WHERE ba.user_id = bc.user_id
                      AND ba.provider = 'powens'

@@ -65,8 +65,17 @@ export type PowensConnectionInfo = PowensBankMeta & {
   /** Powens `expire`: the highest expiry among the connection's sources. PSD2
    *  consent lasts ~180 days, and this is the only advance warning we get. */
   expire: string | null;
-  /** e.g. 'SCARequired', 'webauthRequired', 'wrongpass', or null when healthy. */
+  /** e.g. 'SCARequired', 'webauthRequired', 'decoupled', 'wrongpass', or null. */
   state: string | null;
+  /**
+   * The connector's auth mechanism. This decides how much of a renewal can be
+   * driven from the server:
+   *  - 'decoupled'   the bank pushes to its own app and we send {resume:true};
+   *                  no link for the user to open.
+   *  - 'webauth'     Powens requires a browser; a one-tap link is the floor.
+   *  - 'credentials' the webview collects credentials; worst case.
+   */
+  authMechanism: string | null;
 };
 
 /**
@@ -94,11 +103,13 @@ export async function fetchPowensConnectorMap(token: string): Promise<Map<string
       const connector = conn.connector || null;
       const rawId = connector?.uuid ?? connector?.id ?? conn.id_connector ?? null;
       const rawName = connector?.name ?? null;
+      const rawMech = connector?.auth_mechanism ?? connector?.authMechanism ?? null;
       map.set(String(conn.id), {
         bankId: rawId == null ? null : String(rawId).trim() || null,
         bankName: rawName == null ? null : String(rawName).trim() || null,
         expire: conn.expire ? String(conn.expire) : null,
         state: conn.state ? String(conn.state) : null,
+        authMechanism: rawMech == null ? null : String(rawMech).trim() || null,
       });
     }
   } catch {
@@ -142,9 +153,10 @@ export async function persistPowensConnectionInfo(
       await db.execute({
         sql: `UPDATE bank_connections
               SET consent_expires_at = ?, provider_state = ?,
+                  provider_auth_mechanism = COALESCE(?, provider_auth_mechanism),
                   provider_name = COALESCE(?, provider_name)
               WHERE user_id = ? AND powens_connection_id = ?`,
-        args: [info.expire, info.state, info.bankName, userId, connectionId],
+        args: [info.expire, info.state, info.authMechanism, info.bankName, userId, connectionId],
       });
     } catch {
       // column may be missing on a database that has not migrated yet
