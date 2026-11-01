@@ -32,6 +32,11 @@ interface BankAccount {
   subtype: string | null;
   connection_expired: number;
   sca_required: number;
+  /** Server-derived: the bank wants a re-authentication, whatever last_sync says. */
+  auth_required?: number;
+  /** The connection's state as Powens reports it, e.g. 'webauthRequired'. */
+  connection_state?: string | null;
+  provider_connection_id?: string | null;
   balance_native: number | null;
 }
 
@@ -204,12 +209,12 @@ export default function Accounts() {
         const res = await authFetch(`${API}/bank/accounts/${id}/sync`, { method: 'POST' });
         const result = await res.json();
         if (result.reconnect_required || result.sca_required) {
-          updateAccount(id, { sca_required: 1 });
+          updateAccount(id, { sca_required: 1, auth_required: 1 });
           reconnectAccount(id);
           return;
         }
         // Sync succeeded — update UI immediately
-        updateAccount(id, { sca_required: 0, last_sync: new Date().toISOString() });
+        updateAccount(id, { sca_required: 0, auth_required: 0, last_sync: new Date().toISOString() });
       }
     } finally {
       setSyncingId(null);
@@ -1153,6 +1158,30 @@ export default function Accounts() {
         </>
       )}
 
+      {/* Banks asking for re-approval. Distinct from the expired banner: these
+          connections are still 'active' and still serving cached balances, so
+          nothing else on the page looks wrong. */}
+      {!loading && (() => {
+        const needing = (accounts || []).filter(a => a.auth_required && !a.connection_expired);
+        if (needing.length === 0) return null;
+        const connections = new Set(needing.map(a => a.provider_connection_id ?? a.id));
+        return (
+          <div className="mb-3 flex items-center gap-3 p-3 rounded-xl bg-orange-500/10 border border-orange-500/20">
+            <AlertTriangle size={18} className="text-orange-400 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-orange-400 font-medium">{t('auth_required_title')}</p>
+              <p className="text-xs text-orange-400/70">{t('auth_required_desc', { count: connections.size })}</p>
+            </div>
+            <button
+              onClick={() => reconnectAccount(needing[0].id)}
+              className="flex-shrink-0 text-xs font-medium px-3 py-1.5 rounded-lg bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors"
+            >
+              {t('reconnect')}
+            </button>
+          </div>
+        );
+      })()}
+
       {/* Expired connections banner */}
       {!loading && (connections || []).some(c => c.status === 'expired') && (
         <div className="mb-3 flex items-center gap-3 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
@@ -1451,7 +1480,7 @@ export default function Accounts() {
                         <AlertTriangle size={10} />
                         {t('sync_expired')}
                       </button>
-                    ) : acc.sca_required ? (
+                    ) : (acc.sca_required || acc.auth_required) ? (
                       <button
                         onClick={() => reconnectAccount(acc.id)}
                         className="text-[10px] px-1.5 py-0.5 rounded-full bg-orange-500/20 text-orange-400 hover:bg-orange-500/30 transition-colors flex items-center gap-1"

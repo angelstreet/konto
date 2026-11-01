@@ -32,6 +32,11 @@ async function findBankAccountByProviderId(userId: number, companyId: number | n
   return null;
 }
 
+/** Powens connection states that mean the user has to act before data flows again. */
+const POWENS_ACTION_STATES = new Set([
+  'scarequired', 'webauthrequired', 'wrongpass', 'actionneeded', 'validating', 'decoupled',
+]);
+
 const router = new Hono();
 
 
@@ -542,10 +547,37 @@ router.get('/api/bank/accounts', async (c) => {
   });
   const hasActivePowens = (activeConns.rows[0] as any).cnt > 0;
 
-  const rows = (result.rows as any[]).map(row => ({
-    ...row,
-    connection_expired: row.provider === 'powens' && !hasActivePowens ? 1 : 0
-  }));
+  // The bank's own verdict on each connection. An account can be syncing
+  // happily on cached data while its connection already needs the user to
+  // re-authenticate, so "last_sync was recent" is not evidence of health.
+  const connRes = await db.execute({
+    sql: `SELECT powens_connection_id, provider_state, status, consent_expires_at
+          FROM bank_connections WHERE user_id = ?`,
+    args: [userId],
+  });
+  const connState = new Map<string, any>();
+  for (const row of connRes.rows as any[]) {
+    if (row.powens_connection_id != null) connState.set(String(row.powens_connection_id), row);
+  }
+
+  const rows = (result.rows as any[]).map(row => {
+    const conn = row.provider_connection_id != null
+      ? connState.get(String(row.provider_connection_id))
+      : undefined;
+    const expired = row.provider === 'powens' && !hasActivePowens ? 1 : 0;
+    const state = (conn?.provider_state || '').toLowerCase();
+    const needsAuth = row.provider === 'powens' && (
+      !!row.sca_required || !!expired || POWENS_ACTION_STATES.has(state)
+    );
+    return {
+      ...row,
+      connection_expired: expired,
+      // What the UI needs to flag a row without anyone pressing sync first.
+      auth_required: needsAuth ? 1 : 0,
+      connection_state: conn?.provider_state ?? null,
+      consent_expires_at: conn?.consent_expires_at ?? null,
+    };
+  });
 
   return c.json(rows);
 });
