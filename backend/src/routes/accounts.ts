@@ -5,7 +5,7 @@ import { encrypt, decrypt } from '../crypto.js';
 import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, decryptDriveConn,
          POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI, POWENS_CONNECTOR_CAPABILITIES,
          classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
-         fetchPowensConnectorMap,
+         fetchPowensConnectorMap, persistPowensConnectionInfo, persistPowensAccountConnections,
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
          calcInvestmentDiff, calcInvDiff, formatCurrencyFR, escapeHtml } from '../shared.js';
 import { categorizeTransaction } from '../categorizer.js';
@@ -288,6 +288,7 @@ router.get('/api/bank-callback', async (c) => {
       const accountsData = await accountsRes.json() as any;
       accounts = accountsData.accounts || [];
       const connectorMap = await fetchPowensConnectorMap(accessToken);
+      await persistPowensConnectionInfo(userId, connectorMap);
 
       for (const acc of accounts) {
         const accType = classifyAccountType(acc.type, acc.name || acc.original_name || '');
@@ -353,6 +354,8 @@ router.get('/api/bank-callback', async (c) => {
       console.error('Failed to fetch accounts:', e);
     }
 
+    await persistPowensAccountConnections(userId, accounts);
+
     // Infer loan details from newly connected accounts (non-blocking)
     inferAndPersistLoanDetails(userId).catch(e => console.error('[bank-callback] loan inference failed:', e));
 
@@ -376,8 +379,38 @@ router.get('/api/bank-callback', async (c) => {
 // --- Bank connections ---
 router.get('/api/bank/connections', async (c) => {
   const userId = await getUserId(c);
+  // One row per connection, with the PSD2 consent clock and an account to hang
+  // a reconnect link on. reconnect_account_id prefers an account already
+  // flagged sca_required, so the link lands where the problem is.
   const result = await db.execute({
-    sql: 'SELECT id, powens_connection_id, provider_name, status, created_at FROM bank_connections WHERE user_id = ?',
+    sql: `SELECT bc.id, bc.powens_connection_id, bc.provider_name, bc.status,
+                 bc.created_at, bc.consent_expires_at, bc.provider_state,
+                 (SELECT ba.id FROM bank_accounts ba
+                   WHERE ba.user_id = bc.user_id
+                     AND ba.provider = 'powens'
+                     AND ba.provider_connection_id = bc.powens_connection_id
+                   ORDER BY ba.sca_required DESC, ba.id ASC LIMIT 1) AS reconnect_account_id,
+                 (SELECT COALESCE(ba.provider_bank_name, ba.bank_name) FROM bank_accounts ba
+                   WHERE ba.user_id = bc.user_id
+                     AND ba.provider = 'powens'
+                     AND ba.provider_connection_id = bc.powens_connection_id
+                     AND COALESCE(ba.provider_bank_name, ba.bank_name) IS NOT NULL
+                   ORDER BY ba.id ASC LIMIT 1) AS bank_name,
+                 (SELECT COUNT(*) FROM bank_accounts ba
+                   WHERE ba.user_id = bc.user_id
+                     AND ba.provider = 'powens'
+                     AND ba.provider_connection_id = bc.powens_connection_id) AS account_count,
+                 (SELECT MAX(ba.sca_required) FROM bank_accounts ba
+                   WHERE ba.user_id = bc.user_id
+                     AND ba.provider = 'powens'
+                     AND ba.provider_connection_id = bc.powens_connection_id) AS sca_required,
+                 (SELECT MAX(ba.last_sync) FROM bank_accounts ba
+                   WHERE ba.user_id = bc.user_id
+                     AND ba.provider = 'powens'
+                     AND ba.provider_connection_id = bc.powens_connection_id) AS last_sync
+          FROM bank_connections bc
+          WHERE bc.user_id = ?
+          ORDER BY bc.id`,
     args: [userId]
   });
   return c.json(result.rows);
@@ -388,6 +421,9 @@ router.post('/api/bank/sync', async (c) => {
   const userId = await getUserId(c);
   const connections = await db.execute({ sql: "SELECT * FROM bank_connections WHERE status = ? AND user_id = ?", args: ['active', userId] });
   let totalSynced = 0;
+  // Powens accounts seen this run, so the account -> connection links can be
+  // written once the accounts themselves exist.
+  const pendingConnectionLinks: any[] = [];
 
   for (const rawConn of connections.rows as any[]) {
     const conn = decryptBankConn(rawConn);
@@ -403,6 +439,8 @@ router.post('/api/bank/sync', async (c) => {
       const data = await res.json() as any;
       const accounts = data.accounts || [];
       const connectorMap = await fetchPowensConnectorMap(token);
+      await persistPowensConnectionInfo(userId, connectorMap);
+      pendingConnectionLinks.push(...accounts);
 
       for (const acc of accounts) {
         const meta = extractPowensBankMeta(acc, connectorMap);
@@ -461,6 +499,7 @@ router.post('/api/bank/sync', async (c) => {
   // Infer loan details from synced data (non-blocking)
   inferAndPersistLoanDetails(userId).catch(e => console.error('[sync] loan inference failed:', e));
 
+  await persistPowensAccountConnections(userId, pendingConnectionLinks);
   return c.json({ synced: totalSynced });
 });
 
@@ -861,6 +900,7 @@ router.post('/api/bank/sync-all', async (c) => {
   let totalInvestments = 0;
   let scaConnections: number[] = [];
   let errors = 0;
+  const pendingConnectionLinks: any[] = [];
 
   for (const conn of connections) {
     let token = conn.powens_token;
@@ -907,6 +947,8 @@ router.post('/api/bank/sync-all', async (c) => {
       // Sync each account
       const connProviderName = conn.provider_name || null;
       const connectorMap = await fetchPowensConnectorMap(token);
+      await persistPowensConnectionInfo(userId, connectorMap);
+      pendingConnectionLinks.push(...powensAccounts);
       for (const powensAcc of powensAccounts) {
         const providerId = String(powensAcc.id);
         const meta = extractPowensBankMeta(powensAcc, connectorMap);
@@ -997,6 +1039,8 @@ router.post('/api/bank/sync-all', async (c) => {
       errors++;
     }
   }
+
+  await persistPowensAccountConnections(userId, pendingConnectionLinks);
 
   console.log(`Sync-all complete: ${totalSynced} tx, ${totalInvestments} investments, ${scaConnections.length} SCA, ${errors} errors`);
   return c.json({

@@ -31,8 +31,19 @@
 - When consent lapses, Powens reports `SCARequired`. The app marks
   `bank_accounts.sca_required = 1` and keeps serving cached data; the UI shows a
   re-auth badge, and `/api/bank/accounts` returns `connection_expired` when the
-  user has no active connection left. Nothing notifies the user — they have to
-  notice the badge.
+  user has no active connection left.
+- **Ahead of that**, a connection carries `expire` — the highest expiry among
+  its sources, i.e. the PSD2 consent clock. Every sync stores it as
+  `bank_connections.consent_expires_at`, with the connection's `state` as
+  `provider_state`, so the app can warn before a bank stops syncing rather than
+  only noticing afterwards. `GET /api/bank/connections` returns both, plus the
+  owning connection's `bank_name`, `account_count`, `last_sync` and a
+  `reconnect_account_id` to hang a reconnect link on.
+- Each account records its owning connection as `provider_connection_id`, from
+  the account's own `id_connection`. This matters for notifications: several
+  connections can sit behind one institution name (CIC, say), so one link per
+  *bank* would silently skip most of them — it has to be one link per
+  *connection*.
 - Access tokens last about an hour; `refreshPowensToken()` renews them from the
   stored refresh token, and the `refresh-stale-connections` cron (see
   `backend/src/jobs/`) re-syncs anything older than 7 days.

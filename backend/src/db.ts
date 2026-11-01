@@ -474,6 +474,20 @@ export async function migrateDatabase() {
     await db.execute("UPDATE bank_accounts SET subtype = 'other' WHERE type = 'investment' AND subtype IS NULL");
   }
 
+  // PSD2 consent expiry, straight from the Powens connection's `expire`, plus
+  // its last reported state. Lets the app warn before a bank stops syncing
+  // instead of only noticing afterwards.
+  try {
+    await db.execute("SELECT consent_expires_at FROM bank_connections LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE bank_connections ADD COLUMN consent_expires_at TEXT");
+  }
+  try {
+    await db.execute("SELECT provider_state FROM bank_connections LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE bank_connections ADD COLUMN provider_state TEXT");
+  }
+
   // Add powens_refresh_token to bank_connections for automatic token refresh
   try {
     await db.execute("SELECT powens_refresh_token FROM bank_connections LIMIT 1");
@@ -486,6 +500,15 @@ export async function migrateDatabase() {
     await db.execute("SELECT sca_required FROM bank_accounts LIMIT 1");
   } catch {
     await db.execute("ALTER TABLE bank_accounts ADD COLUMN sca_required INTEGER NOT NULL DEFAULT 0");
+  }
+
+  // Which Powens connection owns this account (its `id_connection`). Lets the
+  // app offer one reconnect link per connection, which matters because several
+  // connections can share one institution name.
+  try {
+    await db.execute("SELECT provider_connection_id FROM bank_accounts LIMIT 1");
+  } catch {
+    await db.execute("ALTER TABLE bank_accounts ADD COLUMN provider_connection_id TEXT");
   }
 
   // The EUR value a provider reported for a crypto holding. balance stays in

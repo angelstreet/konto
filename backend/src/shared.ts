@@ -60,6 +60,15 @@ export function classifyAccountUsage(powensUsage: string | undefined | null, com
 
 export type PowensBankMeta = { bankId: string | null; bankName: string | null };
 
+/** What a Powens connection tells us beyond its institution. */
+export type PowensConnectionInfo = PowensBankMeta & {
+  /** Powens `expire`: the highest expiry among the connection's sources. PSD2
+   *  consent lasts ~180 days, and this is the only advance warning we get. */
+  expire: string | null;
+  /** e.g. 'SCARequired', 'webauthRequired', 'wrongpass', or null when healthy. */
+  state: string | null;
+};
+
 /**
  * Institution per connection id, from `GET /users/me/connections?expand=connector`.
  *
@@ -72,8 +81,8 @@ export type PowensBankMeta = { bankId: string | null; bankName: string | null };
  * Returns an empty map on any failure: callers then fall back to the account
  * fields, which is the old behaviour.
  */
-export async function fetchPowensConnectorMap(token: string): Promise<Map<string, PowensBankMeta>> {
-  const map = new Map<string, PowensBankMeta>();
+export async function fetchPowensConnectorMap(token: string): Promise<Map<string, PowensConnectionInfo>> {
+  const map = new Map<string, PowensConnectionInfo>();
   try {
     const res = await fetch(`${POWENS_API}/users/me/connections?expand=connector`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -88,12 +97,59 @@ export async function fetchPowensConnectorMap(token: string): Promise<Map<string
       map.set(String(conn.id), {
         bankId: rawId == null ? null : String(rawId).trim() || null,
         bankName: rawName == null ? null : String(rawName).trim() || null,
+        expire: conn.expire ? String(conn.expire) : null,
+        state: conn.state ? String(conn.state) : null,
       });
     }
   } catch {
     // fall through with whatever was collected
   }
   return map;
+}
+
+/**
+ * Records which Powens connection owns each account, from the account's own
+ * `id_connection`. Needed so the app can offer one reconnect link per
+ * connection: several connections can sit behind one institution name, and a
+ * link resolves the connection that owns the account it names.
+ */
+export async function persistPowensAccountConnections(userId: number, accounts: any[]): Promise<void> {
+  for (const acc of accounts) {
+    if (acc?.id == null || acc?.id_connection == null) continue;
+    try {
+      await db.execute({
+        sql: `UPDATE bank_accounts SET provider_connection_id = ?
+              WHERE user_id = ? AND provider = 'powens' AND provider_account_id = ?`,
+        args: [String(acc.id_connection), userId, String(acc.id)],
+      });
+    } catch {
+      // column missing on an unmigrated database
+    }
+  }
+}
+
+/**
+ * Writes what a connection told us back onto its bank_connections row, so the
+ * consent clock is readable without a Powens round-trip. Called from the sync
+ * paths, which already hold the connector map.
+ */
+export async function persistPowensConnectionInfo(
+  userId: number,
+  map: Map<string, PowensConnectionInfo>,
+): Promise<void> {
+  for (const [connectionId, info] of map) {
+    try {
+      await db.execute({
+        sql: `UPDATE bank_connections
+              SET consent_expires_at = ?, provider_state = ?,
+                  provider_name = COALESCE(?, provider_name)
+              WHERE user_id = ? AND powens_connection_id = ?`,
+        args: [info.expire, info.state, info.bankName, userId, connectionId],
+      });
+    } catch {
+      // column may be missing on a database that has not migrated yet
+    }
+  }
 }
 
 export function extractPowensBankMeta(acc: any, connectorMap?: Map<string, PowensBankMeta>): PowensBankMeta {
