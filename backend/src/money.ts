@@ -48,3 +48,32 @@ export function accountBalanceEur(
   if (account.balance_native != null && account.balance_native !== 0) return account.balance_native;
   return 0;
 }
+
+/** The three pieces net worth is built from, each already converted to EUR. */
+export type NetWorthParts = {
+  /** Every non-loan account balance, via accountBalanceEur. */
+  accountsEur: number;
+  /** Assets at gross value — current_value, or purchase_price when unvalued. */
+  assetsGross: number;
+  /** Loan account balances, which are negative. */
+  loansEur: number;
+};
+
+/**
+ * Net worth. One definition, shared by the dashboard, the public API summary and
+ * the ClawBox integration, so those three cannot drift apart again.
+ *
+ * Two things are deliberately NOT parameters, because passing them is how this
+ * figure went wrong twice:
+ *
+ * - Investment positions (the `investments` table). They are a breakdown of the
+ *   investment accounts already inside accountsEur; in production each such
+ *   account's positions sum to its own balance to the cent. Adding them counted
+ *   192 889 EUR twice.
+ * - Loans net of assets. assetsGross is gross on purpose: loansEur already
+ *   carries every loan, asset-linked or not. Subtracting the linked ones again
+ *   via a "net asset value" understated net worth by 775 416 EUR.
+ */
+export function netWorthEur({ accountsEur, assetsGross, loansEur }: NetWorthParts): number {
+  return accountsEur + assetsGross + loansEur;
+}

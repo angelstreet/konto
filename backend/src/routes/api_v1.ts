@@ -8,6 +8,7 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
          calcInvestmentDiff, calcInvDiff, formatCurrencyFR, escapeHtml,
          getCryptoEurPrices, getFiatEurRates, accountBalanceEur } from '../shared.js';
+import { netWorthEur } from '../money.js';
 
 
 const router = new Hono();
@@ -213,7 +214,11 @@ router.get('/api/v1/summary', async (c) => {
   const totalInvestments = investments.reduce((s: number, i: any) => s + (i.valuation || 0), 0);
   const totalAssets = assets.reduce((s: number, a: any) => s + (a.current_value || a.purchase_price || 0), 0);
   const totalLoans = loans.reduce((s: number, l: any) => s + toEur(l), 0);
-  const patrimoineNet = totalBalance + totalInvestments + totalAssets + totalLoans;
+  const patrimoineNet = netWorthEur({
+    accountsEur: totalBalance,
+    assetsGross: totalAssets,
+    loansEur: totalLoans,
+  });
   let income = 0, expenses = 0;
   const catTotals = new Map<string, number>();
   for (const row of txsRes.rows as any[]) {

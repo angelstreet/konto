@@ -7,6 +7,7 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
          calcInvestmentDiff, calcInvDiff, getCryptoEurPrices, updateCryptoBalanceNative,
          getFiatEurRates, accountBalanceEur } from '../shared.js';
+import { netWorthEur } from '../money.js';
 import { estimatePropertyPrice } from '../services/propertyEstimation.js';
 import { createPatrimoineSnapshot } from '../services/snapshots.js';
 
@@ -1348,7 +1349,10 @@ router.get('/api/dashboard', async (c) => {
         };
       }),
     },
-    totals: { brut: brutBalance + patrimoineBrut, net: netBalance + patrimoineNet },
+    totals: {
+      brut: brutBalance + patrimoineBrut,
+      net: netWorthEur({ accountsEur: brutBalance, assetsGross: patrimoineBrut, loansEur: loanTotal }),
+    },
     accountCount: accounts.length, companyCount,
     distribution: { personal: personalBalance, pro: proBalance },
   });

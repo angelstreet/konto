@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { accountBalanceEur, FIAT_CURRENCIES } from '../../backend/src/money.ts';
+import { accountBalanceEur, FIAT_CURRENCIES, netWorthEur } from '../../backend/src/money.ts';
 
 // bank_accounts.balance is held in the account's OWN unit: euros for a current
 // account, CHF for a Swiss one, and a raw token quantity for crypto. Every total
@@ -66,5 +66,48 @@ describe('accountBalanceEur', () => {
     // 10000 + 1000 + 9000 + 800 + 150
     expect(total).toBeCloseTo(20950, 2);
     expect(total).toBeLessThan(1e6);
+  });
+});
+
+// The figures below are the real production ones at the time both totals were
+// fixed, so each wrong result is pinned to the bug that produced it.
+const PROD = {
+  accountsEur: 120000,   // all non-loan accounts, converted to EUR
+  assetsGross: 400000,     // five assets at gross value
+  loansEur: -250000,     // four loans, all of them linked to an asset
+};
+const INVESTMENT_POSITIONS = 90000; // positions held inside the accounts above
+
+describe('netWorthEur', () => {
+  it('adds accounts and gross assets, then deducts the loans', () => {
+    expect(netWorthEur(PROD)).toBeCloseTo(270000, 2);
+  });
+
+  it('does not count investment positions on top of the accounts holding them', () => {
+    // /api/v1/summary used to add them, reporting 1 169 774.48.
+    const doubleCounted = netWorthEur(PROD) + INVESTMENT_POSITIONS;
+    expect(netWorthEur(PROD)).not.toBeCloseTo(doubleCounted, 2);
+    expect(doubleCounted - netWorthEur(PROD)).toBeCloseTo(INVESTMENT_POSITIONS, 2);
+  });
+
+  it('deducts each loan once, not once per place it appears', () => {
+    // The dashboard used to add a net asset value (assets minus the linked
+    // loans) to a net balance that had already deducted them: 201 469.04.
+    const assetsNetOfLoans = PROD.assetsGross + PROD.loansEur;
+    const doubleSubtracted = PROD.accountsEur + PROD.loansEur + assetsNetOfLoans;
+    expect(doubleSubtracted).toBeCloseTo(20000, 2);
+    expect(netWorthEur(PROD) - doubleSubtracted).toBeCloseTo(-PROD.loansEur, 2);
+  });
+
+  it('is the plain sum of its three parts', () => {
+    expect(netWorthEur({ accountsEur: 1000, assetsGross: 500, loansEur: -200 })).toBe(1300);
+  });
+
+  it('handles a portfolio with no assets and no debt', () => {
+    expect(netWorthEur({ accountsEur: 2500, assetsGross: 0, loansEur: 0 })).toBe(2500);
+  });
+
+  it('goes negative when the debt exceeds everything owned', () => {
+    expect(netWorthEur({ accountsEur: 100, assetsGross: 0, loansEur: -5000 })).toBe(-4900);
   });
 });

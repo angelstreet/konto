@@ -1,6 +1,7 @@
 import db from '../db.js';
 import { categorizeTransaction } from '../categorizer.js';
 import { getCryptoEurPrices, getFiatEurRates, accountBalanceEur } from '../shared.js';
+import { netWorthEur } from '../money.js';
 import { kontoDeeplink, kontoLoanDeeplink } from './deeplinks.js';
 
 export type KontoIntegrationActionId =
@@ -98,7 +99,11 @@ async function getSummary(userId: number) {
   const totalInvestments = investments.reduce((s: number, i: any) => s + (i.valuation || 0), 0);
   const totalAssets = assets.reduce((s: number, a: any) => s + (a.current_value || a.purchase_price || 0), 0);
   const totalLoans = loans.reduce((s: number, l: any) => s + toEur(l), 0);
-  const patrimoineNet = totalBalance + totalInvestments + totalAssets + totalLoans;
+  const patrimoineNet = netWorthEur({
+    accountsEur: totalBalance,
+    assetsGross: totalAssets,
+    loansEur: totalLoans,
+  });
 
   let income = 0;
   let expenses = 0;
