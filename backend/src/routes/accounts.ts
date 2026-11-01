@@ -70,50 +70,62 @@ async function buildReconnectUrl(
   accountId: string,
   lang: string,
 ): Promise<{ url: string; connection_id?: string } | null> {
+  const accRes = await db.execute({
+    sql: 'SELECT provider_account_id, provider_connection_id FROM bank_accounts WHERE id = ? AND user_id = ?',
+    args: [accountId, userId]
+  });
+  if (accRes.rows.length === 0) return null;
+  const { provider_connection_id: providerConnectionId } = accRes.rows[0] as any;
+
+  // The account records which Powens connection owns it. This used to be found
+  // by probing each connection's token against /users/me/accounts — but a
+  // Powens token is scoped to the Powens USER, not the connection, so every
+  // token lists every account and the first row always "matched". When no token
+  // worked the function fell through to a generic /connect, which does not
+  // reconnect anything: it creates a NEW connection. That is how one bank ended
+  // up behind nine connections.
+  if (!providerConnectionId) return null;
+
+  const connRes = await db.execute({
+    sql: `SELECT * FROM bank_connections
+          WHERE user_id = ? AND powens_connection_id = ? AND status != 'replaced'
+          ORDER BY id DESC LIMIT 1`,
+    args: [userId, String(providerConnectionId)],
+  });
+  if (connRes.rows.length === 0) return null;
+  const conn = decryptBankConn(connRes.rows[0] as any);
+
   const state = randomBytes(16).toString('hex');
   await db.execute({ sql: 'INSERT INTO oauth_states (state, user_id) VALUES (?, ?)', args: [state, userId] });
   await db.execute({ sql: "DELETE FROM oauth_states WHERE created_at < datetime('now', '-10 minutes')", args: [] });
 
-  const accRes = await db.execute({
-    sql: 'SELECT provider_account_id FROM bank_accounts WHERE id = ? AND user_id = ?',
-    args: [accountId, userId]
-  });
-  if (accRes.rows.length === 0) return null;
-  const providerAccountId = (accRes.rows[0] as any).provider_account_id;
+  const base = `https://webview.powens.com/${lang}/reconnect?domain=${POWENS_DOMAIN}`
+    + `&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}`
+    + `&connection_id=${conn.powens_connection_id}&state=${state}`;
 
-  // Find which connection owns this account
-  const connsRes = await db.execute({
-    sql: 'SELECT * FROM bank_connections WHERE user_id = ? AND status = ?',
-    args: [userId, 'active']
-  });
-  for (const rawConn of connsRes.rows as any[]) {
-    const conn = decryptBankConn(rawConn);
+  // A temporary code is preferred over handing the webview a live token.
+  for (const token of [conn.powens_token, await refreshPowensToken(conn.id)]) {
+    if (!token) continue;
     try {
-      const accountsRes = await fetch(`${POWENS_API}/users/me/accounts`, {
-        headers: { 'Authorization': `Bearer ${conn.powens_token}` },
+      const codeRes = await fetch(`${POWENS_API}/auth/token/code`, {
+        headers: { 'Authorization': `Bearer ${token}` },
       });
-      if (!accountsRes.ok) continue;
-      const data = await accountsRes.json() as any;
-      if ((data.accounts || []).some((a: any) => String(a.id) === providerAccountId)) {
-        // Generate a temporary code for the webview
-        const codeRes = await fetch(`${POWENS_API}/auth/token/code`, {
-          headers: { 'Authorization': `Bearer ${conn.powens_token}` },
-        });
-        if (!codeRes.ok) {
-          // Fallback: use token directly
-          const url = `https://webview.powens.com/${lang}/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&token=${conn.powens_token}&state=${state}`;
-          return { url, connection_id: conn.powens_connection_id };
-        }
-        const codeData = await codeRes.json() as any;
-        const url = `https://webview.powens.com/${lang}/reconnect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&connection_id=${conn.powens_connection_id}&code=${codeData.code}&state=${state}`;
-        return { url, connection_id: conn.powens_connection_id };
-      }
-    } catch {}
+      if (!codeRes.ok) continue;
+      const codeData = await codeRes.json() as any;
+      if (!codeData?.code) continue;
+      return { url: `${base}&code=${codeData.code}`, connection_id: conn.powens_connection_id };
+    } catch {
+      // try the refreshed token
+    }
   }
 
-  // Fallback to generic connect
-  const url = `https://webview.powens.com/${lang}/connect?domain=${POWENS_DOMAIN}&client_id=${POWENS_CLIENT_ID}&redirect_uri=${encodeURIComponent(REDIRECT_URI)}&state=${state}${POWENS_CONNECTOR_CAPABILITIES ? `&connector_capabilities=${POWENS_CONNECTOR_CAPABILITIES}` : ''}`;
-  return { url };
+  // Last resort: the webview also accepts the access token directly. Never fall
+  // back to /connect here — that would silently add a duplicate connection
+  // instead of repairing this one.
+  if (conn.powens_token) {
+    return { url: `${base}&token=${conn.powens_token}`, connection_id: conn.powens_connection_id };
+  }
+  return null;
 }
 
 // Reconnect a specific SCA-blocked connection
