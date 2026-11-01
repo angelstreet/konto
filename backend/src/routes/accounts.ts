@@ -188,23 +188,46 @@ router.get('/api/bank-callback', async (c) => {
   }
 
   // Powens reconnect flow: redirects back with connection_id but no code when SCA is resolved
-  // In this case the existing token is still valid — just clear SCA flag and sync
+  // In this case the existing token is still valid — just clear the flags and
+  // re-read the connection's state so the UI is right the moment he lands.
   if (!code && connectionId) {
     const userId = stateUserId ?? await getUserId(c);
     await db.execute({
       sql: 'UPDATE bank_connections SET status = ? WHERE user_id = ? AND powens_connection_id = ? AND status = ?',
       args: ['active', userId, connectionId, 'sca_required'],
     });
+    // Scoped to this connection — provider_connection_id makes that possible.
     await db.execute({
       sql: `UPDATE bank_accounts SET sca_required = 0
-            WHERE user_id = ? AND provider = 'powens'
-            AND provider_account_id IN (
-              SELECT ba.provider_account_id FROM bank_accounts ba
-              JOIN bank_connections bc ON bc.user_id = ba.user_id AND bc.powens_connection_id = ?
-              WHERE ba.user_id = ?
-            )`,
-      args: [userId, connectionId, userId],
+            WHERE user_id = ? AND provider = 'powens' AND provider_connection_id = ?`,
+      args: [userId, connectionId],
     });
+
+    // Without this the account rows keep showing "auth required" until the next
+    // sync, because that flag is derived from bank_connections.provider_state
+    // and nothing here used to refresh it. Returning from the bank is exactly
+    // when it changes, so ask Powens for the new state now.
+    try {
+      const connRow = await db.execute({
+        sql: `SELECT * FROM bank_connections
+              WHERE user_id = ? AND powens_connection_id = ? AND status != 'replaced'
+              ORDER BY id DESC LIMIT 1`,
+        args: [userId, connectionId],
+      });
+      if (connRow.rows.length > 0) {
+        const conn = decryptBankConn(connRow.rows[0] as any);
+        for (const token of [conn.powens_token, await refreshPowensToken(conn.id)]) {
+          if (!token) continue;
+          const map = await fetchPowensConnectorMap(token);
+          if (map.size === 0) continue;
+          await persistPowensConnectionInfo(userId, map);
+          break;
+        }
+      }
+    } catch (e) {
+      console.error('[bank-callback] could not refresh connection state:', e);
+    }
+
     return c.html(`<html><head><link rel="icon" href="https://konto.angelstreet.io/favicon.ico"></head><body style="background:#0f0f0f;color:#fff;font-family:sans-serif;padding:40px;">
       <h1 style="color:#d4a812;">✅ Bank reconnected!</h1><p>Your accounts have been refreshed.</p>
       <p style="color:#888;">Redirecting to accounts...</p>
