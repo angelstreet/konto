@@ -1,11 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { accountBalanceEur, FIAT_CURRENCIES, netWorthEur } from '../../backend/src/money.ts';
 
-// bank_accounts.balance is held in the account's OWN unit: euros for a current
-// account, CHF for a Swiss one, and a raw token quantity for crypto. Every total
-// in the app must therefore go through accountBalanceEur. Summing raw balances
-// once pushed patrimoine_net to 162 billion euros, because 179 million PEPE was
-// added as 179 million euros.
+// bank_accounts.balance is held in the account's OWN unit: euros for a French
+// current account, CHF for a Swiss one, and a raw token quantity for crypto
+// (250 million PEPE is stored as 250000000). Nothing may add those numbers
+// together directly — every total goes through accountBalanceEur, because a
+// token count summed as euros once produced a net worth in the billions.
+//
+// Figures here are invented. Never paste a real account balance into this
+// repo: it is public.
 
 const prices = { BTC: 90000, ETH: 3000, POL: 0.0821 };
 const rates = { EUR: 1, USD: 1.08, CHF: 0.94 };
@@ -29,7 +32,7 @@ describe('accountBalanceEur', () => {
   });
 
   it('falls back to the provider EUR value when the token has no live price', () => {
-    // PEPE is not quoted by the price feed; Coinbase already told us it is 800 EUR.
+    // PEPE is not quoted by the price feed; the provider already valued it.
     const pepe = { currency: 'PEPE', balance: 250000000, balance_native: 800 };
     expect(accountBalanceEur(pepe, prices, rates)).toBeCloseTo(800, 2);
   });
@@ -69,34 +72,36 @@ describe('accountBalanceEur', () => {
   });
 });
 
-// The figures below are the real production ones at the time both totals were
-// fixed, so each wrong result is pinned to the bug that produced it.
-const PROD = {
+// A portfolio shaped like the one that exposed both totals bugs: cash, an
+// investment account whose positions are also listed in the investments table,
+// and a property financed by a loan that is linked to it.
+const PORTFOLIO = {
   accountsEur: 120000,   // all non-loan accounts, converted to EUR
-  assetsGross: 400000,     // five assets at gross value
-  loansEur: -250000,     // four loans, all of them linked to an asset
+  assetsGross: 400000,   // assets at gross value
+  loansEur: -250000,     // loans, linked to an asset
 };
 const INVESTMENT_POSITIONS = 90000; // positions held inside the accounts above
 
 describe('netWorthEur', () => {
   it('adds accounts and gross assets, then deducts the loans', () => {
-    expect(netWorthEur(PROD)).toBeCloseTo(270000, 2);
+    expect(netWorthEur(PORTFOLIO)).toBeCloseTo(270000, 2);
   });
 
   it('does not count investment positions on top of the accounts holding them', () => {
-    // /api/v1/summary used to add them, reporting 1 169 774.48.
-    const doubleCounted = netWorthEur(PROD) + INVESTMENT_POSITIONS;
-    expect(netWorthEur(PROD)).not.toBeCloseTo(doubleCounted, 2);
-    expect(doubleCounted - netWorthEur(PROD)).toBeCloseTo(INVESTMENT_POSITIONS, 2);
+    // /api/v1/summary used to add them, inflating net worth by their full value.
+    const doubleCounted = netWorthEur(PORTFOLIO) + INVESTMENT_POSITIONS;
+    expect(netWorthEur(PORTFOLIO)).not.toBeCloseTo(doubleCounted, 2);
+    expect(doubleCounted - netWorthEur(PORTFOLIO)).toBeCloseTo(INVESTMENT_POSITIONS, 2);
   });
 
   it('deducts each loan once, not once per place it appears', () => {
     // The dashboard used to add a net asset value (assets minus the linked
-    // loans) to a net balance that had already deducted them: 201 469.04.
-    const assetsNetOfLoans = PROD.assetsGross + PROD.loansEur;
-    const doubleSubtracted = PROD.accountsEur + PROD.loansEur + assetsNetOfLoans;
+    // loans) to a net balance that had already deducted them, so every
+    // asset-linked loan came off twice.
+    const assetsNetOfLoans = PORTFOLIO.assetsGross + PORTFOLIO.loansEur;
+    const doubleSubtracted = PORTFOLIO.accountsEur + PORTFOLIO.loansEur + assetsNetOfLoans;
     expect(doubleSubtracted).toBeCloseTo(20000, 2);
-    expect(netWorthEur(PROD) - doubleSubtracted).toBeCloseTo(-PROD.loansEur, 2);
+    expect(netWorthEur(PORTFOLIO) - doubleSubtracted).toBeCloseTo(-PORTFOLIO.loansEur, 2);
   });
 
   it('is the plain sum of its three parts', () => {

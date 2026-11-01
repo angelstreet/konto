@@ -458,8 +458,8 @@ export async function migrateDatabase() {
   // NOTE: a "one-time" crypto balance repair used to live here. It divided every
   // crypto balance above 100 by its live EUR price, but migrateDatabase() runs on
   // every boot (and on every Vercel cold start), so it re-applied itself forever:
-  // one POL account was divided by ~0.01 on each run until its balance reached 6.2e18
-  // and patrimoine_net read 162 billion euros. Balances are native token quantities;
+  // a POL account was multiplied by 1/price on each run until its balance reached
+  // 1e28 and net worth read in the billions. Balances are native token quantities;
   // converting them to EUR is accountBalanceEur()'s job at read time, never a write.
   // Do not reintroduce a price-based rewrite of bank_accounts.balance.
 

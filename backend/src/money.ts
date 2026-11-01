@@ -3,7 +3,7 @@
  *
  * `bank_accounts.balance` is held in the account's OWN unit: euros for a French
  * current account, CHF for a Swiss one, and a raw token quantity for crypto
- * (179 million PEPE is stored as 250000000). Nothing may add those numbers
+ * (250 million PEPE is stored as 250000000). Nothing may add those numbers
  * together directly — every total in the app goes through accountBalanceEur.
  *
  * The live rate feeds live in shared.ts because they cache through the DB; this
@@ -67,12 +67,13 @@ export type NetWorthParts = {
  * figure went wrong twice:
  *
  * - Investment positions (the `investments` table). They are a breakdown of the
- *   investment accounts already inside accountsEur; in production each such
- *   account's positions sum to its own balance to the cent. Adding them counted
- *   192 889 EUR twice.
+ *   investment accounts already inside accountsEur; every account that holds
+ *   positions has them sum to its own balance, so adding them counted the whole
+ *   investment total twice.
  * - Loans net of assets. assetsGross is gross on purpose: loansEur already
  *   carries every loan, asset-linked or not. Subtracting the linked ones again
- *   via a "net asset value" understated net worth by 775 416 EUR.
+ *   via a "net asset value" understated net worth by the whole linked-loan
+ *   balance.
  */
 export function netWorthEur({ accountsEur, assetsGross, loansEur }: NetWorthParts): number {
   return accountsEur + assetsGross + loansEur;
