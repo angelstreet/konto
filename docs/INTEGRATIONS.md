@@ -49,6 +49,20 @@
   `backend/src/jobs/`) re-syncs anything older than 7 days.
 - There is **no Powens webhook endpoint** in the backend. Adding one would make
   SCA detection immediate rather than waiting for a cron.
+#### How much of a renewal can be automated
+
+Powens draws the line by the connector's `auth_mechanism`, stored on each
+connection as `provider_auth_mechanism`:
+
+| mechanism | what a background job can do |
+|---|---|
+| `decoupled` | **Everything.** The bank pushes to its own app, the user approves there, and the integrator sends `{"resume": true}`. No link to open. |
+| `webauth` | Powens requires the user to finish in a browser. A one-tap link is the floor — no server call replaces it. |
+| `credentials` | The webview collects bank credentials. |
+
+So "renew it all in the background" is a property of the bank, not of the
+integration. Check `provider_auth_mechanism` before promising it.
+
 #### Which connection a callback belongs to
 
 A Powens access token is scoped to the Powens *user*, so
