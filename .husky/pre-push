@@ -1,5 +1,7 @@
 #!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
+# husky v9 runs this file directly; the v8 `. _/husky.sh` shim it used to source
+# was removed upstream and the directory never existed here, so every push
+# aborted on a "No such file or directory" before any check could run.
 
 echo "[pre-push] Running build..."
 npm run build
