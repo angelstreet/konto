@@ -60,6 +60,18 @@
   `backend/src/jobs/`) re-syncs anything older than 7 days.
 - There is **no Powens webhook endpoint** in the backend. Adding one would make
   SCA detection immediate rather than waiting for a cron.
+#### Duplicates after a reconnect
+
+A reconnect can make Powens re-issue account ids. Konto matches on
+`provider_account_id`, so a sync then inserts a second row for every account it
+already had. Repair with `POST /api/bank/merge-duplicates` — the oldest row
+keeps its transactions and adopts the newest row's provider ids, the newer rows
+are removed without tombstones. Run it with `?dry=1` first.
+
+Note also that `/api/bank/sync-all` **only updates known accounts** — its loop
+skips anything with no existing row. New accounts arrive through
+`/api/bank/sync` or the OAuth callback.
+
 #### How much of a renewal can be automated
 
 Powens draws the line by the connector's `auth_mechanism`, stored on each
