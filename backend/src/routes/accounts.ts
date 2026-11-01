@@ -775,6 +775,47 @@ router.post('/api/bank/enable-accounts', async (c) => {
   return c.json({ attempted: results.length, enabled: results.filter(r => r.ok).length, results });
 });
 
+/**
+ * Asks Powens to re-sync a connection at the provider, which is what actually
+ * fetches newly enabled accounts. Enabling an account only flips a flag — the
+ * account list Konto reads stays as it was until the connection syncs on
+ * Powens' side, so without this a freshly enabled account never appears.
+ *
+ * POST /api/bank/refresh-connection            → every active connection
+ * POST /api/bank/refresh-connection?ids=12,14  → only those
+ */
+router.post('/api/bank/refresh-connection', async (c) => {
+  const userId = await getUserId(c);
+  const only = (c.req.query('ids') || '').split(',').map(x => x.trim()).filter(Boolean);
+  const connsRes = await db.execute({
+    sql: "SELECT * FROM bank_connections WHERE user_id = ? AND status != 'replaced'",
+    args: [userId],
+  });
+
+  const results: any[] = [];
+  for (const rawConn of connsRes.rows as any[]) {
+    const conn = decryptBankConn(rawConn);
+    const cid = String(conn.powens_connection_id || '');
+    if (!cid || (only.length && !only.includes(cid))) continue;
+    for (const token of [conn.powens_token, await refreshPowensToken(conn.id)]) {
+      if (!token) continue;
+      try {
+        const res = await fetch(`${POWENS_API}/users/me/connections/${cid}`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({}),
+        });
+        const text = await res.text();
+        results.push({ connection_id: cid, ok: res.ok, status: res.status, detail: res.ok ? undefined : text.slice(0, 140) });
+        break;
+      } catch (err: any) {
+        results.push({ connection_id: cid, ok: false, detail: err?.message });
+      }
+    }
+  }
+  return c.json({ attempted: results.length, refreshed: results.filter(r => r.ok).length, results });
+});
+
 // --- Sync all accounts ---
 router.post('/api/bank/sync', async (c) => {
   const userId = await getUserId(c);
