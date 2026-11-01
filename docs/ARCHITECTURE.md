@@ -466,3 +466,21 @@ Auto-detection + manual management:
 
 - Admin endpoints: `GET /api/admin/blacklist`, `POST /api/admin/blacklist`
 - `ip_blacklist` table with `auto`/`manual` entries and expiry
+- `isBlacklisted()` queries the table on every request and nothing is cached in
+  memory, so deleting a row unblocks the IP immediately. The 5-minute 404
+  counter *is* in memory, so a freshly unblocked IP that keeps 404ing is
+  re-blocked.
+
+**This fires on your own tooling.** Polling an endpoint that 404s — a health
+check against a route that does not exist, a loop waiting for a deploy to
+appear — trips `scanning_detected` after 20 hits in 5 minutes and blocks that IP
+for an hour from everything except `/api/health`. The block is a row in
+`ip_blacklist`, and `GET /api/admin/blacklist` is itself blocked from the
+blocked IP, so clear it from the database:
+
+```sql
+DELETE FROM ip_blacklist WHERE ip = '<ip>' AND auto = 1;
+```
+
+Poll a route that returns 200, or check the deployment from the Vercel side
+instead.
