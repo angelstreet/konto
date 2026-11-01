@@ -30,6 +30,8 @@ backend/db/*.backup*
 
 # Internal scripts
 backend/manual-sync-*.js
+# Raw provider API dumps — these held real IBANs, account numbers and balances
+backend/tmp/
 backend/scripts/encrypt-*.ts
 
 # Proofs & screenshots (internal QA)
