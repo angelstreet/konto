@@ -706,6 +706,67 @@ router.get('/api/bank/provider-accounts', async (c) => {
   return c.json(out);
 });
 
+/**
+ * Re-activates accounts a connection has disabled, straight through the API.
+ *
+ * An account left out of the consent is returned by `?all` with a `disabled`
+ * timestamp and omitted from the normal listing, so it never syncs. The manage
+ * webview can re-tick it, but Powens also exposes it directly:
+ * `PUT /users/me/accounts/{id}` with `disabled: null`.
+ *
+ * POST /api/bank/enable-accounts            → every disabled account
+ * POST /api/bank/enable-accounts?ids=64,67  → only those
+ */
+router.post('/api/bank/enable-accounts', async (c) => {
+  const userId = await getUserId(c);
+  const only = (c.req.query('ids') || '').split(',').map(x => x.trim()).filter(Boolean);
+  const connsRes = await db.execute({
+    sql: "SELECT * FROM bank_connections WHERE user_id = ? AND status != 'replaced'",
+    args: [userId],
+  });
+
+  const results: any[] = [];
+  for (const rawConn of connsRes.rows as any[]) {
+    const conn = decryptBankConn(rawConn);
+    let token: string | null = null;
+    for (const candidate of [conn.powens_token, await refreshPowensToken(conn.id)]) {
+      if (!candidate) continue;
+      const probe = await fetch(`${POWENS_API}/users/me/accounts?all`, {
+        headers: { Authorization: `Bearer ${candidate}` },
+      });
+      if (probe.ok) { token = candidate; break; }
+    }
+    if (!token) continue;
+
+    const listRes = await fetch(`${POWENS_API}/users/me/accounts?all`, {
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!listRes.ok) continue;
+    const data = await listRes.json() as any;
+
+    for (const acc of data.accounts || []) {
+      if (!acc?.disabled) continue;
+      if (only.length && !only.includes(String(acc.id))) continue;
+      try {
+        const put = await fetch(`${POWENS_API}/users/me/accounts/${acc.id}`, {
+          method: 'PUT',
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ disabled: null }),
+        });
+        const text = await put.text();
+        results.push({
+          id: acc.id, name: acc.name || acc.original_name, type: acc.type,
+          ok: put.ok, status: put.status,
+          detail: put.ok ? undefined : text.slice(0, 160),
+        });
+      } catch (err: any) {
+        results.push({ id: acc.id, name: acc.name, ok: false, detail: err?.message });
+      }
+    }
+  }
+  return c.json({ attempted: results.length, enabled: results.filter(r => r.ok).length, results });
+});
+
 // --- Sync all accounts ---
 router.post('/api/bank/sync', async (c) => {
   const userId = await getUserId(c);
