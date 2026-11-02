@@ -924,7 +924,8 @@ router.get('/api/properties/:assetId/arbitrage', async (c) => {
   let loan: any = null;
   if (asset.linked_loan_account_id) {
     const loanRes = await db.execute({
-      sql: `SELECT ba.id, ba.name, ba.balance, ld.interest_rate, ld.monthly_payment, ld.insurance_monthly
+      sql: `SELECT ba.id, ba.name, ba.balance, ld.interest_rate, ld.monthly_payment,
+                   ld.insurance_monthly, ld.duration_months, ld.source
             FROM bank_accounts ba
             LEFT JOIN loan_details ld ON ld.bank_account_id = ba.id AND ld.user_id = ba.user_id
             WHERE ba.id = ? AND ba.user_id = ? AND ba.type = 'loan' LIMIT 1`,
@@ -935,6 +936,13 @@ router.get('/api/properties/:assetId/arbitrage', async (c) => {
       // A loan's balance is stored negative; the page wants the capital owed.
       const balance = Math.abs(Math.min(Number(row.balance) || 0, 0));
       const payment = Number(row.monthly_payment) || 0;
+      const duration = Number(row.duration_months) || 0;
+      // `source = 'estimated'` rows were filled in from the balance alone: the
+      // instalment is balance / duration with the interest ignored, so it runs
+      // ~14 % under the real one and a schedule projected from it is fiction.
+      // Treat it as unusable rather than project confidently from invented data.
+      const estimated = row.source === 'estimated'
+        || (duration > 0 && payment > 0 && Math.abs(payment - balance / duration) < 0.5);
       loan = {
         account_id: Number(row.id),
         name: row.name,
@@ -942,8 +950,10 @@ router.get('/api/properties/:assetId/arbitrage', async (c) => {
         rate: Number(row.interest_rate) || 0,
         payment,
         insurance: Number(row.insurance_monthly) || 0,
-        // Without a balance and an instalment the schedule cannot be reprojected.
-        incomplete: !(balance > 0 && payment > 0),
+        source: row.source || 'manual',
+        estimated,
+        // Without a real balance and instalment the schedule cannot be reprojected.
+        incomplete: !(balance > 0 && payment > 0) || estimated,
       };
     }
   }
@@ -953,6 +963,7 @@ router.get('/api/properties/:assetId/arbitrage', async (c) => {
 
   const warnings: string[] = [];
   if (!asset.linked_loan_account_id) warnings.push('no_loan_linked');
+  else if (loan?.estimated) warnings.push('loan_estimated');
   else if (loan?.incomplete) warnings.push('loan_details_missing');
   if (asset.property_usage !== 'principal' && annualRent === 0) warnings.push('no_rent_recorded');
   if (recordedCosts === 0) warnings.push('no_charges_recorded');

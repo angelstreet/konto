@@ -21,7 +21,7 @@ interface ArbitrageData {
     purchase_price: number; notary_fees: number; works: number;
     purchase_date: string | null; is_primary_residence: boolean;
   };
-  loan: { account_id: number; name: string; balance: number; rate: number; payment: number; insurance: number; incomplete: boolean } | null;
+  loan: { account_id: number; name: string; balance: number; rate: number; payment: number; insurance: number; source: string; estimated: boolean; incomplete: boolean } | null;
   defaults: { annual_rent: number; annual_cost: number; selling_costs: number };
   recorded: { annual_charges: number; annual_revenues: number };
   warnings: string[];
@@ -30,6 +30,7 @@ interface ArbitrageData {
 const WARNING_TEXT: Record<string, string> = {
   no_loan_linked: "Aucun prêt n'est rattaché à ce bien : il est traité comme détenu sans dette. Rattachez-le depuis la fiche de l'actif.",
   loan_details_missing: "Le prêt rattaché n'a ni capital restant ni mensualité exploitables — complétez-le dans Prêts pour que la projection soit juste.",
+  loan_estimated: "Le prêt rattaché est estimé : sa mensualité a été déduite du capital divisé par la durée, intérêts ignorés, donc elle est environ 14 % trop basse. Seul le capital restant vient de la banque. Saisissez la vraie mensualité, le vrai taux et la date de début dans Prêts — d'ici là le bien est calculé sans dette.",
   no_rent_recorded: "Aucun loyer n'est enregistré pour ce bien : garder ne rapporte mécaniquement rien et vendre gagnerait toujours.",
   no_charges_recorded: "Aucune charge enregistrée : le coût annuel est à saisir à la main ci-dessous.",
   value_far_from_estimate: "Votre valeur saisie et l'estimation DVF diffèrent de plus de 20 %, et le verdict en dépend directement.",

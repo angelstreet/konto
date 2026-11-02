@@ -239,3 +239,28 @@ describe('yearsHeld', () => {
     expect(yearsHeld('2040-01-01', 0, new Date('2030-01-01'))).toBe(0);
   });
 });
+
+describe('an estimated loan must not be projected', () => {
+  // Konto fills a loan it only knows the balance of with payment = balance /
+  // duration, interest ignored. Both of the user's Crédit Agricole loans are
+  // like this. Such an instalment runs ~14 % under the real one, so a schedule
+  // built from it pays the loan off years late — the page drops the loan
+  // instead, and the API flags it. This pins the arithmetic behind that rule.
+  test('a capital-only instalment implies a payoff well past the stated term', () => {
+    const balance = 96_587.45;
+    const months = 120;
+    const rate = 3.1;
+    const capitalOnly = balance / months;
+
+    const monthlyRate = rate / 100 / 12;
+    const real = (balance * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -months));
+    expect(capitalOnly).toBeLessThan(real * 0.9);
+
+    const implied = payoffMonths({ balance, rate, payment: capitalOnly, insurance: 0 });
+    expect(implied).toBeGreaterThan(months * 1.15);
+
+    // The real instalment clears it on time (payoffMonths ceils, so allow the
+    // final part-month).
+    expect(payoffMonths({ balance, rate, payment: real, insurance: 0 })).toBeLessThanOrEqual(months + 1);
+  });
+});
