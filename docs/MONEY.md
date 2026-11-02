@@ -138,3 +138,36 @@ curl "$URL/api/dashboard?cb=$(date +%s)"
 
 `/api/v1/*` is **not** cached, which is why it can disagree with
 `/api/dashboard` for up to a minute after a change.
+
+## Gotcha: a loan's instalment count is not trustworthy
+
+`loan_details.installments_paid`, `installments_left` and `duration_months`
+come from two sources that disagree — what Powens reports and what
+`parse-loan-pdf` read off the amortisation table — and neither is reconciled
+against the balance. One loan reports **53 instalments paid on a term that
+started 18 months ago**; another reports 282 left where the balance, rate and
+instalment imply 259.
+
+Three fields *are* mutually consistent, and reproduce the stored
+`monthly_breakdown` to the cent:
+
+- `bank_accounts.balance` (negative; the capital still owed)
+- `loan_details.interest_rate`
+- `loan_details.monthly_payment` — **insurance included**, so the amortising
+  part is `monthly_payment - insurance_monthly`
+
+So project a schedule forward from those, month by month:
+
+```
+interest = balance × rate / 12 / 100
+capital  = (monthly_payment − insurance_monthly) − interest
+balance  = balance − capital
+```
+
+`frontend/src/lib/propertyArbitrage.ts` (`projectLoan`, `payoffMonths`) does
+exactly this, and the payoff date it derives lands within a few months of
+`end_date` — whereas `installments_left` does not. Never compute a remaining
+balance at a future date from the instalment counts.
+
+An instalment too small to cover the interest never amortises: guard for it
+rather than looping forever.
