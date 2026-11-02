@@ -47,6 +47,11 @@ export interface ArbitrageInputs {
   /** Apply the 30 % PFU to the placement's gains. Without it the comparison
    *  flatters selling, since holding is taxed and the placement would not be. */
   taxPlacement: boolean;
+  /** Ceiling on what the property can ever be worth, in euros. Compounding a
+   *  growth rate for thirty years quietly assumes a market that keeps paying;
+   *  a ceiling says how far you are willing to believe it. 0 or undefined
+   *  means no ceiling. */
+  maxValue?: number;
 }
 
 export interface LoanProjection {
@@ -215,7 +220,8 @@ export function simulate(property: ArbitrageProperty, inputs: ArbitrageInputs, t
   const monthlyRate = inputs.rate / 100 / 12;
   const monthlyGrowth = Math.pow(1 + inputs.growth / 100, 1 / 12);
 
-  const valueAt = (month: number) => property.value * Math.pow(monthlyGrowth, month);
+  const ceiling = inputs.maxValue && inputs.maxValue > 0 ? inputs.maxValue : Infinity;
+  const valueAt = (month: number) => Math.min(property.value * Math.pow(monthlyGrowth, month), ceiling);
   /** Net of the 30 % PFU on whatever the placement earned above what was put in. */
   const afterPlacementTax = (value: number, contributed: number) =>
     inputs.taxPlacement && value > contributed ? value - (value - contributed) * (PFU_RATE / 100) : value;

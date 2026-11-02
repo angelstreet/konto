@@ -264,3 +264,34 @@ describe('an estimated loan must not be projected', () => {
     expect(payoffMonths({ balance, rate, payment: real, insurance: 0 })).toBeLessThanOrEqual(months + 1);
   });
 });
+
+describe('a ceiling on the sale price', () => {
+  // Compounding growth for thirty years assumes a market that keeps paying.
+  // The ceiling is how the user says how far they believe it.
+  const capped = { ...INPUTS, growth: 3, maxValue: 250_000 };
+
+  test('the sale price never exceeds the ceiling', () => {
+    const r = simulate(PROPERTY, capped, TODAY);
+    expect(r.sell.price).toBeLessThanOrEqual(capped.maxValue);
+    expect(r.keep.value).toBeLessThanOrEqual(capped.maxValue);
+  });
+
+  test('a ceiling below today\'s value pins the price to it', () => {
+    const r = simulate(PROPERTY, { ...capped, maxValue: 180_000 }, TODAY);
+    expect(r.sell.price).toBeCloseTo(180_000, 6);
+  });
+
+  test('a ceiling never flatters keeping', () => {
+    const free = simulate(PROPERTY, { ...capped, maxValue: 0 }, TODAY);
+    const held = simulate(PROPERTY, capped, TODAY);
+    expect(held.keep.total).toBeLessThanOrEqual(free.keep.total);
+    expect(held.gap).toBeGreaterThanOrEqual(free.gap);
+  });
+
+  test('a ceiling out of reach changes nothing', () => {
+    const free = simulate(PROPERTY, { ...capped, maxValue: 0 }, TODAY);
+    const high = simulate(PROPERTY, { ...capped, maxValue: 10_000_000 }, TODAY);
+    expect(high.keep.total).toBeCloseTo(free.keep.total, 6);
+    expect(high.sell.total).toBeCloseTo(free.sell.total, 6);
+  });
+})

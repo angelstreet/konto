@@ -22,7 +22,7 @@ interface ArbitrageData {
     purchase_date: string | null; is_primary_residence: boolean;
   };
   loan: { account_id: number; name: string; balance: number; rate: number; payment: number; insurance: number; source: string; estimated: boolean; incomplete: boolean } | null;
-  defaults: { annual_rent: number; annual_cost: number; selling_costs: number };
+  defaults: { annual_rent: number; annual_cost: number; selling_costs: number; max_value: number };
   recorded: { annual_charges: number; annual_revenues: number };
   warnings: string[];
 }
@@ -68,6 +68,7 @@ export default function PropertyArbitrage() {
   const [annualRent, setAnnualRent] = useState(0);
   const [sellingCosts, setSellingCosts] = useState(0);
   const [taxPlacement, setTaxPlacement] = useState(true);
+  const [maxValue, setMaxValue] = useState(0);
 
   useEffect(() => {
     authFetch(`${API}/assets?type=real_estate`)
@@ -91,6 +92,7 @@ export default function PropertyArbitrage() {
         setAnnualCost(d.defaults.annual_cost);
         setAnnualRent(d.defaults.annual_rent);
         setSellingCosts(d.defaults.selling_costs);
+        setMaxValue(d.defaults.max_value || 0);
         setSellMonths(0);
         setError(null);
         setLoading(false);
@@ -111,10 +113,10 @@ export default function PropertyArbitrage() {
   }), [data]);
 
   const inputs: ArbitrageInputs = {
-    sellMonths, rate, growth, horizonYears, annualCost, annualRent, sellingCosts, taxPlacement,
+    sellMonths, rate, growth, horizonYears, annualCost, annualRent, sellingCosts, taxPlacement, maxValue,
   };
   const result = useMemo(() => (property ? simulate(property, inputs) : null),
-    [property, sellMonths, rate, growth, horizonYears, annualCost, annualRent, sellingCosts, taxPlacement]);
+    [property, sellMonths, rate, growth, horizonYears, annualCost, annualRent, sellingCosts, taxPlacement, maxValue]);
 
   const h = hideAmounts;
   const f = (v: number) => (h ? '•••' : fmt(v));
@@ -264,6 +266,31 @@ export default function PropertyArbitrage() {
                   </span>{' '}du prix.
                 </p>
               </div>
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4 mt-4">
+              <div>
+                <label className="block text-[10px] text-muted uppercase tracking-wide mb-1">Prix de vente plafonné à</label>
+                <input type="number" step={5000} value={maxValue}
+                  onChange={e => setMaxValue(Number(e.target.value) || 0)}
+                  className="w-full bg-background border border-border focus:border-accent-500 outline-none rounded-md px-2 py-1.5 text-base font-semibold" />
+                <p className="text-[10px] text-muted mt-1 leading-snug">
+                  au-delà, le prix ne monte plus. 0 = pas de plafond.{' '}
+                  {data.property.purchase_price > 0 && (
+                    <>Achat {f(data.property.purchase_price)}, soit{' '}
+                    <span className="text-accent-400">
+                      {maxValue > 0 ? `${((maxValue / data.property.purchase_price - 1) * 100).toFixed(0)} %` : '—'}
+                    </span>.</>
+                  )}
+                </p>
+              </div>
+              {maxValue > 0 && result.sell.price >= maxValue - 1 && (
+                <div className="col-span-1 md:col-span-2 self-end">
+                  <p className="text-[11px] text-amber-300 leading-snug">
+                    Le plafond est atteint : sans lui le bien vaudrait davantage, et garder serait plus favorable.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Sell-date presets */}
@@ -488,6 +515,7 @@ export default function PropertyArbitrage() {
               <li>La <b>plus-value</b> applique 19 % + 17,2 %, les abattements par durée (exonération d'IR à 22 ans, de prélèvements sociaux à 30 ans) et la surtaxe au-delà de 50 000 €.</li>
               <li>Les deux colonnes sont mesurées <b>au même horizon</b> ; la période d'ici la vente est commune et n'avantage personne.</li>
               <li>Un cash-flow négatif est actualisé au taux du placement : c'est son coût d'opportunité.</li>
+              <li>Le <b>plafond de prix</b> borne ce que le bien peut valoir, à la vente comme à l'horizon. Trente ans de croissance composée supposent un marché qui continue de payer ; le plafond dit jusqu'où vous y croyez.</li>
               <li>Hors IFI, hors travaux futurs, hors revalorisation des loyers.</li>
             </ul>
           </div>

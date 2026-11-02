@@ -986,11 +986,15 @@ router.get('/api/properties/:assetId/arbitrage', async (c) => {
       is_primary_residence: (asset.property_usage || 'principal') === 'principal',
     },
     loan,
-    // Starting points for the page's two editable cells.
+    // Starting points for the page's editable cells.
     defaults: {
       annual_rent: Math.round(annualRent),
       annual_cost: Math.round(recordedCosts),
       selling_costs: Math.round(value * 0.04),
+      // Ceiling on the sale price. French demographics make decades of
+      // compounding growth a stretch, so the page offers acquisition + 30 %
+      // as the point past which the user stops believing the curve.
+      max_value: asset.purchase_price ? Math.round(Number(asset.purchase_price) * 1.3) : 0,
     },
     recorded: {
       annual_charges: Math.round(recordedCosts),
