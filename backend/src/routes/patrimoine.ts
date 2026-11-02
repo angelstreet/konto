@@ -1139,6 +1139,7 @@ router.get('/api/properties/roi', async (c) => {
   // Fetch ALL real_estate assets to enrich Smoobu properties with loans + manual charges
   const allAssetsRes = await db.execute({
     sql: `SELECT a.id, a.name, a.property_usage, a.linked_loan_account_id, a.monthly_rent,
+                 a.kozy_property_id,
                  ld.monthly_payment as loan_monthly, ld.insurance_monthly as loan_insurance
           FROM assets a
           LEFT JOIN loan_details ld ON ld.bank_account_id = a.linked_loan_account_id
@@ -1158,10 +1159,18 @@ router.get('/api/properties/roi', async (c) => {
 
   const toMonthly = (amount: number, freq: string) => freq === 'yearly' ? amount / 12 : freq === 'one_time' ? 0 : amount;
 
-  // Match Smoobu apartments to assets by name similarity
-  const findAssetForApt = (aptName: string) => {
+  // Match a Smoobu apartment to an asset: by the id recorded on the asset when
+  // there is one, otherwise by name similarity. Names alone cannot do it — the
+  // listings are marketing titles ("T2 Paris Disneyland Balcon Parking") that
+  // need not resemble the asset's name, and Smoobu's own addresses do not
+  // separate flats in the same building. Set kozy_property_id to settle it.
+  const findAssetForApt = (aptName: string, aptId: number) => {
+    const byId = allAssets.find((a: any) => a.kozy_property_id && String(a.kozy_property_id) === String(aptId));
+    if (byId) return byId;
+    const claimed = new Set(allAssets.filter((a: any) => a.kozy_property_id).map((a: any) => a.id));
     const lower = aptName.toLowerCase();
     return allAssets.find((a: any) => {
+      if (claimed.has(a.id)) return false;   // already mapped to another listing
       const aLower = (a.name || '').toLowerCase();
       return lower.includes(aLower) || aLower.includes(lower) || lower.split(/\s+/).some((w: string) => w.length > 3 && aLower.includes(w));
     });
@@ -1174,7 +1183,7 @@ router.get('/api/properties/roi', async (c) => {
     const occupancyRate = totalDays > 0 ? Math.round((rev.nights / totalDays) * 100) : 0;
 
     // Find linked asset for loan + manual charges
-    const linkedAsset = findAssetForApt(apt.name);
+    const linkedAsset = findAssetForApt(apt.name, apt.id);
     const loanMonthly = linkedAsset ? ((linkedAsset.loan_monthly || 0) + (linkedAsset.loan_insurance || 0)) : 0;
     const loanTotal = loanMonthly * monthsParam;
     const manualCosts = linkedAsset ? (allManualCosts[linkedAsset.id] || []) : [];
@@ -1219,7 +1228,9 @@ router.get('/api/properties/roi', async (c) => {
   });
 
   // ── Long-term rental properties (from assets table) ──
-  const longTermAssets = allAssets.filter((a: any) => a.property_usage === 'rented_long');
+  // An asset mapped to a Smoobu listing already has a row above, built from
+  // real bookings; it must not also appear here from its monthly_rent.
+  const longTermAssets = allAssets.filter((a: any) => a.property_usage === 'rented_long' && !a.kozy_property_id);
 
   // Fetch manual revenues for long-term assets
   let manualRevsByAsset: Record<number, { label: string; amount: number; frequency: string }[]> = {};
