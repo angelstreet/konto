@@ -496,5 +496,7 @@
   "immo_viable": "VIABLE",
   "immo_attention": "ATTENTION",
   "immo_non_viable": "NON VIABLE",
-  "immo_export_pdf": "Exporter pour la banque"
+  "immo_export_pdf": "Exporter pour la banque",
+  "tool_property_arbitrage": "Vendre ou garder",
+  "nav_property_arbitrage": "Vendre ou garder"
 }

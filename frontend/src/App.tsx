@@ -25,6 +25,7 @@ import Outils from './pages/Outils';
 import Onboarding from './pages/Onboarding';
 import Trends from './pages/Trends';
 import PropertyROI from './pages/PropertyROI';
+import PropertyArbitrage from './pages/PropertyArbitrage';
 import Profile from './pages/Profile';
 import Import from './pages/Import';
 import { FilterProvider } from './FilterContext';
@@ -105,6 +106,7 @@ function AppRoutes() {
         <Route path="/trends" element={<Trends />} />
         <Route path="/trends-pro" element={<Trends />} />
         <Route path="/property-roi" element={<PropertyROI />} />
+        <Route path="/property-arbitrage" element={<PropertyArbitrage />} />
         <Route path="/simulators" element={<CreditSimulator />} />
         <Route path="/simulators/patrimoine" element={<PatrimoineSimulator />} />
         <Route path="/simulateur-immo" element={<SimulateurImmo />} />

@@ -2,7 +2,7 @@ import { API } from '../config';
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
-  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, ArrowLeft
+  Home, Car, Watch, Package, Plus, Pencil, Trash2, ChevronDown, X, ArrowLeft, Scale
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 
@@ -688,6 +688,9 @@ export default function Assets() {
                     <div className="flex gap-2 mb-3">
                       <button onClick={e => { e.stopPropagation(); startEdit(a); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-white bg-white/5 hover:bg-white/10 transition-colors"><Pencil size={12} /> {t('edit')}</button>
                       <button onClick={e => { e.stopPropagation(); deleteAsset(a.id); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-red-400 bg-white/5 hover:bg-red-500/10 transition-colors"><Trash2 size={12} /> {t('delete')}</button>
+                      {a.type === 'real_estate' && (
+                        <button onClick={e => { e.stopPropagation(); navigate(`/property-arbitrage?asset=${a.id}`); }} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs text-muted hover:text-white bg-white/5 hover:bg-white/10 transition-colors"><Scale size={12} /> {t('tool_property_arbitrage')}</button>
+                      )}
                     </div>
                     {a.purchase_date && <p className="text-xs text-muted mb-2">{t('purchased')} {new Date(a.purchase_date).toLocaleDateString('fr-FR')}</p>}
                     <div className="grid grid-cols-2 gap-3 text-sm">

@@ -5,13 +5,14 @@ import { useAmountVisibility } from '../AmountVisibilityContext';
 import EyeToggle from '../components/EyeToggle';
 import ScopeSelect from '../components/ScopeSelect';
 import { useFilter } from '../FilterContext';
-import { ArrowLeft, Home, X } from 'lucide-react';
+import { ArrowLeft, Home, X, Scale } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { usePreferences } from '../PreferencesContext';
 
 interface Property {
   id: number;
+  asset_id?: number | null;
   name: string;
   revenue: number;
   costs: number;
@@ -163,10 +164,21 @@ export default function PropertyROI() {
                         </p>
                       </div>
                     </div>
-                    <div className={`text-right ${h ? 'amount-masked' : ''}`}>
-                      <p className={`text-sm font-bold ${prop.net >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-                        {h ? '•••' : fmt(prop.monthlyNet)}/mois
-                      </p>
+                    <div className="flex items-start gap-2">
+                      <div className={`text-right ${h ? 'amount-masked' : ''}`}>
+                        <p className={`text-sm font-bold ${prop.net >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                          {h ? '•••' : fmt(prop.monthlyNet)}/mois
+                        </p>
+                      </div>
+                      {prop.asset_id != null && (
+                        <button
+                          onClick={() => navigate(`/property-arbitrage?asset=${prop.asset_id}`)}
+                          title="Vendre ou garder ?"
+                          className="p-1.5 rounded-md border border-border text-muted hover:text-white hover:bg-surface-hover transition-colors"
+                        >
+                          <Scale className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
 

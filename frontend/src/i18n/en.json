@@ -496,5 +496,7 @@
   "immo_viable": "VIABLE",
   "immo_attention": "CAUTION",
   "immo_non_viable": "NOT VIABLE",
-  "immo_export_pdf": "Export for bank"
+  "immo_export_pdf": "Export for bank",
+  "tool_property_arbitrage": "Sell or hold",
+  "nav_property_arbitrage": "Sell or hold"
 }

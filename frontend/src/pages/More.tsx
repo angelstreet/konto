@@ -24,6 +24,7 @@ import {
   Briefcase,
   Lock,
   Building2,
+  Scale,
 } from 'lucide-react';
 
 interface MenuItem {
@@ -91,6 +92,7 @@ const menuGroups: MenuGroup[] = [
       { path: '/reconciliation', icon: GitCompareArrows, labelKey: 'nav_reconciliation' },
       { path: '/simulators', icon: Calculator, labelKey: 'nav_simulators' },
       { path: '/simulateur-immo', icon: Building2, labelKey: 'nav_simulateur_immo' },
+      { path: '/property-arbitrage', icon: Scale, labelKey: 'nav_property_arbitrage' },
       { path: '/banking-score', icon: Landmark, labelKey: 'nav_banking_score' },
     ],
   },

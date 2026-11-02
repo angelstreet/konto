@@ -891,6 +891,105 @@ const PROPERTY_COST_PATTERNS: { apartmentId: number; patterns: string[] }[] = [
   { apartmentId: 2105584, patterns: ['480570', 'jardin'] },
 ];
 
+// Everything the sell-or-hold page needs for one property, in one call: the
+// value, the acquisition, and above all the linked loan — read from
+// loan_details so the user never retypes it. The arithmetic itself lives in
+// frontend/src/lib/propertyArbitrage.ts; this only supplies the inputs.
+router.get('/api/properties/:assetId/arbitrage', async (c) => {
+  const userId = await getUserId(c);
+  const assetId = Number(c.req.param('assetId'));
+  if (!Number.isFinite(assetId)) return c.json({ error: 'Invalid asset id' }, 400);
+
+  const assetRes = await db.execute({
+    sql: `SELECT * FROM assets WHERE id = ? AND user_id = ? AND type = 'real_estate' LIMIT 1`,
+    args: [assetId, userId],
+  });
+  if (assetRes.rows.length === 0) return c.json({ error: 'Property not found' }, 404);
+  const asset = assetRes.rows[0] as any;
+
+  const costsRes = await db.execute({ sql: 'SELECT * FROM asset_costs WHERE asset_id = ?', args: [assetId] });
+  const revenuesRes = await db.execute({ sql: 'SELECT * FROM asset_revenues WHERE asset_id = ?', args: [assetId] });
+  const perYear = (rows: any[]) => rows.reduce((sum, r) => {
+    const amount = Number(r.amount) || 0;
+    if (r.frequency === 'monthly') return sum + amount * 12;
+    if (r.frequency === 'yearly') return sum + amount;
+    return sum;   // one_time is not a recurring cost
+  }, 0);
+
+  const recordedCosts = perYear(costsRes.rows as any[]);
+  const rentFromMonthly = asset.property_usage === 'rented_long' && asset.monthly_rent
+    ? Number(asset.monthly_rent) * 12 : 0;
+  const annualRent = rentFromMonthly + perYear(revenuesRes.rows as any[]);
+
+  let loan: any = null;
+  if (asset.linked_loan_account_id) {
+    const loanRes = await db.execute({
+      sql: `SELECT ba.id, ba.name, ba.balance, ld.interest_rate, ld.monthly_payment, ld.insurance_monthly
+            FROM bank_accounts ba
+            LEFT JOIN loan_details ld ON ld.bank_account_id = ba.id AND ld.user_id = ba.user_id
+            WHERE ba.id = ? AND ba.user_id = ? AND ba.type = 'loan' LIMIT 1`,
+      args: [asset.linked_loan_account_id, userId],
+    });
+    const row = loanRes.rows[0] as any;
+    if (row) {
+      // A loan's balance is stored negative; the page wants the capital owed.
+      const balance = Math.abs(Math.min(Number(row.balance) || 0, 0));
+      const payment = Number(row.monthly_payment) || 0;
+      loan = {
+        account_id: Number(row.id),
+        name: row.name,
+        balance,
+        rate: Number(row.interest_rate) || 0,
+        payment,
+        insurance: Number(row.insurance_monthly) || 0,
+        // Without a balance and an instalment the schedule cannot be reprojected.
+        incomplete: !(balance > 0 && payment > 0),
+      };
+    }
+  }
+
+  const value = Number(asset.current_value) || Number(asset.estimated_value) || 0;
+  const estimated = Number(asset.estimated_value) || null;
+
+  const warnings: string[] = [];
+  if (!asset.linked_loan_account_id) warnings.push('no_loan_linked');
+  else if (loan?.incomplete) warnings.push('loan_details_missing');
+  if (asset.property_usage !== 'principal' && annualRent === 0) warnings.push('no_rent_recorded');
+  if (recordedCosts === 0) warnings.push('no_charges_recorded');
+  if (value > 0 && estimated && Math.abs(value - estimated) / value > 0.2) warnings.push('value_far_from_estimate');
+
+  return c.json({
+    property: {
+      id: assetId,
+      name: asset.name,
+      usage: asset.property_usage || 'principal',
+      property_type: asset.property_type || null,
+      surface: asset.surface ? Number(asset.surface) : null,
+      value,
+      value_source: asset.current_value ? 'declared' : 'estimated',
+      estimated_value: estimated,
+      purchase_price: Number(asset.purchase_price) || 0,
+      notary_fees: Number(asset.notary_fees) || 0,
+      works: Number(asset.travaux) || 0,
+      purchase_date: asset.purchase_date || null,
+      is_primary_residence: (asset.property_usage || 'principal') === 'principal',
+    },
+    loan,
+    // Starting points for the page's two editable cells.
+    defaults: {
+      annual_rent: Math.round(annualRent),
+      annual_cost: Math.round(recordedCosts),
+      selling_costs: Math.round(value * 0.04),
+    },
+    recorded: {
+      annual_charges: Math.round(recordedCosts),
+      annual_revenues: Math.round(annualRent),
+      costs: (costsRes.rows as any[]).map(r => ({ label: r.label, amount: Number(r.amount), frequency: r.frequency })),
+    },
+    warnings,
+  });
+});
+
 router.get('/api/properties/roi', async (c) => {
   const userId = await getUserId(c);
   const prefsRow = await db.execute({ sql: 'SELECT smoobu_api_key FROM user_preferences WHERE user_id = ?', args: [userId] });
@@ -1088,6 +1187,9 @@ router.get('/api/properties/roi', async (c) => {
 
     return {
       id: apt.id,
+      // Real estate asset behind this Smoobu apartment, when one matched — lets
+      // the card link to the sell-or-hold page, which is keyed on assets.
+      asset_id: linkedAsset ? Number(linkedAsset.id) : null,
       name: apt.name,
       revenue: Math.round(rev.total * 100) / 100,
       costs: Math.round(totalCosts * 100) / 100,
@@ -1157,6 +1259,7 @@ router.get('/api/properties/roi', async (c) => {
     const net = revenue - totalCostsAsset;
     properties.push({
       id: -asset.id,
+      asset_id: Number(asset.id),
       name: `${asset.name}${asset.tenant_name ? ` (${asset.tenant_name})` : ''}`,
       revenue: Math.round(revenue * 100) / 100,
       costs: Math.round(totalCostsAsset * 100) / 100,

@@ -35,6 +35,7 @@ import {
   Trophy,
   Bitcoin,
   FileText,
+  Scale,
 } from 'lucide-react';
 
 /* ── Navigation data structure ──────────────────────────────────────── */
@@ -130,6 +131,7 @@ const navGroups: NavGroup[] = [
       { kind: 'leaf', path: '/reconciliation', icon: GitCompareArrows, labelKey: 'nav_reconciliation' },
       { kind: 'leaf', path: '/simulators', icon: Calculator, labelKey: 'nav_simulators' },
       { kind: 'leaf', path: '/simulateur-immo', icon: Building2, labelKey: 'nav_simulateur_immo' },
+      { kind: 'leaf', path: '/property-arbitrage', icon: Scale, labelKey: 'nav_property_arbitrage' },
       { kind: 'leaf', path: '/banking-score', icon: Landmark, labelKey: 'nav_banking_score' },
     ],
   },
