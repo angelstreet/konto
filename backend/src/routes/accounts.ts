@@ -15,7 +15,7 @@ import { inferAndPersistLoanDetails } from './loans.js';
 // --- Helper: deduplicated bank account find-or-create ---
 // Tries to find an existing account by (company_id, provider, provider_account_id) first,
 // then by (user_id, provider, iban) as fallback. Returns { id } or null.
-async function findBankAccountByProviderId(userId: number, companyId: number | null, provider: string, providerAccountId: string | null, iban: string | null): Promise<number | null> {
+async function findBankAccountByProviderId(userId: number, companyId: number | null, provider: string, providerAccountId: string | null, iban: string | null, accountNumber: string | null = null): Promise<number | null> {
   if (providerAccountId) {
     const existing = await db.execute({
       sql: 'SELECT id FROM bank_accounts WHERE user_id = ? AND company_id = ? AND provider = ? AND provider_account_id = ?',
@@ -27,6 +27,19 @@ async function findBankAccountByProviderId(userId: number, companyId: number | n
     const existing = await db.execute({
       sql: 'SELECT id FROM bank_accounts WHERE user_id = ? AND provider = ? AND iban = ?',
       args: [userId, provider, iban]
+    });
+    if (existing.rows.length > 0) return existing.rows[0].id as number;
+  }
+  // Last resort: the bank's own account number. A reconnect makes Powens
+  // re-issue provider_account_id, and an account with no IBAN — a securities
+  // account, typically — then matched nothing and was inserted again. That is
+  // how one reconnect turned 22 accounts into 41, twice in two days.
+  if (accountNumber) {
+    const existing = await db.execute({
+      sql: `SELECT id FROM bank_accounts
+            WHERE user_id = ? AND provider = ? AND account_number = ?
+              AND account_number IS NOT NULL AND account_number != ''`,
+      args: [userId, provider, accountNumber]
     });
     if (existing.rows.length > 0) return existing.rows[0].id as number;
   }
@@ -522,7 +535,7 @@ router.get('/api/bank-callback', async (c) => {
         const storedBankName = meta.bankName || null;
 
         // Deduplicate: find existing account by (company_id, provider, provider_account_id) or by iban
-        const existingId = await findBankAccountByProviderId(userId, null, 'powens', String(acc.id), accIban);
+        const existingId = await findBankAccountByProviderId(userId, null, 'powens', String(acc.id), accIban, accNumber);
 
         let bankAccountId: number;
         if (existingId === null) {
@@ -966,7 +979,7 @@ router.post('/api/bank/sync', async (c) => {
         const accIban = acc.iban || null;
         if (isProviderAccountExcluded(excludedAccounts, 'powens', String(acc.id), accIban)) continue;
         // Deduplicate: find by (company_id, provider, provider_account_id) or by iban
-        const existingId = await findBankAccountByProviderId(userId, null, 'powens', String(acc.id), accIban);
+        const existingId = await findBankAccountByProviderId(userId, null, 'powens', String(acc.id), accIban, accNumber);
         let bankAccountId: number;
         if (existingId !== null) {
           const full = await db.execute({ sql: 'SELECT company_id FROM bank_accounts WHERE id = ?', args: [existingId] });
@@ -1550,7 +1563,9 @@ router.post('/api/bank/sync-all', async (c) => {
         const bankNameFromMeta = meta.bankName || connProviderName;
         const storedBankName = bankNameFromMeta || null;
         const accType = classifyAccountType(powensAcc.type, powensAcc.name || powensAcc.original_name || '');
-        // Deduplicate: try by provider_account_id first, then by iban
+        // Deduplicate: provider_account_id, then iban, then the bank's own
+        // account number — the last matters because a reconnect re-issues
+        // provider ids and an account with no IBAN would otherwise look new.
         let accRes = await db.execute({
           sql: 'SELECT id, type, company_id FROM bank_accounts WHERE user_id = ? AND provider = ? AND provider_account_id = ?',
           args: [userId, 'powens', providerId]
@@ -1559,6 +1574,15 @@ router.post('/api/bank/sync-all', async (c) => {
           accRes = await db.execute({
             sql: 'SELECT id, type, company_id FROM bank_accounts WHERE user_id = ? AND provider = ? AND iban = ?',
             args: [userId, 'powens', powensAcc.iban]
+          });
+        }
+        const pwNumber = powensAcc.number || powensAcc.webid || null;
+        if (accRes.rows.length === 0 && pwNumber) {
+          accRes = await db.execute({
+            sql: `SELECT id, type, company_id FROM bank_accounts
+                  WHERE user_id = ? AND provider = ? AND account_number = ?
+                    AND account_number IS NOT NULL AND account_number != ''`,
+            args: [userId, 'powens', String(pwNumber)]
           });
         }
         if (accRes.rows.length === 0) continue;
