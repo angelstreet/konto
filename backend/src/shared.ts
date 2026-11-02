@@ -184,6 +184,54 @@ export function isProviderAccountExcluded(
 }
 
 /**
+ * Registers a bank_connections row for any Powens connection an account refers
+ * to but Konto has never recorded.
+ *
+ * The manage webview can create a *new* connection — ticking an account there
+ * produced connection 38 — and the callback's reconnect branch only clears
+ * flags, so no row was written. The accounts still synced, because another
+ * connection's token can see them, but they belonged to a connection that did
+ * not exist here: no token, invisible to the diagnostics, and skipped by the
+ * per-connection investment sync, so a securities account arrived with its
+ * balance and none of its holdings.
+ *
+ * The token that could see the accounts is stored for the new row, which is
+ * what the sync paths use anyway.
+ */
+export async function ensurePowensConnectionRows(
+  userId: number,
+  accounts: any[],
+  token: string,
+  connectorMap?: Map<string, PowensConnectionInfo>,
+): Promise<string[]> {
+  const created: string[] = [];
+  const ids = new Set<string>();
+  for (const acc of accounts) {
+    if (acc?.id_connection != null) ids.add(String(acc.id_connection));
+  }
+  for (const cid of ids) {
+    try {
+      const existing = await db.execute({
+        sql: 'SELECT id FROM bank_connections WHERE user_id = ? AND powens_connection_id = ? LIMIT 1',
+        args: [userId, cid],
+      });
+      if (existing.rows.length > 0) continue;
+      const info = connectorMap?.get(cid);
+      await db.execute({
+        sql: `INSERT INTO bank_connections
+                (user_id, powens_connection_id, powens_token, provider_name, status, consent_expires_at, provider_state, provider_auth_mechanism)
+              VALUES (?, ?, ?, ?, 'active', ?, ?, ?)`,
+        args: [userId, cid, encrypt(token), info?.bankName ?? null, info?.expire ?? null, info?.state ?? null, info?.authMechanism ?? null],
+      });
+      created.push(cid);
+    } catch {
+      // a column may be missing on an unmigrated database
+    }
+  }
+  return created;
+}
+
+/**
  * Records which Powens connection owns each account, from the account's own
  * `id_connection`. Needed so the app can offer one reconnect link per
  * connection: several connections can sit behind one institution name, and a

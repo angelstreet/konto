@@ -6,7 +6,7 @@ import { getUserId, decryptBankConn, decryptCoinbaseConn, decryptBinanceConn, de
          POWENS_CLIENT_ID, POWENS_CLIENT_SECRET, POWENS_DOMAIN, POWENS_API, REDIRECT_URI, POWENS_CONNECTOR_CAPABILITIES,
          classifyAccountType, classifyAccountSubtype, classifyAccountUsage, extractPowensBankMeta,
          fetchPowensConnectorMap, persistPowensConnectionInfo, persistPowensAccountConnections,
-         loadExcludedProviderAccounts, isProviderAccountExcluded,
+         loadExcludedProviderAccounts, isProviderAccountExcluded, ensurePowensConnectionRows,
          refreshPowensToken, getDriveAccessToken, sha256, generateApiKey, getClientIP,
          calcInvestmentDiff, calcInvDiff, formatCurrencyFR, escapeHtml } from '../shared.js';
 import { categorizeTransaction } from '../categorizer.js';
@@ -969,6 +969,7 @@ router.post('/api/bank/sync', async (c) => {
       const accounts = data.accounts || [];
       const connectorMap = await fetchPowensConnectorMap(token);
       await persistPowensConnectionInfo(userId, connectorMap);
+      await ensurePowensConnectionRows(userId, accounts, token, connectorMap);
       pendingConnectionLinks.push(...accounts);
 
       for (const acc of accounts) {
@@ -1554,6 +1555,7 @@ router.post('/api/bank/sync-all', async (c) => {
       const connProviderName = conn.provider_name || null;
       const connectorMap = await fetchPowensConnectorMap(token);
       await persistPowensConnectionInfo(userId, connectorMap);
+      await ensurePowensConnectionRows(userId, powensAccounts, token, connectorMap);
       pendingConnectionLinks.push(...powensAccounts);
       for (const powensAcc of powensAccounts) {
         const providerId = String(powensAcc.id);
