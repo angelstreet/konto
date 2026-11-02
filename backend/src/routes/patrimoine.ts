@@ -1075,10 +1075,16 @@ router.get('/api/properties/roi', async (c) => {
   });
 
   // Match costs to properties
-  const costsByApt: Record<number, { total: number; byMonth: Record<string, number>; matched: { label: any; amount: number; date: string }[] }> = {};
+  type CostBucket = { total: number; byMonth: Record<string, number>; matched: { label: any; amount: number; date: string }[] };
+  const costsByApt: Record<number, CostBucket & { loanRepaid: CostBucket }> = {};
   for (const apt of apartments) {
-    costsByApt[apt.id] = { total: 0, byMonth: {}, matched: [] };
+    costsByApt[apt.id] = { total: 0, byMonth: {}, matched: [], loanRepaid: { total: 0, byMonth: {}, matched: [] } };
   }
+
+  // A mortgage direct debit is the same euro as the instalment held in
+  // loan_details. Counting both charges the property twice, so these are kept
+  // apart and only added when no loan is attributed to the asset.
+  const LOAN_REPAYMENT = /echeance\s*(de\s*)?pret|remboursement\s*(de\s*)?pret/i;
 
   for (const tx of txResult.rows as any[]) {
     const label = (tx.label || '').toLowerCase();
@@ -1086,9 +1092,17 @@ router.get('/api/properties/roi', async (c) => {
       if (pattern.patterns.some(p => label.includes(p))) {
         const month = tx.date?.substring(0, 7);
         const amount = Math.abs(tx.amount);
-        costsByApt[pattern.apartmentId].total += amount;
-        if (month) costsByApt[pattern.apartmentId].byMonth[month] = (costsByApt[pattern.apartmentId].byMonth[month] || 0) + amount;
-        costsByApt[pattern.apartmentId].matched.push({label: tx.label, amount, date: tx.date.substring(0,10)});
+        const bucket = costsByApt[pattern.apartmentId];
+        const entry = { label: tx.label, amount, date: tx.date.substring(0, 10) };
+        if (LOAN_REPAYMENT.test(tx.label || '')) {
+          bucket.loanRepaid.total += amount;
+          if (month) bucket.loanRepaid.byMonth[month] = (bucket.loanRepaid.byMonth[month] || 0) + amount;
+          bucket.loanRepaid.matched.push(entry);
+          break;
+        }
+        bucket.total += amount;
+        if (month) bucket.byMonth[month] = (bucket.byMonth[month] || 0) + amount;
+        bucket.matched.push(entry);
         break;
       }
     }
@@ -1179,13 +1193,22 @@ router.get('/api/properties/roi', async (c) => {
   // Build response — enrich Smoobu properties with loans + manual charges
   const properties = apartments.map((apt: any) => {
     const rev = revenueByApt[apt.id] || { total: 0, byMonth: {}, nights: 0, bookingCount: 0 };
-    const bankCosts = costsByApt[apt.id] || { total: 0, byMonth: {}, matched: [] };
+    const bucket = costsByApt[apt.id] || { total: 0, byMonth: {}, matched: [], loanRepaid: { total: 0, byMonth: {}, matched: [] } };
     const occupancyRate = totalDays > 0 ? Math.round((rev.nights / totalDays) * 100) : 0;
 
     // Find linked asset for loan + manual charges
     const linkedAsset = findAssetForApt(apt.name, apt.id);
     const loanMonthly = linkedAsset ? ((linkedAsset.loan_monthly || 0) + (linkedAsset.loan_insurance || 0)) : 0;
     const loanTotal = loanMonthly * monthsParam;
+    // With a loan on the asset, its instalment is already counted above; the
+    // matching direct debits would charge it a second time. With no loan, the
+    // direct debits are the only trace of it, so they stay in the costs.
+    const bankCosts = loanMonthly > 0 ? bucket : {
+      total: bucket.total + bucket.loanRepaid.total,
+      byMonth: Object.entries(bucket.loanRepaid.byMonth).reduce(
+        (acc, [m, v]) => ({ ...acc, [m]: (acc[m] || 0) + v }), { ...bucket.byMonth } as Record<string, number>),
+      matched: [...bucket.matched, ...bucket.loanRepaid.matched],
+    };
     const manualCosts = linkedAsset ? (allManualCosts[linkedAsset.id] || []) : [];
     const chargesMonthly = manualCosts.reduce((s: number, c: any) => s + toMonthly(c.amount, c.frequency), 0);
     const chargesTotal = chargesMonthly * monthsParam;
